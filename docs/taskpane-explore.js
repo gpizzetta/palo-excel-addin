@@ -40,7 +40,34 @@
 		return String(text).replace(/^\uFEFF/, "");
 	}
 
-	function rejectIfHtml(text) {
+	/** URL affichée dans les messages de debug (masque le mot de passe). */
+	function redactUrlForDebug(url) {
+		try {
+			var u = new URL(url);
+			if (u.searchParams.has("extern_password")) {
+				u.searchParams.set("extern_password", "***");
+			}
+			if (u.searchParams.has("password")) {
+				u.searchParams.set("password", "***");
+			}
+			return u.toString();
+		} catch (e) {
+			return String(url)
+				.replace(/([?&]extern_password=)[^&]*/gi, "$1***")
+				.replace(/([?&]password=)[^&]*/gi, "$1***");
+		}
+	}
+
+	function truncateForDebug(text, maxLen) {
+		maxLen = maxLen || 900;
+		var t = stripBom(text).replace(/\s+/g, " ").trim();
+		if (t.length <= maxLen) {
+			return t;
+		}
+		return t.slice(0, maxLen) + "…";
+	}
+
+	function rejectIfHtml(text, requestUrl) {
 		var t = stripBom(text).trim();
 		if (!t.length) {
 			return;
@@ -53,8 +80,15 @@
 			lower.indexOf("<head") !== -1 ||
 			lower.indexOf("<body") !== -1
 		) {
+			var safeUrl = requestUrl ? redactUrlForDebug(requestUrl) : "(URL inconnue)";
+			var excerpt = truncateForDebug(text, 900);
 			throw new Error(
-				"Le serveur a renvoyé du HTML au lieu du CSV Palo. Indiquez l’URL racine du serveur OLAP (ex. https://hôte:port), pas une page web.",
+				"Le serveur a renvoyé du HTML au lieu du CSV Palo. Indiquez l’URL racine du serveur OLAP (ex. https://hôte:port), pas une page web.\n\n" +
+					"URL interrogée : " +
+					safeUrl +
+					"\n\n" +
+					"Réponse du serveur (extrait) :\n" +
+					excerpt,
 			);
 		}
 	}
@@ -125,6 +159,7 @@
 	}
 
 	function fetchCsv(url) {
+		var safeUrl = redactUrlForDebug(url);
 		return fetch(url, {
 			method: "GET",
 			mode: "cors",
@@ -133,7 +168,15 @@
 		}).then(function (res) {
 			return res.text().then(function (text) {
 				if (!res.ok) {
-					throw new Error("HTTP " + res.status + " — " + text.slice(0, 300));
+					throw new Error(
+						"HTTP " +
+							res.status +
+							" — URL : " +
+							safeUrl +
+							"\n\n" +
+							"Réponse (extrait) :\n" +
+							truncateForDebug(text, 600),
+					);
 				}
 				return text;
 			});
@@ -147,7 +190,7 @@
 		});
 		var url = apiBase + "/server/login?" + q.toString();
 		return fetchCsv(url).then(function (text) {
-			rejectIfHtml(text);
+			rejectIfHtml(text, url);
 			var lines = parseCsvLines(text);
 			return parseLoginSidFromLines(lines);
 		});
@@ -181,8 +224,8 @@
 		return tryAt(0);
 	}
 
-	function parseIdNameList(text, kindLabel) {
-		rejectIfHtml(text);
+	function parseIdNameList(text, kindLabel, requestUrl) {
+		rejectIfHtml(text, requestUrl);
 		var lines = parseCsvLines(text);
 		var list = [];
 		for (var i = 0; i < lines.length; i++) {
@@ -198,12 +241,16 @@
 			list.push({ id: id, name: name });
 		}
 		if (lines.length && !list.length) {
-			var preview = stripBom(text).replace(/\s+/g, " ").slice(0, 280);
+			var safeUrl = requestUrl ? redactUrlForDebug(requestUrl) : "(URL inconnue)";
 			throw new Error(
 				"Réponse " +
 					kindLabel +
-					" illisible (CSV Palo attendu, id numérique puis nom). Extrait : " +
-					preview,
+					" illisible (CSV Palo attendu : id numérique puis nom).\n\n" +
+					"URL interrogée : " +
+					safeUrl +
+					"\n\n" +
+					"Réponse du serveur (extrait) :\n" +
+					truncateForDebug(text, 900),
 			);
 		}
 		return list;
@@ -211,8 +258,9 @@
 
 	function loadDatabases() {
 		var q = new URLSearchParams({ sid: state.sid });
-		return fetchCsv(state.apiBase + "/server/databases?" + q.toString()).then(function (text) {
-			return parseIdNameList(text, "bases");
+		var url = state.apiBase + "/server/databases?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseIdNameList(text, "bases", url);
 		});
 	}
 
@@ -224,8 +272,9 @@
 			show_attribute: "1",
 			show_info: "1",
 		});
-		return fetchCsv(state.apiBase + "/database/dimensions?" + q.toString()).then(function (text) {
-			return parseIdNameList(text, "dimensions");
+		var url = state.apiBase + "/database/dimensions?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseIdNameList(text, "dimensions", url);
 		});
 	}
 
@@ -237,8 +286,9 @@
 			show_attribute: "1",
 			show_info: "1",
 		});
-		return fetchCsv(state.apiBase + "/database/cubes?" + q.toString()).then(function (text) {
-			return parseIdNameList(text, "cubes");
+		var url = state.apiBase + "/database/cubes?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseIdNameList(text, "cubes", url);
 		});
 	}
 
