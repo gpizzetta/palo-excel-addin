@@ -10,6 +10,22 @@
         "type": "string",
         "dimensionality": "scalar"
       }
+    },
+    {
+      "id": "INFO",
+      "name": "INFO",
+      "description": "GET CORS vers une URL (test serveur Palo HTTP/HTTPS).",
+      "parameters": [
+        {
+          "name": "url",
+          "description": "URL complète, ex. https://127.0.0.1:7777/server/info",
+          "type": "string"
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
     }
   ]
 }

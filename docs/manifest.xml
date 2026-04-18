@@ -5,11 +5,11 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
   <Id>0aa7607a-b26c-4d33-9fb8-39c570d9bdc5</Id>
-  <Version>1.0.3.0</Version>
+  <Version>1.0.4.0</Version>
   <ProviderName>Palo</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Palo minimal"/>
-  <Description DefaultValue="Une fonction personnalisée PALO.HELLO (hello world)."/>
+  <Description DefaultValue="PALO.HELLO() et PALO.INFO(url) — test CORS / HTTP vers le serveur Palo."/>
   <IconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://github.com/gpizzetta/palo-excel-addin"/>
