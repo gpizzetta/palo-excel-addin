@@ -39,6 +39,10 @@ Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) 
 Validation du manifeste (optionnel) :  
 `npx office-addin-manifest validate docs/manifest.xml`
 
+## Cahier des charges (fonctions PALO)
+
+Voir **`docs/CAHIER_DES_CHARGES.md`** : liste des fonctions `palo.*` / `PALO.*` à réimplémenter (référence `palo-server` + extension prévue type *PaloSpreadsheetFuncs*).
+
 ## Licence
 
 MIT — voir `LICENSE`.
