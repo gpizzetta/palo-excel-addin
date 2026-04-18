@@ -26,7 +26,8 @@ Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) 
 | `docs/functions.html` | Page hôte Office.js |
 | `docs/functions.js` | `PALO.HELLO` |
 | `docs/functions.json` | Métadonnées de la fonction |
-| `docs/assets/` | Icônes PNG |
+| `docs/assets/` | Icônes **PNG** servies par Pages (`icon-16` … `icon-80`) — utilisées par le manifeste |
+| `design/*.svg` | Sources vectorielles (**non** référencées par le manifeste ; voir `design/README.md`) |
 
 Validation du manifeste (optionnel) :  
 `npx office-addin-manifest validate docs/manifest.xml`
