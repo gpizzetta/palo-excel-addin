@@ -1,5 +1,12 @@
+/** Doit rester aligné avec <Version> dans docs/manifest.xml */
+var ADDIN_VERSION = "1.0.5.0";
+
 function hello() {
 	return "hello world";
+}
+
+function version() {
+	return ADDIN_VERSION;
 }
 
 /**
@@ -40,4 +47,5 @@ function info(url) {
 }
 
 CustomFunctions.associate("HELLO", hello);
+CustomFunctions.associate("VERSION", version);
 CustomFunctions.associate("INFO", info);

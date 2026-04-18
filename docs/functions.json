@@ -12,6 +12,16 @@
       }
     },
     {
+      "id": "VERSION",
+      "name": "VERSION",
+      "description": "Numéro de version du bundle JS chargé (à comparer au manifeste).",
+      "parameters": [],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    },
+    {
       "id": "INFO",
       "name": "INFO",
       "description": "GET CORS vers une URL (test serveur Palo HTTP/HTTPS).",
