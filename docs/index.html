@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>palo-excel-addin</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+    .version { font-size: 1.75rem; font-weight: 700; color: #107c10; }
+    .meta { color: #605e5c; font-size: 0.9rem; margin-top: 1.5rem; }
+    a { color: #0078d4; }
+    code { background: #f3f2f1; padding: 0.15rem 0.4rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>palo-excel-addin</h1>
+  <p>Page de contrôle du déploiement <strong>GitHub Pages</strong> (dossier <code>docs/</code>).</p>
+  <p>Version lue dans le manifeste déployé&nbsp;:</p>
+  <p class="version" id="version">Chargement…</p>
+  <p><a id="manifestLink" href="manifest.xml">manifest.xml</a></p>
+  <p class="meta" id="hint"></p>
+  <script>
+    (function () {
+      var hint = document.getElementById("hint");
+      fetch("manifest.xml", { cache: "no-store" })
+        .then(function (r) {
+          if (!r.ok) throw new Error("HTTP " + r.status);
+          return r.text();
+        })
+        .then(function (xml) {
+          var m = xml.match(/<Version>([^<]+)<\/Version>/);
+          document.getElementById("version").textContent = m ? m[1] : "(Version introuvable dans le XML)";
+          hint.textContent =
+            "Si ce numéro correspond au <Version> de ton dernier push, Pages est à jour. Actualise après 1–2 min si besoin.";
+        })
+        .catch(function (e) {
+          document.getElementById("version").textContent = "Erreur : " + e.message;
+          hint.textContent = "Ouvre la console (F12) pour plus de détails.";
+        });
+    })();
+  </script>
+</body>
+</html>
