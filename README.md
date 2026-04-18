@@ -2,7 +2,8 @@
 
 Complément Excel minimal, **100 % statique** (HTML + JS dans `docs/`), sans Node ni build.
 
-- Fonction **`=PALO.HELLO()`** → retourne la chaîne `hello world`.
+- **`=PALO.HELLO()`** → `hello world` (test minimal).
+- **`=PALO.INFO("https://hôte:port/chemin")`** → `GET` en **CORS** vers l’URL ; la cellule affiche le statut HTTP ou l’erreur (CORS, réseau, TLS). Pour Palo en **HTTP** depuis Excel Online, le navigateur peut bloquer selon la politique du site ; un serveur en **HTTPS** avec bons en-têtes CORS est souvent nécessaire.
 - Manifeste : **`https://gpizzetta.github.io/palo-excel-addin/manifest.xml`** (GitHub Pages : branche `main`, dossier `/docs`).
 - Contrôle du déploiement : **`https://gpizzetta.github.io/palo-excel-addin/`** — page `index.html` qui affiche la `<Version>` lue dans le manifeste publié (après `git push`, attendre ~1–2 min puis actualiser).
 
