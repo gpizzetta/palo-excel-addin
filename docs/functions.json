@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/office-js/custom-functions.schema.json",
+  "functions": [
+    {
+      "id": "HELLO",
+      "name": "HELLO",
+      "description": "Retourne la chaîne hello world.",
+      "parameters": [],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+  <Id>0aa7607a-b26c-4d33-9fb8-39c570d9bdc5</Id>
+  <Version>1.0.1.0</Version>
+  <ProviderName>Palo</ProviderName>
+  <DefaultLocale>fr-FR</DefaultLocale>
+  <DisplayName DefaultValue="Palo minimal"/>
+  <Description DefaultValue="Une fonction personnalisée PALO.HELLO (hello world)."/>
+  <IconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-64.png"/>
+  <SupportUrl DefaultValue="https://github.com/gpizzetta/palo-excel-addin"/>
+  <AppDomains>
+    <AppDomain>https://gpizzetta.github.io</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Workbook"/>
+  </Hosts>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <AllFormFactors>
+          <ExtensionPoint xsi:type="CustomFunctions">
+            <Script>
+              <SourceLocation resid="Functions.Script.Url"/>
+            </Script>
+            <Page>
+              <SourceLocation resid="Functions.Page.Url"/>
+            </Page>
+            <Metadata>
+              <SourceLocation resid="Functions.Metadata.Url"/>
+            </Metadata>
+            <Namespace resid="Functions.Namespace"/>
+          </ExtensionPoint>
+        </AllFormFactors>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Urls>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
+      </bt:ShortStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
