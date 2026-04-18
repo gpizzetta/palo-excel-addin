@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Palo — Explorateur</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      margin: 0;
+      padding: 12px;
+      color: #323130;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 img { width: 20px; height: 20px; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 6px 12px;
+      background: #0078d4;
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: #106ebe; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.secondary {
+      background: #edebe9;
+      color: #323130;
+    }
+    button.secondary:hover { background: #e1dfdd; }
+    #status {
+      font-size: 12px;
+      min-height: 1.2em;
+      margin-bottom: 8px;
+    }
+    #status.ok { color: #107c10; }
+    #status.err { color: #a4262c; }
+    .hint {
+      font-size: 11px;
+      color: #605e5c;
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+    h2 {
+      font-size: 12px;
+      font-weight: 600;
+      margin: 12px 0 6px 0;
+      color: #201f1e;
+    }
+    ul.list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #edebe9;
+      border-radius: 2px;
+      max-height: 220px;
+      overflow: auto;
+    }
+    ul.list li {
+      padding: 6px 8px;
+      border-bottom: 1px solid #f3f2f1;
+      cursor: pointer;
+    }
+    ul.list li:last-child { border-bottom: none; }
+    ul.list li:hover { background: #f3f2f1; }
+    ul.list li:active { background: #edebe9; }
+    .empty {
+      padding: 8px;
+      color: #605e5c;
+      font-size: 12px;
+    }
+    .detail-head {
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+    #viewDatabases, #viewDetail { display: none; }
+    #viewDatabases.active, #viewDetail.active { display: block; }
+  </style>
+</head>
+<body>
+  <h1>
+    <img src="assets/palo_explore_32.png?v=1.0.8.0" alt="" width="20" height="20" />
+    Explorateur Palo
+  </h1>
+
+  <div class="toolbar">
+    <button type="button" id="btnRefresh" class="secondary">Actualiser</button>
+    <button type="button" id="btnBack" class="secondary" style="display: none;">← Bases</button>
+  </div>
+  <p id="status" role="status"></p>
+
+  <div id="viewDatabases" class="active">
+    <h2>Bases de données</h2>
+    <ul id="listDatabases" class="list" aria-label="Bases de données"></ul>
+    <p id="emptyDatabases" class="empty" style="display: none;">Aucune base (ou chargez la liste).</p>
+  </div>
+
+  <div id="viewDetail">
+    <p class="detail-head" id="detailTitle"></p>
+    <h2>Dimensions</h2>
+    <ul id="listDimensions" class="list" aria-label="Dimensions"></ul>
+    <p id="emptyDimensions" class="empty" style="display: none;">Aucune dimension.</p>
+    <h2>Cubes</h2>
+    <ul id="listCubes" class="list" aria-label="Cubes"></ul>
+    <p id="emptyCubes" class="empty" style="display: none;">Aucun cube.</p>
+  </div>
+
+  <p class="hint">
+    Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
+  </p>
+
+  <script src="taskpane-explore.js?v=1.0.8.0" type="text/javascript"></script>
+</body>
+</html>

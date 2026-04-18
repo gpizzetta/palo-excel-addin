@@ -5,11 +5,11 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
   <Id>0aa7607a-b26c-4d33-9fb8-39c570d9bdc5</Id>
-  <Version>1.0.7.0</Version>
+  <Version>1.0.8.0</Version>
   <ProviderName>Palo</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Palo"/>
-  <Description DefaultValue="PALO.VERSION, HELLO, INFO — connexion depuis le ruban."/>
+  <Description DefaultValue="PALO.VERSION, HELLO, INFO — connexion et explorateur bases / dimensions / cubes."/>
   <IconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://github.com/gpizzetta/palo-excel-addin"/>
@@ -20,7 +20,7 @@
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.7.0"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.8.0"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -68,6 +68,30 @@
                   </Action>
                 </Control>
               </Group>
+              <Group id="Palo.GroupExplore">
+                <Label resid="Palo.GroupExploreLabel"/>
+                <Icon>
+                  <bt:Image size="16" resid="Explore.Icon.16x16"/>
+                  <bt:Image size="32" resid="Explore.Icon.32x32"/>
+                  <bt:Image size="80" resid="Explore.Icon.80x80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Palo.ExploreButton">
+                  <Label resid="Palo.ExploreLabel"/>
+                  <Supertip>
+                    <Title resid="Palo.ExploreLabel"/>
+                    <Description resid="Palo.ExploreTip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Explore.Icon.16x16"/>
+                    <bt:Image size="32" resid="Explore.Icon.32x32"/>
+                    <bt:Image size="80" resid="Explore.Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>PaloExplorePane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Explore.Url"/>
+                  </Action>
+                </Control>
+              </Group>
               <Label resid="Palo.TabLabel"/>
             </CustomTab>
           </ExtensionPoint>
@@ -80,22 +104,29 @@
         <bt:Image id="Icon.32x32" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-32.png"/>
         <bt:Image id="Icon.64x64" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-64.png"/>
         <bt:Image id="Icon.80x80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-80.png"/>
+        <bt:Image id="Explore.Icon.16x16" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/palo_explore_16.png"/>
+        <bt:Image id="Explore.Icon.32x32" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/palo_explore_32.png"/>
+        <bt:Image id="Explore.Icon.80x80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/palo_explore_80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.7.0"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.7.0"/>
-        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.7.0"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.7.0"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.7.0"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.8.0"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.8.0"/>
+        <bt:Url id="Taskpane.Explore.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-explore.html?v=1.0.8.0"/>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.8.0"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.8.0"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.8.0"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
         <bt:String id="Palo.TabLabel" DefaultValue="Palo"/>
         <bt:String id="Palo.GroupLabel" DefaultValue="Serveur"/>
         <bt:String id="Palo.ConnectLabel" DefaultValue="Connexion"/>
+        <bt:String id="Palo.GroupExploreLabel" DefaultValue="Exploration"/>
+        <bt:String id="Palo.ExploreLabel" DefaultValue="Explorateur"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="Palo.ConnectTip" DefaultValue="Configurer l’URL du serveur Palo et les identifiants pour ce classeur."/>
+        <bt:String id="Palo.ExploreTip" DefaultValue="Lister les bases, puis les dimensions et les cubes de la base sélectionnée."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
