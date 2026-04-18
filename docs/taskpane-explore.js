@@ -36,33 +36,89 @@
 		return [u.origin + "/api", u.origin];
 	}
 
+	function stripBom(text) {
+		return String(text).replace(/^\uFEFF/, "");
+	}
+
+	function rejectIfHtml(text) {
+		var t = stripBom(text).trim();
+		if (!t.length) {
+			return;
+		}
+		var lower = t.slice(0, 200).toLowerCase();
+		if (
+			t.charAt(0) === "<" ||
+			lower.indexOf("<!doctype") !== -1 ||
+			lower.indexOf("<html") !== -1 ||
+			lower.indexOf("<head") !== -1 ||
+			lower.indexOf("<body") !== -1
+		) {
+			throw new Error(
+				"Le serveur a renvoyé du HTML au lieu du CSV Palo. Indiquez l’URL racine du serveur OLAP (ex. https://hôte:port), pas une page web.",
+			);
+		}
+	}
+
+	/** Nom d’objet Palo (base, dimension, cube) — refuse les fragments HTML issus d’une mauvaise réponse. */
+	function isPlausibleObjectName(s) {
+		if (s === undefined || s === null) {
+			return false;
+		}
+		var t = String(s).trim();
+		if (!t.length || t.length > 512) {
+			return false;
+		}
+		if (/[<>]/.test(t) || /^\W+$/.test(t)) {
+			return false;
+		}
+		return true;
+	}
+
+	function isNumericId(s) {
+		return s !== undefined && s !== null && /^\d+$/.test(String(s).trim());
+	}
+
+	/** Découpe une ligne CSV Palo : point-virgule (Jedox), puis virgule ou tabulation. */
+	function splitDataLine(line) {
+		var delims = [";", ",", "\t"];
+		for (var d = 0; d < delims.length; d++) {
+			var parts = line.split(delims[d]);
+			if (parts.length >= 2 && isNumericId(parts[0])) {
+				var out = [];
+				for (var i = 0; i < parts.length; i++) {
+					out.push(parts[i].trim());
+				}
+				return out;
+			}
+		}
+		return null;
+	}
+
 	function parseCsvLines(text) {
-		return text
+		return stripBom(text)
 			.split(/\r?\n/)
 			.map(function (line) {
 				return line.replace(/\s+$/, "");
 			})
 			.filter(function (line) {
 				return line.length;
-			})
-			.map(function (line) {
-				return line.split(";");
 			});
 	}
 
-	function parseLoginSid(rows) {
-		if (!rows.length) {
+	/** Login : première ligne CSV, sid en colonne 0 (souvent alphanumérique, pas un id numérique). */
+	function parseLoginSidFromLines(lines) {
+		if (!lines.length) {
 			throw new Error("Réponse login vide.");
 		}
-		var r = rows[0];
-		var sid = r[0];
-		if (sid === undefined || sid === "") {
+		var cells = lines[0].split(";");
+		var sid = cells[0] ? cells[0].trim() : "";
+		if (!sid) {
 			throw new Error("Identifiant de session manquant.");
 		}
-		if (/^[0-9]{1,5}$/.test(sid) && r.length > 1 && r[1]) {
+		if (/^[0-9]{1,5}$/.test(sid) && cells.length > 1 && cells[1]) {
 			var code = parseInt(sid, 10);
 			if (code > 0) {
-				throw new Error(r.slice(1).join("; "));
+				throw new Error(cells.slice(1).join("; "));
 			}
 		}
 		return sid;
@@ -91,7 +147,9 @@
 		});
 		var url = apiBase + "/server/login?" + q.toString();
 		return fetchCsv(url).then(function (text) {
-			return parseLoginSid(parseCsvLines(text));
+			rejectIfHtml(text);
+			var lines = parseCsvLines(text);
+			return parseLoginSidFromLines(lines);
 		});
 	}
 
@@ -123,22 +181,38 @@
 		return tryAt(0);
 	}
 
+	function parseIdNameList(text, kindLabel) {
+		rejectIfHtml(text);
+		var lines = parseCsvLines(text);
+		var list = [];
+		for (var i = 0; i < lines.length; i++) {
+			var cells = splitDataLine(lines[i]);
+			if (!cells || cells.length < 2) {
+				continue;
+			}
+			var id = cells[0];
+			var name = cells[1];
+			if (!isNumericId(id) || !isPlausibleObjectName(name)) {
+				continue;
+			}
+			list.push({ id: id, name: name });
+		}
+		if (lines.length && !list.length) {
+			var preview = stripBom(text).replace(/\s+/g, " ").slice(0, 280);
+			throw new Error(
+				"Réponse " +
+					kindLabel +
+					" illisible (CSV Palo attendu, id numérique puis nom). Extrait : " +
+					preview,
+			);
+		}
+		return list;
+	}
+
 	function loadDatabases() {
 		var q = new URLSearchParams({ sid: state.sid });
 		return fetchCsv(state.apiBase + "/server/databases?" + q.toString()).then(function (text) {
-			var rows = parseCsvLines(text);
-			var list = [];
-			for (var i = 0; i < rows.length; i++) {
-				var row = rows[i];
-				if (row.length < 2) {
-					continue;
-				}
-				list.push({
-					id: row[0],
-					name: row[1],
-				});
-			}
-			return list;
+			return parseIdNameList(text, "bases");
 		});
 	}
 
@@ -151,19 +225,7 @@
 			show_info: "1",
 		});
 		return fetchCsv(state.apiBase + "/database/dimensions?" + q.toString()).then(function (text) {
-			var rows = parseCsvLines(text);
-			var list = [];
-			for (var i = 0; i < rows.length; i++) {
-				var row = rows[i];
-				if (row.length < 2) {
-					continue;
-				}
-				list.push({
-					id: row[0],
-					name: row[1],
-				});
-			}
-			return list;
+			return parseIdNameList(text, "dimensions");
 		});
 	}
 
@@ -176,26 +238,16 @@
 			show_info: "1",
 		});
 		return fetchCsv(state.apiBase + "/database/cubes?" + q.toString()).then(function (text) {
-			var rows = parseCsvLines(text);
-			var list = [];
-			for (var i = 0; i < rows.length; i++) {
-				var row = rows[i];
-				if (row.length < 2) {
-					continue;
-				}
-				list.push({
-					id: row[0],
-					name: row[1],
-				});
-			}
-			return list;
+			return parseIdNameList(text, "cubes");
 		});
 	}
 
 	function renderDatabaseList() {
 		var ul = document.getElementById("listDatabases");
 		var empty = document.getElementById("emptyDatabases");
-		ul.innerHTML = "";
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
 		var dbs = state.databases;
 		if (!dbs.length) {
 			empty.style.display = "block";
@@ -219,7 +271,9 @@
 		function fill(ulId, emptyId, items, labelField) {
 			var ul = document.getElementById(ulId);
 			var empty = document.getElementById(emptyId);
-			ul.innerHTML = "";
+			while (ul.firstChild) {
+				ul.removeChild(ul.firstChild);
+			}
 			if (!items.length) {
 				empty.style.display = "block";
 				return;
