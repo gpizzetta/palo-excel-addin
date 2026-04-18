@@ -3,10 +3,11 @@
 Complément Excel minimal, **100 % statique** (HTML + JS dans `docs/`), sans Node ni build.
 
 - **`=PALO.HELLO()`** → `hello world` (test minimal).
+- **Ruban Accueil → groupe « Palo » → « Connexion »** : volet **URL**, **utilisateur**, **mot de passe**, bouton **Enregistrer** (stockage dans les **paramètres du classeur** Office.js).
 - **`=PALO.VERSION()`** → numéro de version du **bundle JS** chargé (à comparer à `<Version>` du manifeste). Utile si **`#NOM?`** sur d’autres fonctions : cache Excel / ancien script — retirer le complément, repousser, retélécharger le manifeste.
 - **`=PALO.INFO("https://hôte:port/chemin")`** → `GET` en **CORS** vers l’URL ; statut HTTP ou erreur (CORS, réseau, TLS). Palo en **HTTP** seul peut échouer depuis Excel Online ; **HTTPS** + CORS côté serveur souvent nécessaires.
 
-À chaque release, aligner **`ADDIN_VERSION`** dans `docs/functions.js`, **`?v=…`** dans `docs/manifest.xml` et `docs/functions.html`, et `<Version>` du manifeste (même numéro, ex. `1.0.5.0`).
+À chaque release, aligner **`ADDIN_VERSION`** dans `docs/functions.js`, **`?v=…`** dans `docs/manifest.xml`, `docs/functions.html`, `docs/taskpane-connection.html`, et `<Version>` du manifeste (même numéro, ex. `1.0.6.0`).
 - Manifeste : **`https://gpizzetta.github.io/palo-excel-addin/manifest.xml`** (GitHub Pages : branche `main`, dossier `/docs`).
 - Contrôle du déploiement : **`https://gpizzetta.github.io/palo-excel-addin/`** — page `index.html` qui affiche la `<Version>` lue dans le manifeste publié (après `git push`, attendre ~1–2 min puis actualiser).
 
@@ -29,8 +30,10 @@ Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) 
 | `docs/manifest.xml` | Manifeste Office (`<Version>` à bump à chaque release) |
 | `docs/functions.html` | Page hôte Office.js |
 | `docs/functions.js` | `PALO.HELLO` |
-| `docs/functions.json` | Métadonnées de la fonction |
-| `docs/assets/` | Icônes **PNG** servies par Pages (`icon-16` … `icon-80`) — utilisées par le manifeste |
+| `docs/functions.json` | Métadonnées des fonctions |
+| `docs/commands.html` | Commandes du ruban |
+| `docs/taskpane-connection.html` + `taskpane-connection.js` | Volet Connexion (URL / user / mot de passe) |
+| `docs/assets/` | Icônes **PNG** (`icon-16` … `icon-80`) |
 | `design/*.svg` | Sources vectorielles (**non** référencées par le manifeste ; voir `design/README.md`) |
 
 Validation du manifeste (optionnel) :  
