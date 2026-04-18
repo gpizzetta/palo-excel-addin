@@ -5,7 +5,7 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
   <Id>0aa7607a-b26c-4d33-9fb8-39c570d9bdc5</Id>
-  <Version>1.0.6.0</Version>
+  <Version>1.0.7.0</Version>
   <ProviderName>Palo</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Palo"/>
@@ -20,7 +20,7 @@
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.6.0"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.7.0"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -43,8 +43,8 @@
         <DesktopFormFactor>
           <FunctionFile resid="Commands.Url"/>
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
-            <OfficeTab id="TabHome">
-              <Group id="Palo.Ribbon">
+            <CustomTab id="Palo.TabMain">
+              <Group id="Palo.GroupConn">
                 <Label resid="Palo.GroupLabel"/>
                 <Icon>
                   <bt:Image size="16" resid="Icon.16x16"/>
@@ -68,7 +68,8 @@
                   </Action>
                 </Control>
               </Group>
-            </OfficeTab>
+              <Label resid="Palo.TabLabel"/>
+            </CustomTab>
           </ExtensionPoint>
         </DesktopFormFactor>
       </Host>
@@ -81,15 +82,16 @@
         <bt:Image id="Icon.80x80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.6.0"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.6.0"/>
-        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.6.0"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.6.0"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.6.0"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.7.0"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.7.0"/>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.7.0"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.7.0"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.7.0"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
-        <bt:String id="Palo.GroupLabel" DefaultValue="Palo"/>
+        <bt:String id="Palo.TabLabel" DefaultValue="Palo"/>
+        <bt:String id="Palo.GroupLabel" DefaultValue="Serveur"/>
         <bt:String id="Palo.ConnectLabel" DefaultValue="Connexion"/>
       </bt:ShortStrings>
       <bt:LongStrings>

@@ -3,7 +3,7 @@
 Complément Excel minimal, **100 % statique** (HTML + JS dans `docs/`), sans Node ni build.
 
 - **`=PALO.HELLO()`** → `hello world` (test minimal).
-- **Ruban Accueil → groupe « Palo » → « Connexion »** : volet **URL**, **utilisateur**, **mot de passe**, bouton **Enregistrer** (stockage dans les **paramètres du classeur** Office.js).
+- **Ruban → onglet « Palo » → groupe « Serveur » → « Connexion »** : volet **URL**, **utilisateur**, **mot de passe**, **Enregistrer** (paramètres du classeur). Sur **Excel pour Microsoft 365 (Windows / Mac)**, l’onglet **Palo** apparaît à côté des onglets du ruban. **Excel dans le navigateur** : les commandes ruban des compléments **téléversés** sont souvent **invisibles ou incomplètes** — ouvrir le complément via **Insertion → Compléments → Palo** (volet Connexion), ou utiliser **Excel bureau**.
 - **`=PALO.VERSION()`** → numéro de version du **bundle JS** chargé (à comparer à `<Version>` du manifeste). Utile si **`#NOM?`** sur d’autres fonctions : cache Excel / ancien script — retirer le complément, repousser, retélécharger le manifeste.
 - **`=PALO.INFO("https://hôte:port/chemin")`** → `GET` en **CORS** vers l’URL ; statut HTTP ou erreur (CORS, réseau, TLS). Palo en **HTTP** seul peut échouer depuis Excel Online ; **HTTPS** + CORS côté serveur souvent nécessaires.
 
