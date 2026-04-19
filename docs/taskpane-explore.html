@@ -100,8 +100,8 @@
       margin-bottom: 8px;
       word-break: break-all;
     }
-    #viewDatabases, #viewDetail, #viewDimension { display: none; }
-    #viewDatabases.active, #viewDetail.active, #viewDimension.active { display: block; }
+    #viewDatabases, #viewDetail, #viewDimension, #viewCube { display: none; }
+    #viewDatabases.active, #viewDetail.active, #viewDimension.active, #viewCube.active { display: block; }
     table.props {
       width: 100%;
       border-collapse: collapse;
@@ -217,11 +217,68 @@
       color: #0078d4;
     }
     ul.list li.el-row button.el-consol:hover { background: #d6eaf9; }
+    ul.list li.cube-row {
+      display: flex;
+      align-items: center;
+      cursor: default;
+    }
+    ul.list li.cube-row .cube-name {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+      text-align: left;
+    }
+    ul.list li.cube-row:hover { background: #f3f2f1; }
+    .rules-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 12px 0 6px 0;
+      flex-wrap: wrap;
+    }
+    .rules-head h2 { margin: 0; }
+    ul.list.rules-list {
+      max-height: min(50vh, 360px);
+    }
+    ul.list li.rule-row {
+      display: block;
+      cursor: default;
+      padding: 10px 10px;
+    }
+    ul.list li.rule-row:hover { background: #faf9f8; }
+    .rule-def {
+      font-family: Consolas, "Segoe UI Mono", ui-monospace, monospace;
+      font-size: 11px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 140px;
+      overflow: auto;
+      margin-bottom: 6px;
+      color: #201f1e;
+    }
+    .rule-meta {
+      font-size: 10px;
+      color: #605e5c;
+      margin-bottom: 8px;
+    }
+    .rule-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .rule-actions button { font-size: 11px; padding: 4px 10px; }
+    button.rule-del {
+      background: #fde7e9;
+      color: #a4262c;
+    }
+    button.rule-del:hover { background: #f3d6d8; }
   </style>
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.22.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.25.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
@@ -250,8 +307,22 @@
     <div id="cubeAddRow" class="dim-add">
       <button type="button" id="btnOpenCreateCube" class="secondary">Créer un cube…</button>
     </div>
-    <ul id="listCubes" class="list list--static" aria-label="Cubes"></ul>
+    <ul id="listCubes" class="list" aria-label="Cubes"></ul>
     <p id="emptyCubes" class="empty" style="display: none;">Aucun cube.</p>
+  </div>
+
+  <div id="viewCube">
+    <p class="detail-head" id="cubeTitle"></p>
+    <h2>Dimensions du cube (ordre des axes)</h2>
+    <ul id="listCubeDims" class="list list--static" aria-label="Dimensions du cube"></ul>
+    <p id="emptyCubeDims" class="empty" style="display: none;">Aucune dimension (cube/info vide).</p>
+    <div class="rules-head">
+      <h2>Règles Jedox</h2>
+      <button type="button" id="btnAddRule" class="btn-add-circle secondary" style="display: none;" title="Nouvelle règle" aria-label="Nouvelle règle">+</button>
+    </div>
+    <p class="hint" style="margin-top: 0;">API <code>/cube/rules</code>, <code>/rule/create</code>, <code>/rule/modify</code>, <code>/rule/destroy</code>. Écriture si droits W/D sur la base.</p>
+    <ul id="listCubeRules" class="list list--static rules-list" aria-label="Règles du cube"></ul>
+    <p id="emptyCubeRules" class="empty" style="display: none;">Aucune règle.</p>
   </div>
 
   <div id="viewDimension">
@@ -269,10 +340,10 @@
   </div>
 
   <p class="hint">
-    Utilise les identifiants enregistrés dans <strong>Connexion</strong>. La gestion des utilisateurs se fait depuis l’onglet Palo du ruban (<strong>Utilisateurs</strong>). L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
+    Utilise les identifiants enregistrés dans <strong>Connexion</strong>. Clique un <strong>cube</strong> pour voir ses dimensions et ses règles. La gestion des utilisateurs : ruban <strong>Utilisateurs</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.22.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.22.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.25.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.25.0" type="text/javascript"></script>
 </body>
 </html>

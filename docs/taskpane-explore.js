@@ -18,6 +18,10 @@
 		dimensionElements: [],
 		/** Id Jedox de la dimension d’attributs (#…) liée à la dimension courante (`/dimension/info`, colonne attributes_dimension). */
 		attributesDimensionId: null,
+		/** Dimensions chargées pour la base affichée (ordre = liste API) — résolution des ids cube/info. */
+		dimensionsForCurrentDb: [],
+		/** Cube ouvert dans le panneau dimensions + règles. */
+		selectedCube: null,
 	};
 
 	function setStatus(msg, kind) {
@@ -482,6 +486,115 @@
 		});
 	}
 
+	function parseCubeInfoDimensionIds(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		if (!lines.length) {
+			throw new Error("Réponse cube/info vide.");
+		}
+		var cells = splitDataLine(lines[0]);
+		if (!cells || cells.length < 4) {
+			cells = lines[0].split(";").map(function (c) {
+				return c.trim();
+			});
+		}
+		if (!cells || cells.length < 4) {
+			throw new Error("cube/info illisible.");
+		}
+		var raw = stripPaloCsvField(cells[3]);
+		if (!raw || !String(raw).trim()) {
+			return [];
+		}
+		return String(raw)
+			.split(",")
+			.map(function (x) {
+				return x.trim();
+			})
+			.filter(function (x) {
+				return isNumericId(x);
+			});
+	}
+
+	function splitPaloRuleLine(line) {
+		var parts = [];
+		var i = 0;
+		var cur = "";
+		var inQuote = false;
+		while (i < line.length) {
+			var c = line.charAt(i);
+			if (c === '"') {
+				if (inQuote && line.charAt(i + 1) === '"') {
+					cur += '"';
+					i += 2;
+					continue;
+				}
+				inQuote = !inQuote;
+				cur += c;
+				i++;
+				continue;
+			}
+			if (c === ";" && !inQuote) {
+				parts.push(cur.trim());
+				cur = "";
+				i++;
+				continue;
+			}
+			cur += c;
+			i++;
+		}
+		parts.push(cur.trim());
+		return parts;
+	}
+
+	function parseCubeRulesList(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		var list = [];
+		for (var i = 0; i < lines.length; i++) {
+			var cells = splitPaloRuleLine(lines[i]);
+			if (!cells.length || !isNumericId(cells[0])) {
+				continue;
+			}
+			var activeNum = cells.length > 5 ? parseInt(stripPaloCsvField(cells[5]), 10) : 1;
+			if (isNaN(activeNum)) {
+				activeNum = 1;
+			}
+			list.push({
+				id: String(cells[0]).trim(),
+				ruleString: cells.length > 1 ? stripPaloCsvField(cells[1]) : "",
+				externalId: cells.length > 2 ? stripPaloCsvField(cells[2]) : "",
+				comment: cells.length > 3 ? stripPaloCsvField(cells[3]) : "",
+				active: activeNum,
+				position: cells.length > 6 ? stripPaloCsvField(cells[6]) : "",
+			});
+		}
+		return list;
+	}
+
+	function loadCubeInfoDimensionIds(nameDatabase, cubeId) {
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			cube: String(cubeId),
+		});
+		var url = state.apiBase + "/cube/info?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseCubeInfoDimensionIds(text, url);
+		});
+	}
+
+	function loadCubeRules(nameDatabase, cubeId) {
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			cube: String(cubeId),
+		});
+		var url = state.apiBase + "/cube/rules?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseCubeRulesList(text, url);
+		});
+	}
+
 	/** Colonne 7 du CSV `/dimension/info` : id de la dimension d’attributs (#…) contenant les noms de propriétés. */
 	function parseAttributesDimensionIdFromInfo(text, requestUrl) {
 		rejectIfHtml(text, requestUrl);
@@ -610,7 +723,7 @@
 		return href.substring(0, i + 1);
 	}
 
-	function openOfficeDialogPage(htmlFile, queryParams, onRefreshDone) {
+	function openOfficeDialogPage(htmlFile, queryParams, onRefreshDone, dialogSize) {
 		if (
 			typeof Office === "undefined" ||
 			!Office.context ||
@@ -621,11 +734,11 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.22.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.25.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
-			height: 90,
-			width: 90,
+			height: dialogSize && dialogSize.height != null ? dialogSize.height : 90,
+			width: dialogSize && dialogSize.width != null ? dialogSize.width : 90,
 			displayInIframe: true,
 		};
 		Office.context.ui.displayDialogAsync(url, dialogOpts, function (asyncResult) {
@@ -989,7 +1102,264 @@
 			});
 	}
 
+	function canManageRules() {
+		return permissionAllowsWrite(state.databasePermission || "");
+	}
+
+	function renderCubePanel(dimNames, rules) {
+		var ulDim = document.getElementById("listCubeDims");
+		var emptyDim = document.getElementById("emptyCubeDims");
+		var ulRules = document.getElementById("listCubeRules");
+		var emptyRules = document.getElementById("emptyCubeRules");
+		var btnAdd = document.getElementById("btnAddRule");
+		if (btnAdd) {
+			btnAdd.style.display = canManageRules() ? "inline-flex" : "none";
+		}
+		if (!ulDim || !emptyDim || !ulRules || !emptyRules) {
+			return;
+		}
+		while (ulDim.firstChild) {
+			ulDim.removeChild(ulDim.firstChild);
+		}
+		if (!dimNames.length) {
+			emptyDim.style.display = "block";
+		} else {
+			emptyDim.style.display = "none";
+			for (var i = 0; i < dimNames.length; i++) {
+				var liD = document.createElement("li");
+				liD.textContent = i + 1 + ". " + dimNames[i];
+				liD.title = "Axe " + (i + 1);
+				ulDim.appendChild(liD);
+			}
+		}
+		while (ulRules.firstChild) {
+			ulRules.removeChild(ulRules.firstChild);
+		}
+		if (!rules.length) {
+			emptyRules.style.display = "block";
+		} else {
+			emptyRules.style.display = "none";
+			for (var j = 0; j < rules.length; j++) {
+				(function (r) {
+					var li = document.createElement("li");
+					li.className = "rule-row";
+					var pre = document.createElement("div");
+					pre.className = "rule-def";
+					pre.textContent = r.ruleString || "(vide)";
+					pre.title = r.ruleString;
+					var meta = document.createElement("div");
+					meta.className = "rule-meta";
+					meta.textContent =
+						"id " +
+						r.id +
+						(r.active ? " · active" : " · inactive") +
+						(r.position ? " · pos " + r.position : "");
+					var actions = document.createElement("div");
+					actions.className = "rule-actions";
+					if (canManageRules()) {
+						var bEdit = document.createElement("button");
+						bEdit.type = "button";
+						bEdit.className = "secondary";
+						bEdit.textContent = "Modifier";
+						bEdit.addEventListener("click", function () {
+							openModalRuleEdit(r);
+						});
+						var bToggle = document.createElement("button");
+						bToggle.type = "button";
+						bToggle.className = "secondary";
+						bToggle.textContent = r.active ? "Désactiver" : "Activer";
+						bToggle.addEventListener("click", function () {
+							onToggleRule(r);
+						});
+						var bDel = document.createElement("button");
+						bDel.type = "button";
+						bDel.className = "rule-del";
+						bDel.textContent = "Supprimer";
+						bDel.addEventListener("click", function () {
+							onDeleteRule(r);
+						});
+						actions.appendChild(bEdit);
+						actions.appendChild(bToggle);
+						actions.appendChild(bDel);
+					}
+					li.appendChild(pre);
+					li.appendChild(meta);
+					li.appendChild(actions);
+					ulRules.appendChild(li);
+				})(rules[j]);
+			}
+		}
+	}
+
+	function selectCube(cube) {
+		var db = state.selectedDb;
+		if (!db) {
+			return;
+		}
+		state.selectedCube = cube;
+		state.selectedDimension = null;
+		setStatus("Chargement du cube…", "");
+		document.getElementById("cubeTitle").textContent = "Cube : " + cube.name + " — base : " + db.name;
+		Promise.all([loadCubeInfoDimensionIds(db.name, cube.id), loadCubeRules(db.name, cube.id)])
+			.then(function (results) {
+				var dimIds = results[0];
+				var rules = results[1];
+				var idToName = {};
+				for (var i = 0; i < state.dimensionsForCurrentDb.length; i++) {
+					idToName[state.dimensionsForCurrentDb[i].id] = state.dimensionsForCurrentDb[i].name;
+				}
+				var dimNames = [];
+				for (var j = 0; j < dimIds.length; j++) {
+					dimNames.push(idToName[dimIds[j]] || "#" + dimIds[j]);
+				}
+				renderCubePanel(dimNames, rules);
+				setStatus("", "");
+				showView("cube");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+				state.selectedCube = null;
+			});
+	}
+
+	function reloadCubeView() {
+		var db = state.selectedDb;
+		var cube = state.selectedCube;
+		if (!db || !cube) {
+			return Promise.reject(new Error("Cube non sélectionné."));
+		}
+		setStatus("Actualisation…", "");
+		return Promise.all([loadCubeInfoDimensionIds(db.name, cube.id), loadCubeRules(db.name, cube.id)]).then(
+			function (results) {
+				var dimIds = results[0];
+				var rules = results[1];
+				var idToName = {};
+				for (var i = 0; i < state.dimensionsForCurrentDb.length; i++) {
+					idToName[state.dimensionsForCurrentDb[i].id] = state.dimensionsForCurrentDb[i].name;
+				}
+				var dimNames = [];
+				for (var j = 0; j < dimIds.length; j++) {
+					dimNames.push(idToName[dimIds[j]] || "#" + dimIds[j]);
+				}
+				renderCubePanel(dimNames, rules);
+				setStatus("", "");
+			},
+		);
+	}
+
+	function openModalRuleCreate() {
+		if (!canManageRules() || !state.selectedDb || !state.selectedCube) {
+			return;
+		}
+		openOfficeDialogPage(
+			"dialog-rule.html",
+			{
+				apiBase: state.apiBase,
+				sid: state.sid,
+				name_database: state.selectedDb.name,
+				name_cube: state.selectedCube.name,
+				mode: "create",
+			},
+			function () {
+				reloadCubeView()
+					.then(function () {
+						setStatus("Règle créée.", "ok");
+					})
+					.catch(function (err) {
+						var m = err && err.message ? err.message : String(err);
+						setStatus(m, "err");
+					});
+			},
+			{ height: 85, width: 80 },
+		);
+	}
+
+	function openModalRuleEdit(r) {
+		if (!canManageRules() || !state.selectedDb || !state.selectedCube) {
+			return;
+		}
+		openOfficeDialogPage(
+			"dialog-rule.html",
+			{
+				apiBase: state.apiBase,
+				sid: state.sid,
+				name_database: state.selectedDb.name,
+				name_cube: state.selectedCube.name,
+				mode: "edit",
+				rule: r.id,
+			},
+			function () {
+				reloadCubeView()
+					.then(function () {
+						setStatus("Règle enregistrée.", "ok");
+					})
+					.catch(function (err) {
+						var m = err && err.message ? err.message : String(err);
+						setStatus(m, "err");
+					});
+			},
+			{ height: 85, width: 80 },
+		);
+	}
+
+	function onDeleteRule(r) {
+		if (!canManageRules() || !state.selectedDb || !state.selectedCube) {
+			return;
+		}
+		if (!confirm("Supprimer la règle id " + r.id + " ?")) {
+			return;
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.selectedDb.name,
+			name_cube: state.selectedCube.name,
+			rule: r.id,
+		});
+		var url = state.apiBase + "/rule/destroy?" + q.toString();
+		setStatus("Suppression…", "");
+		fetchCsv(url)
+			.then(function () {
+				return reloadCubeView();
+			})
+			.then(function () {
+				setStatus("Règle supprimée.", "ok");
+			})
+			.catch(function (err) {
+				var m = err && err.message ? err.message : String(err);
+				setStatus(m, "err");
+			});
+	}
+
+	function onToggleRule(r) {
+		if (!canManageRules() || !state.selectedDb || !state.selectedCube) {
+			return;
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.selectedDb.name,
+			name_cube: state.selectedCube.name,
+			rule: r.id,
+			activate: "2",
+		});
+		var url = state.apiBase + "/rule/modify?" + q.toString();
+		setStatus("Mise à jour…", "");
+		fetchCsv(url)
+			.then(function () {
+				return reloadCubeView();
+			})
+			.then(function () {
+				setStatus("État de la règle mis à jour.", "ok");
+			})
+			.catch(function (err) {
+				var m = err && err.message ? err.message : String(err);
+				setStatus(m, "err");
+			});
+	}
+
 	function renderLists(dimensions, cubes) {
+		state.dimensionsForCurrentDb = dimensions;
+
 		function fillCubes(ulId, emptyId, items, labelField) {
 			var ul = document.getElementById(ulId);
 			var empty = document.getElementById(emptyId);
@@ -1002,10 +1372,19 @@
 			}
 			empty.style.display = "none";
 			for (var i = 0; i < items.length; i++) {
-				var li = document.createElement("li");
-				li.textContent = items[i][labelField];
-				li.title = "id " + items[i].id;
-				ul.appendChild(li);
+				(function (cube) {
+					var li = document.createElement("li");
+					li.className = "cube-row";
+					var nameSpan = document.createElement("span");
+					nameSpan.className = "cube-name";
+					nameSpan.textContent = cube[labelField];
+					nameSpan.title = "id " + cube.id + " — dimensions et règles";
+					nameSpan.addEventListener("click", function () {
+						selectCube(cube);
+					});
+					li.appendChild(nameSpan);
+					ul.appendChild(li);
+				})(items[i]);
 			}
 		}
 
@@ -1053,6 +1432,10 @@
 		document.getElementById("viewDatabases").className = which === "databases" ? "active" : "";
 		document.getElementById("viewDetail").className = which === "detail" ? "active" : "";
 		document.getElementById("viewDimension").className = which === "dimension" ? "active" : "";
+		var viewCube = document.getElementById("viewCube");
+		if (viewCube) {
+			viewCube.className = which === "cube" ? "active" : "";
+		}
 		var btn = document.getElementById("btnBack");
 		if (which === "databases") {
 			btn.style.display = "none";
@@ -1062,12 +1445,17 @@
 		} else if (which === "dimension") {
 			btn.style.display = "inline-block";
 			btn.textContent = "← Dimensions";
+		} else if (which === "cube") {
+			btn.style.display = "inline-block";
+			btn.textContent = "← Base";
 		}
 	}
 
 	function selectDatabase(db) {
 		state.selectedDb = db;
 		state.selectedDimension = null;
+		state.selectedCube = null;
+		state.dimensionsForCurrentDb = [];
 		state.databasePermission = null;
 		setStatus("Chargement…", "");
 		document.getElementById("detailTitle").textContent = "Base : " + db.name;
@@ -1139,6 +1527,8 @@
 				state.databases = dbs;
 				state.selectedDb = null;
 				state.selectedDimension = null;
+				state.selectedCube = null;
+				state.dimensionsForCurrentDb = [];
 				state.databasePermission = null;
 				state.dimensionElements = [];
 				state.attributesDimensionId = null;
@@ -1156,6 +1546,12 @@
 	}
 
 	function onBack() {
+		if (state.currentView === "cube") {
+			state.selectedCube = null;
+			showView("detail");
+			setStatus("", "");
+			return;
+		}
 		if (state.currentView === "dimension") {
 			state.selectedDimension = null;
 			state.dimensionElements = [];
@@ -1178,6 +1574,10 @@
 		}
 		if (btnCube) {
 			btnCube.addEventListener("click", openModalCreateCube);
+		}
+		var btnAddRule = document.getElementById("btnAddRule");
+		if (btnAddRule) {
+			btnAddRule.addEventListener("click", openModalRuleCreate);
 		}
 		var btnAddEl = document.getElementById("btnAddElement");
 		if (btnAddEl) {
