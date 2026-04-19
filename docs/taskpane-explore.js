@@ -14,6 +14,14 @@
 		currentView: "databases",
 		/** Droits sur la base courante : "N" | "R" | "W" | "D" (voir `/database/info` + show_permission). */
 		databasePermission: null,
+		/** Dernière liste d’éléments parsée pour la dimension affichée (voir `parseDimensionElementsList`). */
+		dimensionElements: [],
+	};
+
+	var consolState = {
+		targetElement: null,
+		/** ids enfants dans l’ordre (pour `element/replace`) */
+		selectedChildIds: [],
 	};
 
 	/** Colonnes CSV `/dimension/info` (ordre Jedox) → libellés affichés */
@@ -369,6 +377,106 @@
 		return list;
 	}
 
+	function parseChildrenIdList(s) {
+		if (!s || !String(s).trim()) {
+			return [];
+		}
+		return String(s)
+			.split(",")
+			.map(function (x) {
+				return x.trim();
+			})
+			.filter(function (x) {
+				return isNumericId(x);
+			});
+	}
+
+	function parseWeightsForChildren(raw, childCount) {
+		if (!childCount) {
+			return [];
+		}
+		var out = [];
+		var parts = String(raw || "").split(",");
+		for (var i = 0; i < childCount; i++) {
+			var p = parts[i] ? parts[i].trim() : "";
+			var v = parseFloat(String(p).replace(",", "."));
+			out.push(isNaN(v) ? 1 : v);
+		}
+		return out;
+	}
+
+	function elementTypeLabel(typeNum) {
+		if (typeNum === 1) {
+			return "N";
+		}
+		if (typeNum === 2) {
+			return "S";
+		}
+		if (typeNum === 4) {
+			return "C";
+		}
+		return String(typeNum);
+	}
+
+	function parseDimensionElementsList(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		var list = [];
+		var anyRow = false;
+		for (var i = 0; i < lines.length; i++) {
+			var cells = splitDataLine(lines[i]);
+			if (!cells || cells.length < 7) {
+				continue;
+			}
+			var id = cells[0];
+			var name = stripPaloCsvField(cells[1]);
+			if (isNumericId(id) && isPlausibleObjectName(name)) {
+				anyRow = true;
+			}
+			if (!isNumericId(id) || !isPlausibleObjectName(name)) {
+				continue;
+			}
+			var typeStr = stripPaloCsvField(cells[6]);
+			var typeNum = parseInt(typeStr, 10);
+			if (isNaN(typeNum)) {
+				typeNum = null;
+			}
+			var childrenRaw = cells.length > 10 ? cells[10] : "";
+			var weightsRaw = cells.length > 11 ? cells[11] : "";
+			var childrenIds = parseChildrenIdList(childrenRaw);
+			var weights = parseWeightsForChildren(weightsRaw, childrenIds.length);
+			list.push({
+				id: id,
+				name: name,
+				type: typeNum,
+				childrenIds: childrenIds,
+				weights: weights,
+			});
+		}
+		if (lines.length && !list.length && !anyRow) {
+			var safeUrl = requestUrl ? redactUrlForDebug(requestUrl) : "(URL inconnue)";
+			throw new Error(
+				"Réponse éléments illisible (CSV Palo attendu).\n\n" +
+					"URL interrogée : " +
+					safeUrl +
+					"\n\n" +
+					"Réponse du serveur (extrait) :\n" +
+					truncateForDebug(text, 900),
+			);
+		}
+		return list;
+	}
+
+	function findElementById(id) {
+		var list = state.dimensionElements;
+		for (var i = 0; i < list.length; i++) {
+			if (list[i].id === id) {
+				return list[i];
+			}
+		}
+		return null;
+	}
+
 	function loadDatabases() {
 		var q = new URLSearchParams({ sid: state.sid });
 		var url = state.apiBase + "/server/databases?" + q.toString();
@@ -490,7 +598,9 @@
 		});
 		var url = state.apiBase + "/dimension/elements?" + q.toString();
 		return fetchCsv(url).then(function (text) {
-			return parseIdNameList(text, "éléments", url);
+			var list = parseDimensionElementsList(text, url);
+			state.dimensionElements = list;
+			return list;
 		});
 	}
 
@@ -519,9 +629,284 @@
 		}
 	}
 
+	function canManageElements() {
+		return permissionAllowsWrite(state.databasePermission || "");
+	}
+
+	function closeModals() {
+		var back = document.getElementById("modalBackdrop");
+		if (back) {
+			back.classList.remove("open");
+		}
+		var mAdd = document.getElementById("modalAddElement");
+		var mCon = document.getElementById("modalConsolidation");
+		if (mAdd) {
+			mAdd.style.display = "none";
+		}
+		if (mCon) {
+			mCon.style.display = "none";
+		}
+		consolState.targetElement = null;
+		consolState.selectedChildIds = [];
+	}
+
+	function openModalAddElement() {
+		if (!canManageElements()) {
+			return;
+		}
+		var nameEl = document.getElementById("inputElementName");
+		var typeEl = document.getElementById("selectElementType");
+		if (nameEl) {
+			nameEl.value = "";
+		}
+		if (typeEl) {
+			typeEl.value = "1";
+		}
+		var mAdd = document.getElementById("modalAddElement");
+		var mCon = document.getElementById("modalConsolidation");
+		var back = document.getElementById("modalBackdrop");
+		if (mAdd) {
+			mAdd.style.display = "block";
+		}
+		if (mCon) {
+			mCon.style.display = "none";
+		}
+		if (back) {
+			back.classList.add("open");
+		}
+		if (nameEl) {
+			nameEl.focus();
+		}
+	}
+
+	function refreshConsolUi() {
+		var target = consolState.targetElement;
+		if (!target) {
+			return;
+		}
+		var selectedSet = {};
+		for (var s = 0; s < consolState.selectedChildIds.length; s++) {
+			selectedSet[consolState.selectedChildIds[s]] = true;
+		}
+		var avail = document.getElementById("consolAvail");
+		if (avail) {
+			avail.innerHTML = "";
+			for (var j = 0; j < state.dimensionElements.length; j++) {
+				var e = state.dimensionElements[j];
+				if (e.id === target.id) {
+					continue;
+				}
+				if (selectedSet[e.id]) {
+					continue;
+				}
+				var opt = document.createElement("option");
+				opt.value = e.id;
+				opt.textContent = e.name + " (" + elementTypeLabel(e.type) + ", id " + e.id + ")";
+				avail.appendChild(opt);
+			}
+		}
+		var ul = document.getElementById("consolSelectedList");
+		if (!ul) {
+			return;
+		}
+		ul.innerHTML = "";
+		for (var k = 0; k < consolState.selectedChildIds.length; k++) {
+			var cid = consolState.selectedChildIds[k];
+			var child = findElementById(cid);
+			var li = document.createElement("li");
+			var span = document.createElement("span");
+			span.textContent = child ? child.name + " (id " + cid + ")" : "id " + cid;
+			var btn = document.createElement("button");
+			btn.type = "button";
+			btn.className = "secondary";
+			btn.textContent = "Retirer";
+			(function (id) {
+				btn.addEventListener("click", function () {
+					consolState.selectedChildIds = consolState.selectedChildIds.filter(function (x) {
+						return x !== id;
+					});
+					refreshConsolUi();
+				});
+			})(cid);
+			li.appendChild(span);
+			li.appendChild(btn);
+			ul.appendChild(li);
+		}
+	}
+
+	function openModalConsolidation(el) {
+		if (!canManageElements()) {
+			return;
+		}
+		consolState.targetElement = el;
+		consolState.selectedChildIds = el.childrenIds && el.childrenIds.length ? el.childrenIds.slice() : [];
+		var sub = document.getElementById("modalConsolSubtitle");
+		if (sub) {
+			sub.textContent =
+				"Élément : " +
+				el.name +
+				" (id " +
+				el.id +
+				") — type actuel : " +
+				elementTypeLabel(el.type);
+		}
+		var mAdd = document.getElementById("modalAddElement");
+		var mCon = document.getElementById("modalConsolidation");
+		var back = document.getElementById("modalBackdrop");
+		if (mAdd) {
+			mAdd.style.display = "none";
+		}
+		if (mCon) {
+			mCon.style.display = "block";
+		}
+		if (back) {
+			back.classList.add("open");
+		}
+		refreshConsolUi();
+	}
+
+	function consolAddSelected() {
+		var avail = document.getElementById("consolAvail");
+		if (!avail) {
+			return;
+		}
+		var opts = avail.selectedOptions;
+		if (!opts || !opts.length) {
+			return;
+		}
+		for (var i = 0; i < opts.length; i++) {
+			var id = opts[i].value;
+			if (consolState.selectedChildIds.indexOf(id) === -1) {
+				consolState.selectedChildIds.push(id);
+			}
+		}
+		refreshConsolUi();
+	}
+
+	function saveConsolidation() {
+		var target = consolState.targetElement;
+		if (!target || !state.selectedDb || !state.selectedDimension) {
+			return;
+		}
+		if (consolState.selectedChildIds.length === 0) {
+			setStatus("Ajoutez au moins un enfant pour enregistrer une consolidation.", "err");
+			return;
+		}
+		var weights = consolState.selectedChildIds.map(function () {
+			return 1;
+		});
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.selectedDb.name,
+			name_dimension: state.selectedDimension.name,
+			element: target.id,
+			type: "4",
+			children: consolState.selectedChildIds.join(","),
+			weights: weights.join(","),
+		});
+		var url = state.apiBase + "/element/replace?" + q.toString();
+		setStatus("Enregistrement de la consolidation…", "");
+		fetchCsv(url)
+			.then(function () {
+				closeModals();
+				return reloadDimensionView();
+			})
+			.then(function () {
+				setStatus("Consolidation enregistrée.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
+	function saveAddElement() {
+		if (!state.selectedDb || !state.selectedDimension) {
+			return;
+		}
+		var nameEl = document.getElementById("inputElementName");
+		var typeEl = document.getElementById("selectElementType");
+		var name = nameEl ? nameEl.value.trim() : "";
+		var type = typeEl ? parseInt(typeEl.value, 10) : 1;
+		if (!name) {
+			setStatus("Indiquez un nom d’élément.", "err");
+			return;
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.selectedDb.name,
+			name_dimension: state.selectedDimension.name,
+			new_name: name,
+			type: String(type),
+		});
+		var url = state.apiBase + "/element/create?" + q.toString();
+		setStatus("Création de l’élément…", "");
+		fetchCsv(url)
+			.then(function () {
+				closeModals();
+				return reloadDimensionView();
+			})
+			.then(function () {
+				setStatus("Élément créé.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
+	function onDeleteElement(el) {
+		if (!state.selectedDb || !state.selectedDimension) {
+			return;
+		}
+		if (!confirm('Supprimer l’élément « ' + el.name + ' » ?')) {
+			return;
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.selectedDb.name,
+			name_dimension: state.selectedDimension.name,
+			element: el.id,
+		});
+		var url = state.apiBase + "/element/destroy?" + q.toString();
+		setStatus("Suppression de l’élément…", "");
+		fetchCsv(url)
+			.then(function () {
+				return reloadDimensionView();
+			})
+			.then(function () {
+				setStatus("Élément supprimé.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
+	function reloadDimensionView() {
+		var db = state.selectedDb;
+		var dim = state.selectedDimension;
+		if (!db || !dim) {
+			return Promise.reject(new Error("Pas de dimension sélectionnée."));
+		}
+		setStatus("Actualisation…", "");
+		return Promise.all([loadDimensionInfo(db.name, dim.name), loadDimensionElements(db.name, dim.name)]).then(
+			function (results) {
+				renderDimensionProps(results[0]);
+				renderElementList(results[1]);
+				setStatus("", "");
+			},
+		);
+	}
+
 	function renderElementList(items) {
 		var ul = document.getElementById("listElements");
 		var empty = document.getElementById("emptyElements");
+		var btnAdd = document.getElementById("btnAddElement");
+		var can = canManageElements();
+		if (btnAdd) {
+			btnAdd.style.display = can ? "inline-block" : "none";
+		}
 		while (ul.firstChild) {
 			ul.removeChild(ul.firstChild);
 		}
@@ -531,10 +916,43 @@
 		}
 		empty.style.display = "none";
 		for (var i = 0; i < items.length; i++) {
-			var li = document.createElement("li");
-			li.textContent = items[i].name;
-			li.title = "id " + items[i].id;
-			ul.appendChild(li);
+			(function (el) {
+				var li = document.createElement("li");
+				li.className = "el-row";
+				var main = document.createElement("span");
+				main.className = "el-main";
+				main.textContent = el.name;
+				var ty = document.createElement("span");
+				ty.className = "el-type";
+				ty.textContent = "(" + elementTypeLabel(el.type) + ")";
+				main.appendChild(ty);
+				li.appendChild(main);
+				if (can) {
+					var actions = document.createElement("span");
+					actions.className = "el-actions";
+					var bCons = document.createElement("button");
+					bCons.type = "button";
+					bCons.className = "el-consol secondary";
+					bCons.textContent = "Consolidation";
+					bCons.title = "Définir les enfants (consolidation)";
+					bCons.addEventListener("click", function (e) {
+						e.stopPropagation();
+						openModalConsolidation(el);
+					});
+					var bDel = document.createElement("button");
+					bDel.type = "button";
+					bDel.className = "el-del";
+					bDel.textContent = "Supprimer";
+					bDel.addEventListener("click", function (e) {
+						e.stopPropagation();
+						onDeleteElement(el);
+					});
+					actions.appendChild(bCons);
+					actions.appendChild(bDel);
+					li.appendChild(actions);
+				}
+				ul.appendChild(li);
+			})(items[i]);
 		}
 	}
 
@@ -855,6 +1273,8 @@
 				state.selectedDb = null;
 				state.selectedDimension = null;
 				state.databasePermission = null;
+				state.dimensionElements = [];
+				closeModals();
 				renderDatabaseList();
 				showView("databases");
 				setStatus(dbs.length + " base(s) chargée(s).", "ok");
@@ -870,7 +1290,9 @@
 
 	function onBack() {
 		if (state.currentView === "dimension") {
+			closeModals();
 			state.selectedDimension = null;
+			state.dimensionElements = [];
 			showView("detail");
 			setStatus("", "");
 			return;
@@ -892,6 +1314,57 @@
 				if (ev.key === "Enter") {
 					ev.preventDefault();
 					onCreateDimension();
+				}
+			});
+		}
+		var btnAddEl = document.getElementById("btnAddElement");
+		if (btnAddEl) {
+			btnAddEl.addEventListener("click", openModalAddElement);
+		}
+		var modalBack = document.getElementById("modalBackdrop");
+		if (modalBack) {
+			modalBack.addEventListener("click", function (ev) {
+				if (ev.target === modalBack) {
+					closeModals();
+				}
+			});
+		}
+		var modalAddCancel = document.getElementById("modalAddCancel");
+		var modalAddOk = document.getElementById("modalAddOk");
+		if (modalAddCancel) {
+			modalAddCancel.addEventListener("click", closeModals);
+		}
+		if (modalAddOk) {
+			modalAddOk.addEventListener("click", saveAddElement);
+		}
+		var modalConsolCancel = document.getElementById("modalConsolCancel");
+		var modalConsolOk = document.getElementById("modalConsolOk");
+		if (modalConsolCancel) {
+			modalConsolCancel.addEventListener("click", closeModals);
+		}
+		if (modalConsolOk) {
+			modalConsolOk.addEventListener("click", saveConsolidation);
+		}
+		var consolBtnAdd = document.getElementById("consolBtnAdd");
+		var consolAvail = document.getElementById("consolAvail");
+		if (consolBtnAdd) {
+			consolBtnAdd.addEventListener("click", consolAddSelected);
+		}
+		if (consolAvail) {
+			consolAvail.addEventListener("dblclick", consolAddSelected);
+		}
+		document.addEventListener("keydown", function (ev) {
+			var back = document.getElementById("modalBackdrop");
+			if (ev.key === "Escape" && back && back.classList.contains("open")) {
+				closeModals();
+			}
+		});
+		var inputElName = document.getElementById("inputElementName");
+		if (inputElName) {
+			inputElName.addEventListener("keydown", function (ev) {
+				if (ev.key === "Enter") {
+					ev.preventDefault();
+					saveAddElement();
 				}
 			});
 		}

@@ -159,11 +159,166 @@
     }
     ul.list li.dim-row button.dim-del:hover { background: #f3d6d8; }
     ul.list li.dim-row button.dim-del:disabled { opacity: 0.5; cursor: not-allowed; }
+    .elements-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin: 12px 0 6px 0;
+    }
+    .elements-head h2 { margin: 0; }
+    button.btn-add-circle {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    ul.list li.el-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      cursor: default;
+      flex-wrap: wrap;
+    }
+    ul.list li.el-row:hover { background: #f3f2f1; }
+    ul.list li.el-row .el-main {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+      cursor: default;
+    }
+    ul.list li.el-row .el-type {
+      font-size: 10px;
+      color: #605e5c;
+      margin-left: 6px;
+    }
+    ul.list li.el-row .el-actions {
+      display: flex;
+      flex-shrink: 0;
+      gap: 4px;
+      align-items: center;
+    }
+    ul.list li.el-row .el-actions button {
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+    ul.list li.el-row button.el-del {
+      background: #fde7e9;
+      color: #a4262c;
+    }
+    ul.list li.el-row button.el-del:hover { background: #f3d6d8; }
+    ul.list li.el-row button.el-consol {
+      background: #e8f4fc;
+      color: #0078d4;
+    }
+    ul.list li.el-row button.el-consol:hover { background: #d6eaf9; }
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.35);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal-box {
+      background: #fff;
+      border-radius: 4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+      max-width: 420px;
+      width: 100%;
+      max-height: 90vh;
+      overflow: auto;
+      padding: 14px 16px;
+    }
+    .modal-box.wide { max-width: 520px; }
+    .modal-box h3 {
+      margin: 0 0 12px 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .modal-field { margin-bottom: 10px; }
+    .modal-field label {
+      display: block;
+      font-size: 11px;
+      color: #605e5c;
+      margin-bottom: 4px;
+    }
+    .modal-field input[type="text"], .modal-field select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #8a8886;
+      border-radius: 2px;
+      font-size: 12px;
+    }
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .consol-panels {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 8px;
+      align-items: start;
+      margin-top: 8px;
+    }
+    .consol-panels select {
+      width: 100%;
+      font-size: 11px;
+    }
+    .consol-mid {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 24px;
+    }
+    .consol-mid button { padding: 4px 8px; font-size: 11px; }
+    ul.consol-selected {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #edebe9;
+      border-radius: 2px;
+      max-height: 160px;
+      overflow: auto;
+      font-size: 11px;
+    }
+    ul.consol-selected li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid #f3f2f1;
+      cursor: default;
+    }
+    ul.consol-selected li:last-child { border-bottom: none; }
+    ul.consol-selected li button {
+      padding: 1px 6px;
+      font-size: 10px;
+      flex-shrink: 0;
+    }
+    .modal-hint {
+      font-size: 11px;
+      color: #605e5c;
+      margin: 8px 0 0 0;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.12.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.13.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
@@ -201,16 +356,64 @@
       <p id="emptyDimensionProps" class="empty" style="display: none;">Aucune propriété.</p>
       <table id="tableDimensionProps" class="props" style="display: none;" aria-label="Propriétés de la dimension"></table>
     </div>
-    <h2>Éléments</h2>
+    <div class="elements-head">
+      <h2>Éléments</h2>
+      <button type="button" id="btnAddElement" class="btn-add-circle secondary" style="display: none;" title="Ajouter un élément" aria-label="Ajouter un élément">+</button>
+    </div>
     <ul id="listElements" class="list" aria-label="Éléments de la dimension"></ul>
     <p id="emptyElements" class="empty" style="display: none;">Aucun élément.</p>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop" role="presentation">
+    <div id="modalAddElement" class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalAddTitle" style="display: none;">
+      <h3 id="modalAddTitle">Nouvel élément</h3>
+      <div class="modal-field">
+        <label for="inputElementName">Nom</label>
+        <input type="text" id="inputElementName" autocomplete="off" />
+      </div>
+      <div class="modal-field">
+        <label for="selectElementType">Type</label>
+        <select id="selectElementType">
+          <option value="1">Numérique</option>
+          <option value="2">Texte</option>
+          <option value="4">Consolidé</option>
+        </select>
+      </div>
+      <p class="modal-hint">Type consolidé : vous pourrez définir les enfants ensuite via « Consolidation » sur la ligne de l’élément.</p>
+      <div class="modal-actions">
+        <button type="button" id="modalAddCancel" class="secondary">Annuler</button>
+        <button type="button" id="modalAddOk">Créer</button>
+      </div>
+    </div>
+    <div id="modalConsolidation" class="modal-box wide" role="dialog" aria-modal="true" aria-labelledby="modalConsolTitle" style="display: none;">
+      <h3 id="modalConsolTitle">Consolidation</h3>
+      <p id="modalConsolSubtitle" class="modal-hint" style="margin-top: 0;"></p>
+      <div class="consol-panels">
+        <div>
+          <label for="consolAvail">Disponibles</label>
+          <select id="consolAvail" size="10" multiple aria-label="Éléments disponibles"></select>
+        </div>
+        <div class="consol-mid">
+          <button type="button" id="consolBtnAdd" class="secondary">Ajouter →</button>
+        </div>
+        <div>
+          <label>Enfants de la consolidation (ordre)</label>
+          <ul id="consolSelectedList" class="consol-selected" aria-label="Enfants sélectionnés"></ul>
+        </div>
+      </div>
+      <p class="modal-hint">À gauche : sélection puis « Ajouter » ou double-clic. À droite : « Retirer » sur une ligne pour l’enlever de la consolidation.</p>
+      <div class="modal-actions">
+        <button type="button" id="modalConsolCancel" class="secondary">Annuler</button>
+        <button type="button" id="modalConsolOk">Enregistrer</button>
+      </div>
+    </div>
   </div>
 
   <p class="hint">
     Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.12.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.12.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.13.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.13.0" type="text/javascript"></script>
 </body>
 </html>
