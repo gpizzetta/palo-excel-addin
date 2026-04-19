@@ -16,6 +16,8 @@
 		databasePermission: null,
 		/** Dernière liste d’éléments parsée pour la dimension affichée (voir `parseDimensionElementsList`). */
 		dimensionElements: [],
+		/** Id Jedox de la dimension d’attributs (#…) liée à la dimension courante (`/dimension/info`, colonne attributes_dimension). */
+		attributesDimensionId: null,
 	};
 
 	var consolState = {
@@ -23,36 +25,6 @@
 		/** ids enfants dans l’ordre (pour `element/replace`) */
 		selectedChildIds: [],
 	};
-
-	/** Colonnes CSV `/dimension/info` (ordre Jedox) → libellés affichés */
-	var DIMENSION_INFO_LABELS = [
-		"Identifiant dimension",
-		"Nom",
-		"Nombre d’éléments",
-		"Niveau max",
-		"Indent max",
-		"Profondeur max",
-		"Type de dimension",
-		"Dimension attributs",
-		"Cube attributs",
-		"Cube droits",
-		"Jeton (token)",
-		"Dimension source",
-		"Dimensions virtuelles",
-		"Id attribut source",
-		"Nom attribut source",
-		"Droits (permission)",
-		"Temps de chargement (s)",
-		"Mémoire (octets)",
-		"Élément lecture par défaut",
-		"Élément écriture par défaut",
-		"Élément parent par défaut",
-		"Élément total",
-		"Élément N/A",
-		"Nombre d’éléments N",
-		"Nombre d’éléments C",
-		"Nombre d’éléments S",
-	];
 
 	function setStatus(msg, kind) {
 		var el = document.getElementById("status");
@@ -516,76 +488,63 @@
 		});
 	}
 
-	function formatDimensionInfoCell(colIndex, raw) {
-		var t = String(raw);
-		if (colIndex === 6) {
-			var v = parseInt(t, 10);
-			var names = {
-				0: "normale",
-				1: "système",
-				2: "attribut",
-				3: "user info",
-				4: "system id",
-				5: "virtuelle (attribut)",
-			};
-			if (!isNaN(v) && names[v] !== undefined) {
-				return t + " (" + names[v] + ")";
-			}
-		}
-		if (colIndex === 16 && t !== "" && t !== "—") {
-			return t + " s";
-		}
-		if (colIndex === 17 && /^\d+$/.test(t)) {
-			var n = parseInt(t, 10);
-			if (n >= 1073741824) {
-				return t + " (" + (n / 1073741824).toFixed(2) + " Go)";
-			}
-			if (n >= 1048576) {
-				return t + " (" + (n / 1048576).toFixed(2) + " Mo)";
-			}
-			if (n >= 1024) {
-				return t + " (" + (n / 1024).toFixed(1) + " Ko)";
-			}
-		}
-		return t;
-	}
-
-	function parseDimensionInfoCsv(text, requestUrl) {
+	/** Colonne 7 du CSV `/dimension/info` : id de la dimension d’attributs (#…) contenant les noms de propriétés. */
+	function parseAttributesDimensionIdFromInfo(text, requestUrl) {
 		rejectIfHtml(text, requestUrl);
 		var lines = parseCsvLines(text);
 		if (!lines.length) {
-			return [];
+			return null;
 		}
 		var cells = splitDataLine(lines[0]);
-		if (!cells || !cells.length) {
+		if (!cells || cells.length < 8) {
 			cells = lines[0].split(";").map(function (c) {
 				return c.trim();
 			});
 		}
-		var rows = [];
-		for (var i = 0; i < DIMENSION_INFO_LABELS.length && i < cells.length; i++) {
-			var raw = stripPaloCsvField(cells[i]);
-			var label = DIMENSION_INFO_LABELS[i];
-			var display = raw === "" ? "—" : formatDimensionInfoCell(i, raw);
-			rows.push({ label: label, value: display });
+		if (cells.length < 8) {
+			return null;
 		}
-		return rows;
+		var raw = stripPaloCsvField(cells[7]);
+		if (!raw || raw === "0") {
+			return null;
+		}
+		if (isNumericId(raw)) {
+			return raw;
+		}
+		return null;
 	}
 
-	function loadDimensionInfo(nameDatabase, nameDimension) {
+	function loadDimensionAttributesDimensionId(nameDatabase, nameDimension) {
 		var q = new URLSearchParams({
 			sid: state.sid,
 			name_database: nameDatabase,
 			name_dimension: nameDimension,
 			show_permission: "1",
-			show_counters: "1",
-			show_default_elements: "1",
-			show_count_by_type: "1",
+			show_counters: "0",
+			show_default_elements: "0",
+			show_count_by_type: "0",
 			show_virtual: "1",
 		});
 		var url = state.apiBase + "/dimension/info?" + q.toString();
 		return fetchCsv(url).then(function (text) {
-			return parseDimensionInfoCsv(text, url);
+			return parseAttributesDimensionIdFromInfo(text, url);
+		});
+	}
+
+	/** Éléments de la dimension d’attributs (propriétés affichables pour la dimension normale). */
+	function loadPropertyElements(nameDatabase, attributesDimId) {
+		if (!attributesDimId) {
+			return Promise.resolve([]);
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			dimension: attributesDimId,
+			show_permission: "0",
+		});
+		var url = state.apiBase + "/dimension/elements?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseDimensionElementsList(text, url);
 		});
 	}
 
@@ -604,28 +563,42 @@
 		});
 	}
 
-	function renderDimensionProps(rows) {
-		var table = document.getElementById("tableDimensionProps");
-		var empty = document.getElementById("emptyDimensionProps");
-		while (table.firstChild) {
-			table.removeChild(table.firstChild);
+	function renderPropertyElementsList(items, attributesDimId) {
+		var ul = document.getElementById("listPropertyElements");
+		var empty = document.getElementById("emptyPropertyElements");
+		var hint = document.getElementById("propertyHint");
+		if (!ul || !empty) {
+			return;
 		}
-		if (!rows.length) {
-			table.style.display = "none";
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
+		if (hint) {
+			hint.style.display = "block";
+			if (!attributesDimId) {
+				hint.textContent =
+					"Aucune dimension d’attributs (#…) n’est liée à cette dimension (champ attributes_dimension dans /dimension/info). Les propriétés sont les éléments de cette dimension « # ».";
+				empty.style.display = "none";
+				empty.textContent = "";
+				return;
+			}
+			hint.textContent =
+				"Liste des éléments de la dimension d’attributs (id " +
+				attributesDimId +
+				") — ce sont les noms de propriétés pour cette dimension.";
+		}
+		if (!items.length) {
 			empty.style.display = "block";
+			empty.textContent = "Aucun élément dans la dimension d’attributs (aucune propriété).";
 			return;
 		}
 		empty.style.display = "none";
-		table.style.display = "table";
-		for (var i = 0; i < rows.length; i++) {
-			var tr = document.createElement("tr");
-			var th = document.createElement("th");
-			th.textContent = rows[i].label;
-			var td = document.createElement("td");
-			td.textContent = rows[i].value;
-			tr.appendChild(th);
-			tr.appendChild(td);
-			table.appendChild(tr);
+		empty.textContent = "—";
+		for (var i = 0; i < items.length; i++) {
+			var li = document.createElement("li");
+			li.textContent = items[i].name;
+			li.title = "id " + items[i].id + " — " + elementTypeLabel(items[i].type);
+			ul.appendChild(li);
 		}
 	}
 
@@ -796,7 +769,7 @@
 				element_name: el.name,
 				initial_children: (el.childrenIds || []).join(","),
 			});
-			var url = getAddinPageBaseUrl() + "dialog-consolidation.html?v=1.0.14.0&" + qs.toString();
+			var url = getAddinPageBaseUrl() + "dialog-consolidation.html?v=1.0.15.0&" + qs.toString();
 			Office.context.ui.displayDialogAsync(
 				url,
 				{ height: 88, width: 85, displayInIframe: true },
@@ -954,13 +927,19 @@
 			return Promise.reject(new Error("Pas de dimension sélectionnée."));
 		}
 		setStatus("Actualisation…", "");
-		return Promise.all([loadDimensionInfo(db.name, dim.name), loadDimensionElements(db.name, dim.name)]).then(
-			function (results) {
-				renderDimensionProps(results[0]);
-				renderElementList(results[1]);
+		return Promise.all([
+			loadDimensionElements(db.name, dim.name),
+			loadDimensionAttributesDimensionId(db.name, dim.name),
+		]).then(function (results) {
+			var mainElements = results[0];
+			var attrId = results[1];
+			state.attributesDimensionId = attrId;
+			return loadPropertyElements(db.name, attrId).then(function (propElements) {
+				renderElementList(mainElements);
+				renderPropertyElementsList(propElements, attrId);
 				setStatus("", "");
-			},
-		);
+			});
+		});
 	}
 
 	function renderElementList(items) {
@@ -1301,15 +1280,24 @@
 			return;
 		}
 		state.selectedDimension = dim;
+		state.attributesDimensionId = null;
 		setStatus("Chargement de la dimension…", "");
 		document.getElementById("dimensionTitle").textContent =
 			"Dimension : " + dim.name + " — base : " + db.name;
-		Promise.all([loadDimensionInfo(db.name, dim.name), loadDimensionElements(db.name, dim.name)])
+		Promise.all([
+			loadDimensionElements(db.name, dim.name),
+			loadDimensionAttributesDimensionId(db.name, dim.name),
+		])
 			.then(function (results) {
-				renderDimensionProps(results[0]);
-				renderElementList(results[1]);
-				setStatus("", "");
-				showView("dimension");
+				var mainElements = results[0];
+				var attrId = results[1];
+				state.attributesDimensionId = attrId;
+				return loadPropertyElements(db.name, attrId).then(function (propElements) {
+					renderElementList(mainElements);
+					renderPropertyElementsList(propElements, attrId);
+					setStatus("", "");
+					showView("dimension");
+				});
 			})
 			.catch(function (err) {
 				var msg = err && err.message ? err.message : String(err);
@@ -1338,6 +1326,7 @@
 				state.selectedDimension = null;
 				state.databasePermission = null;
 				state.dimensionElements = [];
+				state.attributesDimensionId = null;
 				closeModals();
 				renderDatabaseList();
 				showView("databases");
@@ -1357,6 +1346,7 @@
 			closeModals();
 			state.selectedDimension = null;
 			state.dimensionElements = [];
+			state.attributesDimensionId = null;
 			showView("detail");
 			setStatus("", "");
 			return;

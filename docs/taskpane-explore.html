@@ -318,7 +318,7 @@
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.14.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.15.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
@@ -351,17 +351,16 @@
 
   <div id="viewDimension">
     <p class="detail-head" id="dimensionTitle"></p>
-    <h2>Propriétés</h2>
-    <div id="dimensionPropsWrap">
-      <p id="emptyDimensionProps" class="empty" style="display: none;">Aucune propriété.</p>
-      <table id="tableDimensionProps" class="props" style="display: none;" aria-label="Propriétés de la dimension"></table>
-    </div>
     <div class="elements-head">
       <h2>Éléments</h2>
       <button type="button" id="btnAddElement" class="btn-add-circle secondary" style="display: none;" title="Ajouter un élément" aria-label="Ajouter un élément">+</button>
     </div>
     <ul id="listElements" class="list" aria-label="Éléments de la dimension"></ul>
     <p id="emptyElements" class="empty" style="display: none;">Aucun élément.</p>
+    <h2>Propriétés</h2>
+    <p id="propertyHint" class="hint" style="display: none;" role="note"></p>
+    <ul id="listPropertyElements" class="list list--static" aria-label="Propriétés (dimension #)"></ul>
+    <p id="emptyPropertyElements" class="empty" style="display: none;">—</p>
   </div>
 
   <div id="modalBackdrop" class="modal-backdrop" role="presentation">
@@ -413,7 +412,7 @@
     Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.14.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.14.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.15.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.15.0" type="text/javascript"></script>
 </body>
 </html>
