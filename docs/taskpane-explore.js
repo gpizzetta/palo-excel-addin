@@ -610,8 +610,6 @@
 		return href.substring(0, i + 1);
 	}
 
-	var OFFICE_DIALOG_OPTS = { height: 90, width: 90, displayInIframe: true };
-
 	function openOfficeDialogPage(htmlFile, queryParams, onRefreshDone) {
 		if (
 			typeof Office === "undefined" ||
@@ -623,8 +621,14 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.16.0&" + qs.toString();
-		Office.context.ui.displayDialogAsync(url, OFFICE_DIALOG_OPTS, function (asyncResult) {
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.17.0&" + qs.toString();
+		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
+		var dialogOpts = {
+			height: 90,
+			width: 90,
+			displayInIframe: true,
+		};
+		Office.context.ui.displayDialogAsync(url, dialogOpts, function (asyncResult) {
 			if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
 				setStatus("Impossible d’ouvrir la fenêtre Office (displayDialogAsync).", "err");
 				return;
