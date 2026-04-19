@@ -139,7 +139,7 @@
 </head>
 <body>
   <h1>
-    <img src="assets/palo_user_32.png?v=1.0.23.0" alt="" width="20" height="20" />
+    <img src="assets/palo_user_32.png?v=1.0.24.0" alt="" width="20" height="20" />
     Utilisateurs Palo
   </h1>
 
@@ -154,16 +154,21 @@
   <ul id="listHashCubes" class="user-list" aria-label="Cubes #_"></ul>
   <p id="emptyHashCubes" class="empty" style="display: none;">Aucun cube #_…</p>
 
+  <h2>Toutes les dimensions</h2>
+  <p class="section-hint">Dimensions normales et de <strong>propriétés</strong> (<code>show_attribute</code> / <code>show_virtual_attribute</code>), toutes bases accessibles. Le mot de passe peut être porté par une dimension ou un cube dédié — repérez-le ici.</p>
+  <ul id="listAllDimensions" class="user-list" aria-label="Dimensions"></ul>
+  <p id="emptyAllDimensions" class="empty" style="display: none;">Aucune dimension.</p>
+
   <h2>Comptes serveur</h2>
   <p id="userHint" role="note"></p>
   <ul id="listServerUsers" class="user-list" aria-label="Utilisateurs"></ul>
   <p id="emptyServerUsers" class="empty" style="display: none;">Aucun utilisateur chargé.</p>
 
   <p class="foot-hint">
-    Les comptes sont lus dans le cube système <strong>#_USER_</strong> (dimension utilisateurs). La création ajoute un <strong>élément</strong> dans cette dimension (<code>/element/create</code>, type chaîne). Les identifiants de connexion viennent du volet <strong>Connexion</strong>.
+    Les comptes sont les <strong>éléments</strong> de la dimension système <strong>#_USERS_</strong> (ou variante détectée). Création : <code>/element/create</code> sur cette dimension (type chaîne). Les identifiants de session viennent du volet <strong>Connexion</strong>.
   </p>
 
-  <script src="md5.js?v=1.0.23.0" type="text/javascript"></script>
-  <script src="taskpane-users.js?v=1.0.23.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.24.0" type="text/javascript"></script>
+  <script src="taskpane-users.js?v=1.0.24.0" type="text/javascript"></script>
 </body>
 </html>

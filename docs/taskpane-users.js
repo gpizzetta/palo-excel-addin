@@ -10,7 +10,7 @@
 		sid: "",
 		currentUserId: null,
 		currentUserName: null,
-		usersCubeMeta: null,
+		usersMeta: null,
 	};
 
 	function setStatus(msg, kind) {
@@ -270,9 +270,6 @@
 			}
 			var typeStr = cells.length > 6 ? stripPaloCsvField(cells[6]) : "";
 			var typeNum = typeStr === "" ? null : parseInt(typeStr, 10);
-			if (typeNum !== null && !isNaN(typeNum) && (typeNum === 2 || typeNum === 5)) {
-				continue;
-			}
 			list.push({ id: id, name: name, type: typeNum });
 		}
 		if (lines.length && !list.length && !anyIdNameRow) {
@@ -364,8 +361,8 @@
 			name_database: nameDatabase,
 			show_system: "1",
 			show_normal: "1",
-			show_attribute: "0",
-			show_virtual_attribute: "0",
+			show_attribute: "1",
+			show_virtual_attribute: "1",
 			show_info: "1",
 			show_permission: "1",
 		});
@@ -373,6 +370,25 @@
 		return fetchCsv(url).then(function (text) {
 			return parseDatabaseDimensionsList(text, url);
 		});
+	}
+
+	function dimensionKindLabel(typeNum) {
+		if (typeNum === null || typeNum === undefined || isNaN(typeNum)) {
+			return "";
+		}
+		if (typeNum === 2) {
+			return "propriété";
+		}
+		if (typeNum === 5) {
+			return "propriété virtuelle";
+		}
+		if (typeNum === 0) {
+			return "normale";
+		}
+		if (typeNum === 3) {
+			return "système";
+		}
+		return "type " + typeNum;
 	}
 
 	function loadCubesForDb(nameDatabase) {
@@ -422,84 +438,46 @@
 		});
 	}
 
-	function parseCubeInfoDimensionIds(text, requestUrl) {
-		rejectIfHtml(text, requestUrl);
-		var lines = parseCsvLines(text);
-		if (!lines.length) {
-			throw new Error("Réponse cube/info vide.");
-		}
-		var cells = splitDataLine(lines[0]);
-		if (!cells || cells.length < 4) {
-			cells = lines[0].split(";").map(function (c) {
-				return c.trim();
-			});
-		}
-		if (!cells || cells.length < 4) {
-			throw new Error("cube/info illisible.");
-		}
-		var raw = stripPaloCsvField(cells[3]);
-		if (!raw || !String(raw).trim()) {
-			return [];
-		}
-		return String(raw)
-			.split(",")
-			.map(function (x) {
-				return x.trim();
-			})
-			.filter(function (x) {
-				return isNumericId(x);
-			});
-	}
-
-	function pickUserDimensionId(orderedDimIds, idToName) {
-		var preferExact = ["#_USER", "#_Users", "#_users", "User", "Users"];
-		var p, i, id, nm;
-		for (p = 0; p < preferExact.length; p++) {
-			for (i = 0; i < orderedDimIds.length; i++) {
-				id = orderedDimIds[i];
-				nm = idToName[id];
-				if (nm && nm === preferExact[p]) {
-					return id;
+	function pickUsersDimensionName(dims) {
+		var preferExact = ["#_USERS_", "#_USERS", "#_USER_", "#_USER"];
+		var i, j, nm;
+		for (j = 0; j < preferExact.length; j++) {
+			for (i = 0; i < dims.length; i++) {
+				if (dims[i].name === preferExact[j]) {
+					return dims[i].name;
 				}
 			}
 		}
-		for (i = 0; i < orderedDimIds.length; i++) {
-			id = orderedDimIds[i];
-			nm = idToName[id];
+		for (i = 0; i < dims.length; i++) {
+			nm = dims[i].name;
+			if (nm && /^#_USERS/i.test(nm)) {
+				return nm;
+			}
+		}
+		for (i = 0; i < dims.length; i++) {
+			nm = dims[i].name;
 			if (nm && /^#_USER/i.test(nm)) {
-				return id;
+				return nm;
 			}
 		}
-		for (i = 0; i < orderedDimIds.length; i++) {
-			id = orderedDimIds[i];
-			if (idToName[id]) {
-				return id;
-			}
-		}
-		throw new Error("Impossible de déterminer la dimension utilisateurs dans le cube #_USER_.");
+		return null;
 	}
 
-	function findDatabaseWithUsersCube(dbs, idx) {
+	function findDatabaseWithUsersDimension(dbs, idx) {
 		if (idx >= dbs.length) {
 			return Promise.reject(
 				new Error(
-					'Cube « #_USER_ » introuvable dans les bases accessibles (droits sur la base système ?).',
+					'Dimension utilisateurs « #_USERS_ » introuvable (ni variante #_USERS / #_USER_) dans les bases accessibles.',
 				),
 			);
 		}
 		var dbName = dbs[idx].name;
-		return loadCubesForDb(dbName).then(function (cubes) {
-			var c = null;
-			for (var i = 0; i < cubes.length; i++) {
-				if (cubes[i].name === "#_USER_") {
-					c = cubes[i];
-					break;
-				}
+		return loadDimensionsForDb(dbName).then(function (dims) {
+			var userDimName = pickUsersDimensionName(dims);
+			if (userDimName) {
+				return { nameDatabase: dbName, userDimensionName: userDimName };
 			}
-			if (c) {
-				return { nameDatabase: dbName, cube: c };
-			}
-			return findDatabaseWithUsersCube(dbs, idx + 1);
+			return findDatabaseWithUsersDimension(dbs, idx + 1);
 		});
 	}
 
@@ -516,57 +494,27 @@
 		});
 	}
 
-	function loadUsersFromUsersCube() {
-		state.usersCubeMeta = null;
+	function loadUsersFromUsersDimension() {
+		state.usersMeta = null;
 		return loadDatabases()
 			.then(function (dbs) {
-				return findDatabaseWithUsersCube(dbs, 0);
+				return findDatabaseWithUsersDimension(dbs, 0);
 			})
 			.then(function (ctx) {
-				var q = new URLSearchParams({
-					sid: state.sid,
-					name_database: ctx.nameDatabase,
-					cube: ctx.cube.id,
-				});
-				var url = state.apiBase + "/cube/info?" + q.toString();
-				return fetchCsv(url).then(function (text) {
-					return {
-						ctx: ctx,
-						dimIds: parseCubeInfoDimensionIds(text, url),
-					};
-				});
-			})
-			.then(function (o) {
-				var ctx = o.ctx;
-				var dimIds = o.dimIds;
-				if (!dimIds.length) {
-					throw new Error("Le cube #_USER_ ne contient aucune dimension (cube/info).");
-				}
-				return loadDimensionsForDb(ctx.nameDatabase).then(function (dims) {
-					var idToName = {};
-					for (var i = 0; i < dims.length; i++) {
-						idToName[dims[i].id] = dims[i].name;
-					}
-					var userDimId = pickUserDimensionId(dimIds, idToName);
-					var userDimName = idToName[userDimId];
-					if (!userDimName) {
-						throw new Error("Dimension utilisateurs (id " + userDimId + ") introuvable.");
-					}
-					state.usersCubeMeta = {
-						nameDatabase: ctx.nameDatabase,
-						userDimensionName: userDimName,
-					};
-					return fetchDimensionElementsByName(ctx.nameDatabase, userDimName).then(function (elements) {
-						var out = [];
-						for (var j = 0; j < elements.length; j++) {
-							var el = elements[j];
-							if (el.type === 4) {
-								continue;
-							}
-							out.push({ id: el.id, name: el.name });
+				state.usersMeta = {
+					nameDatabase: ctx.nameDatabase,
+					userDimensionName: ctx.userDimensionName,
+				};
+				return fetchDimensionElementsByName(ctx.nameDatabase, ctx.userDimensionName).then(function (elements) {
+					var out = [];
+					for (var j = 0; j < elements.length; j++) {
+						var el = elements[j];
+						if (el.type === 4) {
+							continue;
 						}
-						return out;
-					});
+						out.push({ id: el.id, name: el.name });
+					}
+					return out;
 				});
 			});
 	}
@@ -582,13 +530,13 @@
 			ul.removeChild(ul.firstChild);
 		}
 		if (hint) {
-			if (state.usersCubeMeta) {
+			if (state.usersMeta) {
 				hint.className = "show";
 				hint.textContent =
-					"Cube « #_USER_ » — base « " +
-					state.usersCubeMeta.nameDatabase +
-					" », dimension « " +
-					state.usersCubeMeta.userDimensionName +
+					"Liste issue de la dimension « " +
+					state.usersMeta.userDimensionName +
+					" » — base « " +
+					state.usersMeta.nameDatabase +
 					" ».";
 			} else {
 				hint.className = "";
@@ -627,7 +575,7 @@
 	}
 
 	function refreshServerUsersPanel() {
-		return loadUsersFromUsersCube().then(function (list) {
+		return loadUsersFromUsersDimension().then(function (list) {
 			renderServerUsersList(list);
 		});
 	}
@@ -698,6 +646,70 @@
 		});
 	}
 
+	function loadAllDimensionsAllDatabases() {
+		return loadDatabases().then(function (dbs) {
+			return Promise.all(
+				dbs.map(function (db) {
+					return loadDimensionsForDb(db.name).then(function (dims) {
+						return dims.map(function (d) {
+							return {
+								nameDatabase: db.name,
+								dimId: d.id,
+								dimName: d.name,
+								type: d.type,
+							};
+						});
+					});
+				}),
+			).then(function (arrays) {
+				var out = [];
+				for (var a = 0; a < arrays.length; a++) {
+					out = out.concat(arrays[a]);
+				}
+				out.sort(function (x, y) {
+					var kx = x.nameDatabase + "\0" + x.dimName;
+					var ky = y.nameDatabase + "\0" + y.dimName;
+					return kx < ky ? -1 : kx > ky ? 1 : 0;
+				});
+				return out;
+			});
+		});
+	}
+
+	function renderAllDimensionsList(rows) {
+		var ul = document.getElementById("listAllDimensions");
+		var empty = document.getElementById("emptyAllDimensions");
+		if (!ul || !empty) {
+			return;
+		}
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
+		if (!rows.length) {
+			empty.style.display = "block";
+			return;
+		}
+		empty.style.display = "none";
+		for (var i = 0; i < rows.length; i++) {
+			var r = rows[i];
+			var li = document.createElement("li");
+			var span = document.createElement("span");
+			span.className = "user-name";
+			var kind = dimensionKindLabel(r.type);
+			span.textContent =
+				r.nameDatabase + " — " + r.dimName + (kind ? " · " + kind : "");
+			span.title = "id dimension " + r.dimId + (kind ? " — " + kind : "");
+			li.appendChild(span);
+			ul.appendChild(li);
+		}
+	}
+
+	function refreshAllDimensionsPanel() {
+		return loadAllDimensionsAllDatabases().then(function (rows) {
+			renderAllDimensionsList(rows);
+		});
+	}
+
 	function onDeleteServerUser(u) {
 		if (state.currentUserId && u.id === state.currentUserId) {
 			setStatus("Vous ne pouvez pas supprimer votre propre compte depuis cette session.", "err");
@@ -706,14 +718,14 @@
 		if (!confirm('Supprimer l’utilisateur « ' + u.name + ' » (id ' + u.id + ') ?')) {
 			return;
 		}
-		if (!state.usersCubeMeta) {
-			setStatus("Métadonnées du cube #_USER_ indisponibles. Actualisez la liste.", "err");
+		if (!state.usersMeta) {
+			setStatus("Métadonnées de la dimension utilisateurs indisponibles. Actualisez la liste.", "err");
 			return;
 		}
 		var q = new URLSearchParams({
 			sid: state.sid,
-			name_database: state.usersCubeMeta.nameDatabase,
-			name_dimension: state.usersCubeMeta.userDimensionName,
+			name_database: state.usersMeta.nameDatabase,
+			name_dimension: state.usersMeta.userDimensionName,
 			element: String(u.id),
 		});
 		var url = state.apiBase + "/element/destroy?" + q.toString();
@@ -750,7 +762,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.23.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.24.0&" + qs.toString();
 		var dialogOpts = {
 			height: 90,
 			width: 90,
@@ -779,7 +791,7 @@
 			setStatus("Connectez-vous d’abord (Actualiser).", "err");
 			return;
 		}
-		if (!state.usersCubeMeta) {
+		if (!state.usersMeta) {
 			setStatus("Chargez d’abord la liste utilisateurs (Actualiser).", "err");
 			return;
 		}
@@ -788,8 +800,8 @@
 			{
 				apiBase: state.apiBase,
 				sid: state.sid,
-				name_database: state.usersCubeMeta.nameDatabase,
-				name_dimension: state.usersCubeMeta.userDimensionName,
+				name_database: state.usersMeta.nameDatabase,
+				name_dimension: state.usersMeta.userDimensionName,
 			},
 			function () {
 				refreshServerUsersPanel()
@@ -825,7 +837,11 @@
 			})
 			.then(function () {
 				setStatus("Chargement des utilisateurs…", "");
-				return Promise.all([refreshServerUsersPanel(), refreshHashCubesPanel()]);
+				return Promise.all([
+					refreshServerUsersPanel(),
+					refreshHashCubesPanel(),
+					refreshAllDimensionsPanel(),
+				]);
 			})
 			.then(function () {
 				setStatus("Liste à jour.", "ok");
@@ -834,6 +850,7 @@
 				setStatus(err && err.message ? err.message : String(err), "err");
 				renderServerUsersList([]);
 				renderHashCubesList([]);
+				renderAllDimensionsList([]);
 			})
 			.then(function () {
 				if (btn) {
