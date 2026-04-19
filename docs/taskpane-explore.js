@@ -10,7 +10,41 @@
 		sid: "",
 		databases: [],
 		selectedDb: null,
+		selectedDimension: null,
+		currentView: "databases",
+		/** Droits sur la base courante : "N" | "R" | "W" | "D" (voir `/database/info` + show_permission). */
+		databasePermission: null,
 	};
+
+	/** Colonnes CSV `/dimension/info` (ordre Jedox) → libellés affichés */
+	var DIMENSION_INFO_LABELS = [
+		"Identifiant dimension",
+		"Nom",
+		"Nombre d’éléments",
+		"Niveau max",
+		"Indent max",
+		"Profondeur max",
+		"Type de dimension",
+		"Dimension attributs",
+		"Cube attributs",
+		"Cube droits",
+		"Jeton (token)",
+		"Dimension source",
+		"Dimensions virtuelles",
+		"Id attribut source",
+		"Nom attribut source",
+		"Droits (permission)",
+		"Temps de chargement (s)",
+		"Mémoire (octets)",
+		"Élément lecture par défaut",
+		"Élément écriture par défaut",
+		"Élément parent par défaut",
+		"Élément total",
+		"Élément N/A",
+		"Nombre d’éléments N",
+		"Nombre d’éléments C",
+		"Nombre d’éléments S",
+	];
 
 	function setStatus(msg, kind) {
 		var el = document.getElementById("status");
@@ -230,6 +264,79 @@
 		return tryAt(0);
 	}
 
+	function permissionAllowsWrite(perm) {
+		return perm === "W" || perm === "D";
+	}
+
+	/** Dimensions système (non supprimables via l’UI). */
+	function dimensionTypeDeletable(typeNum) {
+		if (typeNum === null || typeNum === undefined || isNaN(typeNum)) {
+			return true;
+		}
+		return typeNum === 0 || typeNum === 3;
+	}
+
+	function parseDatabaseDimensionsList(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		var list = [];
+		var anyIdNameRow = false;
+		for (var i = 0; i < lines.length; i++) {
+			var cells = splitDataLine(lines[i]);
+			if (!cells || cells.length < 2) {
+				continue;
+			}
+			var id = cells[0];
+			var name = stripPaloCsvField(cells[1]);
+			if (isNumericId(id) && isPlausibleObjectName(name)) {
+				anyIdNameRow = true;
+			}
+			if (!isNumericId(id) || !isPlausibleObjectName(name)) {
+				continue;
+			}
+			var typeStr = cells.length > 6 ? stripPaloCsvField(cells[6]) : "";
+			var typeNum = typeStr === "" ? null : parseInt(typeStr, 10);
+			if (typeNum !== null && !isNaN(typeNum) && (typeNum === 2 || typeNum === 5)) {
+				continue;
+			}
+			var perm = cells.length > 15 ? stripPaloCsvField(cells[15]) : "";
+			list.push({ id: id, name: name, type: typeNum, permission: perm });
+		}
+		if (lines.length && !list.length && !anyIdNameRow) {
+			var safeUrl = requestUrl ? redactUrlForDebug(requestUrl) : "(URL inconnue)";
+			throw new Error(
+				"Réponse dimensions illisible (CSV Palo attendu).\n\n" +
+					"URL interrogée : " +
+					safeUrl +
+					"\n\n" +
+					"Réponse du serveur (extrait) :\n" +
+					truncateForDebug(text, 900),
+			);
+		}
+		return list;
+	}
+
+	function loadDatabasePermissionInfo(nameDatabase) {
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			show_permission: "1",
+		});
+		var url = state.apiBase + "/database/info?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			rejectIfHtml(text, url);
+			var lines = parseCsvLines(text);
+			if (!lines.length) {
+				return null;
+			}
+			var cells = splitDataLine(lines[0]);
+			if (!cells || cells.length < 8) {
+				return null;
+			}
+			return stripPaloCsvField(cells[7]);
+		});
+	}
+
 	function parseIdNameList(text, kindLabel, requestUrl) {
 		rejectIfHtml(text, requestUrl);
 		var lines = parseCsvLines(text);
@@ -275,12 +382,15 @@
 			sid: state.sid,
 			name_database: nameDatabase,
 			show_system: "1",
-			show_attribute: "1",
+			show_normal: "1",
+			show_attribute: "0",
+			show_virtual_attribute: "0",
 			show_info: "1",
+			show_permission: "1",
 		});
 		var url = state.apiBase + "/database/dimensions?" + q.toString();
 		return fetchCsv(url).then(function (text) {
-			return parseIdNameList(text, "dimensions", url);
+			return parseDatabaseDimensionsList(text, url);
 		});
 	}
 
@@ -296,6 +406,136 @@
 		return fetchCsv(url).then(function (text) {
 			return parseIdNameList(text, "cubes", url);
 		});
+	}
+
+	function formatDimensionInfoCell(colIndex, raw) {
+		var t = String(raw);
+		if (colIndex === 6) {
+			var v = parseInt(t, 10);
+			var names = {
+				0: "normale",
+				1: "système",
+				2: "attribut",
+				3: "user info",
+				4: "system id",
+				5: "virtuelle (attribut)",
+			};
+			if (!isNaN(v) && names[v] !== undefined) {
+				return t + " (" + names[v] + ")";
+			}
+		}
+		if (colIndex === 16 && t !== "" && t !== "—") {
+			return t + " s";
+		}
+		if (colIndex === 17 && /^\d+$/.test(t)) {
+			var n = parseInt(t, 10);
+			if (n >= 1073741824) {
+				return t + " (" + (n / 1073741824).toFixed(2) + " Go)";
+			}
+			if (n >= 1048576) {
+				return t + " (" + (n / 1048576).toFixed(2) + " Mo)";
+			}
+			if (n >= 1024) {
+				return t + " (" + (n / 1024).toFixed(1) + " Ko)";
+			}
+		}
+		return t;
+	}
+
+	function parseDimensionInfoCsv(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		if (!lines.length) {
+			return [];
+		}
+		var cells = splitDataLine(lines[0]);
+		if (!cells || !cells.length) {
+			cells = lines[0].split(";").map(function (c) {
+				return c.trim();
+			});
+		}
+		var rows = [];
+		for (var i = 0; i < DIMENSION_INFO_LABELS.length && i < cells.length; i++) {
+			var raw = stripPaloCsvField(cells[i]);
+			var label = DIMENSION_INFO_LABELS[i];
+			var display = raw === "" ? "—" : formatDimensionInfoCell(i, raw);
+			rows.push({ label: label, value: display });
+		}
+		return rows;
+	}
+
+	function loadDimensionInfo(nameDatabase, nameDimension) {
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			name_dimension: nameDimension,
+			show_permission: "1",
+			show_counters: "1",
+			show_default_elements: "1",
+			show_count_by_type: "1",
+			show_virtual: "1",
+		});
+		var url = state.apiBase + "/dimension/info?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseDimensionInfoCsv(text, url);
+		});
+	}
+
+	function loadDimensionElements(nameDatabase, nameDimension) {
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: nameDatabase,
+			name_dimension: nameDimension,
+			show_permission: "1",
+		});
+		var url = state.apiBase + "/dimension/elements?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			return parseIdNameList(text, "éléments", url);
+		});
+	}
+
+	function renderDimensionProps(rows) {
+		var table = document.getElementById("tableDimensionProps");
+		var empty = document.getElementById("emptyDimensionProps");
+		while (table.firstChild) {
+			table.removeChild(table.firstChild);
+		}
+		if (!rows.length) {
+			table.style.display = "none";
+			empty.style.display = "block";
+			return;
+		}
+		empty.style.display = "none";
+		table.style.display = "table";
+		for (var i = 0; i < rows.length; i++) {
+			var tr = document.createElement("tr");
+			var th = document.createElement("th");
+			th.textContent = rows[i].label;
+			var td = document.createElement("td");
+			td.textContent = rows[i].value;
+			tr.appendChild(th);
+			tr.appendChild(td);
+			table.appendChild(tr);
+		}
+	}
+
+	function renderElementList(items) {
+		var ul = document.getElementById("listElements");
+		var empty = document.getElementById("emptyElements");
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
+		if (!items.length) {
+			empty.style.display = "block";
+			return;
+		}
+		empty.style.display = "none";
+		for (var i = 0; i < items.length; i++) {
+			var li = document.createElement("li");
+			li.textContent = items[i].name;
+			li.title = "id " + items[i].id;
+			ul.appendChild(li);
+		}
 	}
 
 	function renderDatabaseList() {
@@ -323,8 +563,158 @@
 		}
 	}
 
+	function effectiveDimPermission(dim) {
+		if (dim.permission && String(dim.permission).trim()) {
+			return String(dim.permission).trim();
+		}
+		return state.databasePermission ? String(state.databasePermission).trim() : "";
+	}
+
+	function canDeleteDimensionRow(dim) {
+		if (!dimensionTypeDeletable(dim.type)) {
+			return false;
+		}
+		return permissionAllowsWrite(effectiveDimPermission(dim));
+	}
+
+	function updateDimensionManageUi() {
+		var row = document.getElementById("dimAddRow");
+		var hint = document.getElementById("dimRightsHint");
+		var p = state.databasePermission;
+		var canCreate = permissionAllowsWrite(p || "");
+		row.style.display = canCreate ? "flex" : "none";
+		if (!hint) {
+			return;
+		}
+		if (p) {
+			hint.style.display = "block";
+			hint.textContent =
+				"Droits sur cette base (API Jedox) : " +
+				p +
+				" — " +
+				(canCreate
+					? "création / suppression de dimensions autorisée si le serveur l’accepte (dimensions système non supprimables)."
+					: "pas de création ni suppression (lecture seule ou droits insuffisants).");
+		} else {
+			hint.style.display = "none";
+			hint.textContent = "";
+		}
+	}
+
+	function reloadDatabaseDetail() {
+		var db = state.selectedDb;
+		if (!db) {
+			return Promise.resolve();
+		}
+		setStatus("Actualisation…", "");
+		return Promise.all([
+			loadDatabasePermissionInfo(db.name),
+			loadDimensionsForDb(db.name),
+			loadCubesForDb(db.name),
+		]).then(function (results) {
+			state.databasePermission = results[0];
+			renderLists(results[1], results[2]);
+			updateDimensionManageUi();
+			setStatus("", "");
+		});
+	}
+
+	function createDimensionOnServer(newName) {
+		var db = state.selectedDb;
+		if (!db || !permissionAllowsWrite(state.databasePermission || "")) {
+			return Promise.reject(new Error("Action non autorisée."));
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: db.name,
+			new_name: newName,
+			type: "0",
+		});
+		var url = state.apiBase + "/dimension/create?" + q.toString();
+		return fetchCsv(url);
+	}
+
+	function destroyDimensionOnServer(dim) {
+		var db = state.selectedDb;
+		if (!db) {
+			return Promise.reject(new Error("Aucune base sélectionnée."));
+		}
+		if (!canDeleteDimensionRow(dim)) {
+			return Promise.reject(new Error("Suppression non autorisée pour cette dimension."));
+		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: db.name,
+			name_dimension: dim.name,
+		});
+		var url = state.apiBase + "/dimension/destroy?" + q.toString();
+		return fetchCsv(url);
+	}
+
+	function onCreateDimension() {
+		var input = document.getElementById("inputNewDimension");
+		var btn = document.getElementById("btnCreateDimension");
+		var name = input ? input.value.trim() : "";
+		if (!name) {
+			setStatus("Indiquez un nom de dimension.", "err");
+			return;
+		}
+		if (!permissionAllowsWrite(state.databasePermission || "")) {
+			setStatus("Création impossible : droits insuffisants sur la base.", "err");
+			return;
+		}
+		btn.disabled = true;
+		setStatus("Création de la dimension…", "");
+		createDimensionOnServer(name)
+			.then(function () {
+				if (input) {
+					input.value = "";
+				}
+				return reloadDatabaseDetail();
+			})
+			.then(function () {
+				setStatus("Dimension créée.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			})
+			.then(function () {
+				btn.disabled = false;
+			});
+	}
+
+	function onDeleteDimension(dim, ev) {
+		if (ev) {
+			ev.preventDefault();
+			ev.stopPropagation();
+		}
+		if (!canDeleteDimensionRow(dim)) {
+			return;
+		}
+		if (!confirm('Supprimer la dimension « ' + dim.name + ' » ?')) {
+			return;
+		}
+		setStatus("Suppression…", "");
+		destroyDimensionOnServer(dim)
+			.then(function () {
+				if (state.selectedDimension && state.selectedDimension.id === dim.id) {
+					state.selectedDimension = null;
+					showView("detail");
+				}
+				return reloadDatabaseDetail();
+			})
+			.then(function () {
+				setStatus("Dimension supprimée.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
 	function renderLists(dimensions, cubes) {
-		function fill(ulId, emptyId, items, labelField) {
+		function fillCubes(ulId, emptyId, items, labelField) {
 			var ul = document.getElementById(ulId);
 			var empty = document.getElementById(emptyId);
 			while (ul.firstChild) {
@@ -342,25 +732,102 @@
 				ul.appendChild(li);
 			}
 		}
-		fill("listDimensions", "emptyDimensions", dimensions, "name");
-		fill("listCubes", "emptyCubes", cubes, "name");
+
+		var ulDim = document.getElementById("listDimensions");
+		var emptyDim = document.getElementById("emptyDimensions");
+		while (ulDim.firstChild) {
+			ulDim.removeChild(ulDim.firstChild);
+		}
+		if (!dimensions.length) {
+			emptyDim.style.display = "block";
+		} else {
+			emptyDim.style.display = "none";
+			for (var j = 0; j < dimensions.length; j++) {
+				(function (dim) {
+					var li = document.createElement("li");
+					li.className = "dim-row";
+					var nameSpan = document.createElement("span");
+					nameSpan.className = "dim-name";
+					nameSpan.textContent = dim.name;
+					nameSpan.title = "id " + dim.id + " — ouvrir";
+					nameSpan.addEventListener("click", function () {
+						selectDimension(dim);
+					});
+					li.appendChild(nameSpan);
+					if (canDeleteDimensionRow(dim)) {
+						var delBtn = document.createElement("button");
+						delBtn.type = "button";
+						delBtn.className = "dim-del";
+						delBtn.setAttribute("aria-label", "Supprimer la dimension " + dim.name);
+						delBtn.textContent = "Supprimer";
+						delBtn.addEventListener("click", function (e) {
+							onDeleteDimension(dim, e);
+						});
+						li.appendChild(delBtn);
+					}
+					ulDim.appendChild(li);
+				})(dimensions[j]);
+			}
+		}
+		fillCubes("listCubes", "emptyCubes", cubes, "name");
 	}
 
 	function showView(which) {
+		state.currentView = which;
 		document.getElementById("viewDatabases").className = which === "databases" ? "active" : "";
 		document.getElementById("viewDetail").className = which === "detail" ? "active" : "";
-		document.getElementById("btnBack").style.display = which === "detail" ? "inline-block" : "none";
+		document.getElementById("viewDimension").className = which === "dimension" ? "active" : "";
+		var btn = document.getElementById("btnBack");
+		if (which === "databases") {
+			btn.style.display = "none";
+		} else if (which === "detail") {
+			btn.style.display = "inline-block";
+			btn.textContent = "← Bases";
+		} else if (which === "dimension") {
+			btn.style.display = "inline-block";
+			btn.textContent = "← Dimensions";
+		}
 	}
 
 	function selectDatabase(db) {
 		state.selectedDb = db;
+		state.selectedDimension = null;
+		state.databasePermission = null;
 		setStatus("Chargement…", "");
 		document.getElementById("detailTitle").textContent = "Base : " + db.name;
-		Promise.all([loadDimensionsForDb(db.name), loadCubesForDb(db.name)])
+		Promise.all([
+			loadDatabasePermissionInfo(db.name),
+			loadDimensionsForDb(db.name),
+			loadCubesForDb(db.name),
+		])
 			.then(function (results) {
-				renderLists(results[0], results[1]);
+				state.databasePermission = results[0];
+				renderLists(results[1], results[2]);
+				updateDimensionManageUi();
 				setStatus("", "");
 				showView("detail");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
+	function selectDimension(dim) {
+		var db = state.selectedDb;
+		if (!db) {
+			return;
+		}
+		state.selectedDimension = dim;
+		setStatus("Chargement de la dimension…", "");
+		document.getElementById("dimensionTitle").textContent =
+			"Dimension : " + dim.name + " — base : " + db.name;
+		Promise.all([loadDimensionInfo(db.name, dim.name), loadDimensionElements(db.name, dim.name)])
+			.then(function (results) {
+				renderDimensionProps(results[0]);
+				renderElementList(results[1]);
+				setStatus("", "");
+				showView("dimension");
 			})
 			.catch(function (err) {
 				var msg = err && err.message ? err.message : String(err);
@@ -386,6 +853,8 @@
 			.then(function (dbs) {
 				state.databases = dbs;
 				state.selectedDb = null;
+				state.selectedDimension = null;
+				state.databasePermission = null;
 				renderDatabaseList();
 				showView("databases");
 				setStatus(dbs.length + " base(s) chargée(s).", "ok");
@@ -400,6 +869,12 @@
 	}
 
 	function onBack() {
+		if (state.currentView === "dimension") {
+			state.selectedDimension = null;
+			showView("detail");
+			setStatus("", "");
+			return;
+		}
 		showView("databases");
 		setStatus("", "");
 	}
@@ -407,6 +882,19 @@
 	Office.onReady(function () {
 		document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 		document.getElementById("btnBack").addEventListener("click", onBack);
+		var btnCreate = document.getElementById("btnCreateDimension");
+		var inputNew = document.getElementById("inputNewDimension");
+		if (btnCreate) {
+			btnCreate.addEventListener("click", onCreateDimension);
+		}
+		if (inputNew) {
+			inputNew.addEventListener("keydown", function (ev) {
+				if (ev.key === "Enter") {
+					ev.preventDefault();
+					onCreateDimension();
+				}
+			});
+		}
 		refreshAll();
 	});
 })();

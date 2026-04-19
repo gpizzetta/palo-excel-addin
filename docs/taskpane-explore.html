@@ -86,6 +86,9 @@
     ul.list li:last-child { border-bottom: none; }
     ul.list li:hover { background: #f3f2f1; }
     ul.list li:active { background: #edebe9; }
+    ul.list--static li { cursor: default; }
+    ul.list--static li:hover { background: transparent; }
+    ul.list--static li:active { background: transparent; }
     .empty {
       padding: 8px;
       color: #605e5c;
@@ -97,13 +100,70 @@
       margin-bottom: 8px;
       word-break: break-all;
     }
-    #viewDatabases, #viewDetail { display: none; }
-    #viewDatabases.active, #viewDetail.active { display: block; }
+    #viewDatabases, #viewDetail, #viewDimension { display: none; }
+    #viewDatabases.active, #viewDetail.active, #viewDimension.active { display: block; }
+    table.props {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      border: 1px solid #edebe9;
+      border-radius: 2px;
+    }
+    table.props th, table.props td {
+      padding: 4px 8px;
+      border-bottom: 1px solid #f3f2f1;
+      text-align: left;
+      vertical-align: top;
+    }
+    table.props th {
+      color: #605e5c;
+      font-weight: 600;
+      width: 42%;
+    }
+    table.props tr:last-child th, table.props tr:last-child td { border-bottom: none; }
+    .dim-add {
+      display: none;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 8px 0;
+    }
+    .dim-add input[type="text"] {
+      flex: 1;
+      min-width: 120px;
+      padding: 5px 8px;
+      border: 1px solid #8a8886;
+      border-radius: 2px;
+      font-size: 12px;
+    }
+    ul.list li.dim-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      cursor: default;
+    }
+    ul.list li.dim-row:hover { background: #f3f2f1; }
+    ul.list li.dim-row .dim-name {
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+      text-align: left;
+    }
+    ul.list li.dim-row button.dim-del {
+      flex-shrink: 0;
+      padding: 2px 8px;
+      font-size: 11px;
+      background: #fde7e9;
+      color: #a4262c;
+    }
+    ul.list li.dim-row button.dim-del:hover { background: #f3d6d8; }
+    ul.list li.dim-row button.dim-del:disabled { opacity: 0.5; cursor: not-allowed; }
   </style>
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.11.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.12.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
@@ -122,18 +182,35 @@
   <div id="viewDetail">
     <p class="detail-head" id="detailTitle"></p>
     <h2>Dimensions</h2>
-    <ul id="listDimensions" class="list" aria-label="Dimensions"></ul>
+    <p id="dimRightsHint" class="hint" style="display: none;" role="note"></p>
+    <div id="dimAddRow" class="dim-add">
+      <input type="text" id="inputNewDimension" placeholder="Nom de la nouvelle dimension" autocomplete="off" aria-label="Nom de la nouvelle dimension" />
+      <button type="button" id="btnCreateDimension" class="secondary">Créer</button>
+    </div>
+    <ul id="listDimensions" class="list list--pick" aria-label="Dimensions"></ul>
     <p id="emptyDimensions" class="empty" style="display: none;">Aucune dimension.</p>
     <h2>Cubes</h2>
-    <ul id="listCubes" class="list" aria-label="Cubes"></ul>
+    <ul id="listCubes" class="list list--static" aria-label="Cubes"></ul>
     <p id="emptyCubes" class="empty" style="display: none;">Aucun cube.</p>
+  </div>
+
+  <div id="viewDimension">
+    <p class="detail-head" id="dimensionTitle"></p>
+    <h2>Propriétés</h2>
+    <div id="dimensionPropsWrap">
+      <p id="emptyDimensionProps" class="empty" style="display: none;">Aucune propriété.</p>
+      <table id="tableDimensionProps" class="props" style="display: none;" aria-label="Propriétés de la dimension"></table>
+    </div>
+    <h2>Éléments</h2>
+    <ul id="listElements" class="list" aria-label="Éléments de la dimension"></ul>
+    <p id="emptyElements" class="empty" style="display: none;">Aucun élément.</p>
   </div>
 
   <p class="hint">
     Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.11.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.11.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.12.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.12.0" type="text/javascript"></script>
 </body>
 </html>
