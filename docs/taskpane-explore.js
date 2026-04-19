@@ -734,10 +734,17 @@
 		}
 	}
 
-	function openModalConsolidation(el) {
-		if (!canManageElements()) {
-			return;
+	/** Dossier du complément (même origine que cette page), pour ouvrir la boîte de dialogue Office. */
+	function getAddinPageBaseUrl() {
+		var href = window.location.href.split("#")[0];
+		var i = href.lastIndexOf("/");
+		if (i < 0) {
+			return href.indexOf("?") >= 0 ? href.substring(0, href.indexOf("?")) + "/" : href + "/";
 		}
+		return href.substring(0, i + 1);
+	}
+
+	function openModalConsolidationInline(el) {
 		consolState.targetElement = el;
 		consolState.selectedChildIds = el.childrenIds && el.childrenIds.length ? el.childrenIds.slice() : [];
 		var sub = document.getElementById("modalConsolSubtitle");
@@ -763,6 +770,63 @@
 			back.classList.add("open");
 		}
 		refreshConsolUi();
+	}
+
+	function openModalConsolidation(el) {
+		if (!canManageElements()) {
+			return;
+		}
+		var useDialog = false;
+		try {
+			useDialog =
+				typeof Office !== "undefined" &&
+				Office.context &&
+				Office.context.ui &&
+				typeof Office.context.ui.displayDialogAsync === "function";
+		} catch (e) {
+			useDialog = false;
+		}
+		if (useDialog) {
+			var qs = new URLSearchParams({
+				sid: state.sid,
+				apiBase: state.apiBase,
+				name_database: state.selectedDb.name,
+				name_dimension: state.selectedDimension.name,
+				element_id: el.id,
+				element_name: el.name,
+				initial_children: (el.childrenIds || []).join(","),
+			});
+			var url = getAddinPageBaseUrl() + "dialog-consolidation.html?v=1.0.14.0&" + qs.toString();
+			Office.context.ui.displayDialogAsync(
+				url,
+				{ height: 88, width: 85, displayInIframe: true },
+				function (asyncResult) {
+					if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+						openModalConsolidationInline(el);
+						return;
+					}
+					var dialog = asyncResult.value;
+					dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+						var msg = arg.message;
+						try {
+							dialog.close();
+						} catch (e) {}
+						if (msg === "refresh") {
+							reloadDimensionView()
+								.then(function () {
+									setStatus("Consolidation enregistrée.", "ok");
+								})
+								.catch(function (err) {
+									var m = err && err.message ? err.message : String(err);
+									setStatus(m, "err");
+								});
+						}
+					});
+				},
+			);
+			return;
+		}
+		openModalConsolidationInline(el);
 	}
 
 	function consolAddSelected() {
