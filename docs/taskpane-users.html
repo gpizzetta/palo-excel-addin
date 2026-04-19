@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Palo — Utilisateurs</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      margin: 0;
+      padding: 12px;
+      color: #323130;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0 0 10px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    h1 img { width: 20px; height: 20px; }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    button {
+      padding: 6px 12px;
+      background: #0078d4;
+      color: #fff;
+      border: none;
+      border-radius: 2px;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover { background: #106ebe; }
+    button:disabled { opacity: 0.6; cursor: not-allowed; }
+    button.secondary {
+      background: #edebe9;
+      color: #323130;
+    }
+    button.secondary:hover { background: #e1dfdd; }
+    button.btn-add-circle {
+      width: 28px;
+      height: 28px;
+      min-width: 28px;
+      padding: 0;
+      border-radius: 50%;
+      font-size: 18px;
+      font-weight: 600;
+      line-height: 1;
+    }
+    #status {
+      font-size: 12px;
+      min-height: 1.2em;
+      margin-bottom: 8px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    #status.ok { color: #107c10; }
+    #status.err { color: #a4262c; }
+    h2 {
+      font-size: 12px;
+      font-weight: 600;
+      margin: 0 0 6px 0;
+      color: #201f1e;
+    }
+    #userHint {
+      font-size: 11px;
+      color: #605e5c;
+      margin: 0 0 8px 0;
+      line-height: 1.45;
+      display: none;
+    }
+    #userHint.show { display: block; }
+    ul.user-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      border: 1px solid #edebe9;
+      border-radius: 2px;
+      max-height: min(60vh, 420px);
+      overflow: auto;
+    }
+    ul.user-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #f3f2f1;
+      cursor: default;
+    }
+    ul.user-list li:last-child { border-bottom: none; }
+    ul.user-list li:hover { background: #f3f2f1; }
+    ul.user-list .user-name {
+      flex: 1;
+      min-width: 0;
+      word-break: break-all;
+    }
+    ul.user-list button.user-del {
+      flex-shrink: 0;
+      padding: 2px 10px;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 1;
+      background: #fde7e9;
+      color: #a4262c;
+    }
+    ul.user-list button.user-del:hover { background: #f3d6d8; }
+    .empty {
+      padding: 10px;
+      color: #605e5c;
+      font-size: 12px;
+      border: 1px solid #edebe9;
+      border-radius: 2px;
+    }
+    .foot-hint {
+      font-size: 11px;
+      color: #605e5c;
+      margin-top: 12px;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <h1>
+    <img src="assets/palo_user_32.png?v=1.0.21.0" alt="" width="20" height="20" />
+    Utilisateurs Palo
+  </h1>
+
+  <div class="toolbar">
+    <button type="button" id="btnRefresh" class="secondary">Actualiser</button>
+    <button type="button" id="btnUserAdd" class="btn-add-circle secondary" title="Créer un utilisateur" aria-label="Créer un utilisateur">+</button>
+  </div>
+  <p id="status" role="status"></p>
+
+  <h2>Comptes serveur</h2>
+  <p id="userHint" role="note"></p>
+  <ul id="listServerUsers" class="user-list" aria-label="Utilisateurs"></ul>
+  <p id="emptyServerUsers" class="empty" style="display: none;">Aucun utilisateur chargé.</p>
+
+  <p class="foot-hint">
+    Les comptes sont lus dans le cube système <strong>#_USERS</strong> (dimension utilisateurs). Les identifiants viennent du volet <strong>Connexion</strong>.
+  </p>
+
+  <script src="md5.js?v=1.0.21.0" type="text/javascript"></script>
+  <script src="taskpane-users.js?v=1.0.21.0" type="text/javascript"></script>
+</body>
+</html>

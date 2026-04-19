@@ -31,88 +31,6 @@
       align-items: center;
       margin-bottom: 10px;
     }
-    button.toolbar-icon {
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 4px 8px;
-      min-width: 36px;
-    }
-    button.toolbar-icon img {
-      display: block;
-      width: 20px;
-      height: 20px;
-    }
-    .user-panel {
-      display: none;
-      margin-bottom: 10px;
-      border: 1px solid #edebe9;
-      border-radius: 4px;
-      background: #fff;
-      max-height: 280px;
-      overflow: hidden;
-      flex-direction: column;
-    }
-    .user-panel.open {
-      display: flex;
-    }
-    .user-panel-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border-bottom: 1px solid #edebe9;
-      background: #faf9f8;
-      flex-shrink: 0;
-    }
-    .user-panel-head h2 {
-      margin: 0;
-      flex: 1;
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .user-panel-head .btn-add-circle {
-      width: 28px;
-      height: 28px;
-      min-width: 28px;
-      padding: 0;
-      border-radius: 50%;
-      font-size: 18px;
-      font-weight: 600;
-      line-height: 1;
-    }
-    ul.user-list li {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      cursor: default;
-    }
-    ul.user-list li:hover { background: #f3f2f1; }
-    ul.user-list .user-name {
-      flex: 1;
-      min-width: 0;
-      word-break: break-all;
-    }
-    ul.user-list button.user-del {
-      flex-shrink: 0;
-      padding: 2px 10px;
-      font-size: 16px;
-      font-weight: 700;
-      line-height: 1;
-      background: #fde7e9;
-      color: #a4262c;
-    }
-    ul.user-list button.user-del:hover { background: #f3d6d8; }
-    #userPanelHint {
-      font-size: 11px;
-      color: #605e5c;
-      padding: 6px 10px;
-      margin: 0;
-      border-bottom: 1px solid #f3f2f1;
-      display: none;
-    }
-    #userPanelHint.show { display: block; }
     button {
       padding: 6px 12px;
       background: #0078d4;
@@ -303,26 +221,13 @@
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.19.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.21.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
   <div class="toolbar">
     <button type="button" id="btnRefresh" class="secondary">Actualiser</button>
     <button type="button" id="btnBack" class="secondary" style="display: none;">← Bases</button>
-    <button type="button" id="btnToggleUsers" class="secondary toolbar-icon" title="Utilisateurs du serveur" aria-label="Utilisateurs du serveur" aria-expanded="false">
-      <img src="assets/palo_user_32.png?v=1.0.19.0" alt="" width="20" height="20" />
-    </button>
-  </div>
-  <div id="userPanel" class="user-panel" aria-hidden="true">
-    <div class="user-panel-head">
-      <h2>Utilisateurs</h2>
-      <button type="button" id="btnUserAdd" class="btn-add-circle secondary" title="Créer un utilisateur" aria-label="Créer un utilisateur">+</button>
-      <button type="button" id="btnUserPanelClose" class="secondary">Fermer</button>
-    </div>
-    <p id="userPanelHint" role="note"></p>
-    <ul id="listServerUsers" class="list user-list" aria-label="Utilisateurs"></ul>
-    <p id="emptyServerUsers" class="empty" style="display: none;">Aucun utilisateur.</p>
   </div>
   <p id="status" role="status"></p>
 
@@ -364,10 +269,10 @@
   </div>
 
   <p class="hint">
-    Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
+    Utilise les identifiants enregistrés dans <strong>Connexion</strong>. La gestion des utilisateurs se fait depuis l’onglet Palo du ruban (<strong>Utilisateurs</strong>). L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.19.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.19.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.21.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.21.0" type="text/javascript"></script>
 </body>
 </html>

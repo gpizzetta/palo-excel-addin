@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.19.0";
+var ADDIN_VERSION = "1.0.21.0";
 
 function hello() {
 	return "hello world";
