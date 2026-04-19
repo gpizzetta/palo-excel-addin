@@ -690,7 +690,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.21.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.22.0&" + qs.toString();
 		var dialogOpts = {
 			height: 90,
 			width: 90,
