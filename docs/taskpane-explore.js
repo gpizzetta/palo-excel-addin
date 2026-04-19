@@ -44,17 +44,12 @@
 	function redactUrlForDebug(url) {
 		try {
 			var u = new URL(url);
-			if (u.searchParams.has("extern_password")) {
-				u.searchParams.set("extern_password", "***");
-			}
 			if (u.searchParams.has("password")) {
 				u.searchParams.set("password", "***");
 			}
 			return u.toString();
 		} catch (e) {
-			return String(url)
-				.replace(/([?&]extern_password=)[^&]*/gi, "$1***")
-				.replace(/([?&]password=)[^&]*/gi, "$1***");
+			return String(url).replace(/([?&]password=)[^&]*/gi, "$1***");
 		}
 	}
 
@@ -184,9 +179,14 @@
 	}
 
 	function loginAtBase(apiBase, user, password) {
+		if (typeof md5 !== "function") {
+			return Promise.reject(
+				new Error("Bibliothèque MD5 indisponible : le script md5.js doit être chargé avant taskpane-explore.js."),
+			);
+		}
 		var q = new URLSearchParams({
 			user: user,
-			extern_password: password,
+			password: md5(String(password)),
 		});
 		var url = apiBase + "/server/login?" + q.toString();
 		return fetchCsv(url).then(function (text) {
