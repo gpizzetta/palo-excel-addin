@@ -18,6 +18,12 @@
 		dimensionElements: [],
 		/** Id Jedox de la dimension d’attributs (#…) liée à la dimension courante (`/dimension/info`, colonne attributes_dimension). */
 		attributesDimensionId: null,
+		/** Id / nom du compte connecté (`/server/user_info`), pour masquer la suppression de soi-même. */
+		currentUserId: null,
+		currentUserName: null,
+		/** Liste utilisateurs limitée au compte courant si l’API ne fournit pas la liste complète. */
+		usersListIsPartial: false,
+		usersPanelOpen: false,
 	};
 
 	function setStatus(msg, kind) {
@@ -343,6 +349,265 @@
 		return list;
 	}
 
+	function parseUserInfoFirstLine(text, requestUrl) {
+		rejectIfHtml(text, requestUrl);
+		var lines = parseCsvLines(text);
+		if (!lines.length) {
+			throw new Error("Réponse user_info vide.");
+		}
+		var cells = splitDataLine(lines[0]);
+		if (!cells || cells.length < 2) {
+			cells = lines[0].split(";").map(function (c) {
+				return c.trim();
+			});
+		}
+		if (!cells || cells.length < 2) {
+			throw new Error("user_info illisible.");
+		}
+		var id = cells[0].trim();
+		var name = stripPaloCsvField(cells[1]);
+		if (!isNumericId(id) || !String(name).trim()) {
+			throw new Error("Identité utilisateur illisible dans user_info.");
+		}
+		return { id: id, name: name };
+	}
+
+	function loadCurrentUserFromServer() {
+		var q = new URLSearchParams({ sid: state.sid, show_permission: "0", show_info: "0" });
+		var url = state.apiBase + "/server/user_info?" + q.toString();
+		return fetchCsv(url).then(function (text) {
+			var u = parseUserInfoFirstLine(text, url);
+			state.currentUserId = u.id;
+			state.currentUserName = u.name;
+		});
+	}
+
+	function fetchFullUserListFromServer() {
+		var q = new URLSearchParams({ sid: state.sid });
+		var urls = [
+			state.apiBase + "/server/users?" + q.toString(),
+			state.apiBase + "/user/list?" + q.toString(),
+			state.apiBase + "/server/user_list?" + q.toString(),
+		];
+		function tryIdx(i) {
+			if (i >= urls.length) {
+				return Promise.reject(new Error("NO_FULL_USER_LIST"));
+			}
+			return fetchCsv(urls[i])
+				.then(function (text) {
+					return parseIdNameList(text, "utilisateurs", urls[i]);
+				})
+				.catch(function () {
+					return tryIdx(i + 1);
+				});
+		}
+		return tryIdx(0);
+	}
+
+	function loadServerUsersForPanel() {
+		state.usersListIsPartial = false;
+		return fetchFullUserListFromServer()
+			.then(function (list) {
+				return list;
+			})
+			.catch(function (err) {
+				if (!err || err.message !== "NO_FULL_USER_LIST") {
+					throw err;
+				}
+				var q = new URLSearchParams({ sid: state.sid, show_permission: "0", show_info: "0" });
+				var url = state.apiBase + "/server/user_info?" + q.toString();
+				return fetchCsv(url).then(function (text) {
+					var u = parseUserInfoFirstLine(text, url);
+					state.usersListIsPartial = true;
+					return [u];
+				});
+			});
+	}
+
+	function renderServerUsersList(users) {
+		var ul = document.getElementById("listServerUsers");
+		var empty = document.getElementById("emptyServerUsers");
+		var hint = document.getElementById("userPanelHint");
+		if (!ul || !empty) {
+			return;
+		}
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
+		if (hint) {
+			if (state.usersListIsPartial) {
+				hint.className = "show";
+				hint.textContent =
+					"Liste complète indisponible via l’API HTTP (essais : /server/users, /user/list, /server/user_list). Affichage du compte connecté uniquement.";
+			} else {
+				hint.className = "";
+				hint.textContent = "";
+			}
+		}
+		if (!users.length) {
+			empty.style.display = "block";
+			empty.textContent = "Aucun utilisateur.";
+			return;
+		}
+		empty.style.display = "none";
+		for (var i = 0; i < users.length; i++) {
+			(function (u) {
+				var li = document.createElement("li");
+				var span = document.createElement("span");
+				span.className = "user-name";
+				span.textContent = u.name;
+				span.title = "id " + u.id;
+				li.appendChild(span);
+				var canDel =
+					permissionAllowsWrite(state.databasePermission || "") &&
+					state.currentUserId &&
+					u.id !== state.currentUserId;
+				if (canDel) {
+					var b = document.createElement("button");
+					b.type = "button";
+					b.className = "user-del";
+					b.setAttribute("aria-label", "Supprimer l’utilisateur " + u.name);
+					b.textContent = "−";
+					b.addEventListener("click", function () {
+						onDeleteServerUser(u);
+					});
+					li.appendChild(b);
+				}
+				ul.appendChild(li);
+			})(users[i]);
+		}
+	}
+
+	function refreshServerUsersPanel() {
+		return loadServerUsersForPanel().then(function (list) {
+			renderServerUsersList(list);
+		});
+	}
+
+	function onDeleteServerUser(u) {
+		if (!permissionAllowsWrite(state.databasePermission || "")) {
+			return;
+		}
+		if (state.currentUserId && u.id === state.currentUserId) {
+			setStatus("Vous ne pouvez pas supprimer votre propre compte depuis cette session.", "err");
+			return;
+		}
+		if (!confirm('Supprimer l’utilisateur « ' + u.name + ' » (id ' + u.id + ') ?')) {
+			return;
+		}
+		var q = new URLSearchParams({ sid: state.sid, user: u.id });
+		var urls = [
+			state.apiBase + "/user/destroy?" + q.toString(),
+			state.apiBase + "/server/user_destroy?" + q.toString(),
+		];
+		function tryIdx(i) {
+			if (i >= urls.length) {
+				return Promise.reject(
+					new Error(
+						"Aucun endpoint de suppression utilisateur n’a répondu (/user/destroy, /server/user_destroy).",
+					),
+				);
+			}
+			return fetchCsv(urls[i]).catch(function () {
+				return tryIdx(i + 1);
+			});
+		}
+		setStatus("Suppression de l’utilisateur…", "");
+		tryIdx(0)
+			.then(function () {
+				return refreshServerUsersPanel();
+			})
+			.then(function () {
+				setStatus("Utilisateur supprimé.", "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus(msg, "err");
+			});
+	}
+
+	function setUsersPanelOpen(open) {
+		var panel = document.getElementById("userPanel");
+		var btn = document.getElementById("btnToggleUsers");
+		if (!panel) {
+			return;
+		}
+		state.usersPanelOpen = !!open;
+		if (state.usersPanelOpen) {
+			panel.classList.add("open");
+			panel.setAttribute("aria-hidden", "false");
+			if (btn) {
+				btn.setAttribute("aria-expanded", "true");
+			}
+			setStatus("Chargement des utilisateurs…", "");
+			refreshServerUsersPanel()
+				.then(function () {
+					setStatus("", "");
+				})
+				.catch(function (err) {
+					var msg = err && err.message ? err.message : String(err);
+					setStatus(msg, "err");
+					renderServerUsersList([]);
+				});
+		} else {
+			panel.classList.remove("open");
+			panel.setAttribute("aria-hidden", "true");
+			if (btn) {
+				btn.setAttribute("aria-expanded", "false");
+			}
+		}
+	}
+
+	function toggleUsersPanel() {
+		if (!permissionAllowsWrite(state.databasePermission || "") || !state.selectedDb) {
+			return;
+		}
+		setUsersPanelOpen(!state.usersPanelOpen);
+	}
+
+	function updateUserToolbarButton() {
+		var btn = document.getElementById("btnToggleUsers");
+		if (!btn) {
+			return;
+		}
+		var show =
+			state.currentView === "detail" &&
+			state.selectedDb &&
+			permissionAllowsWrite(state.databasePermission || "");
+		btn.style.display = show ? "inline-flex" : "none";
+		if (!show) {
+			setUsersPanelOpen(false);
+		}
+	}
+
+	function openModalCreateUser() {
+		if (!permissionAllowsWrite(state.databasePermission || "") || !state.selectedDb) {
+			setStatus("Action non autorisée.", "err");
+			return;
+		}
+		openOfficeDialogPage(
+			"dialog-create-user.html",
+			{
+				apiBase: state.apiBase,
+				sid: state.sid,
+			},
+			function () {
+				if (state.usersPanelOpen) {
+					refreshServerUsersPanel()
+						.then(function () {
+							setStatus("Utilisateur créé.", "ok");
+						})
+						.catch(function (err) {
+							var msg = err && err.message ? err.message : String(err);
+							setStatus(msg, "err");
+						});
+				} else {
+					setStatus("Utilisateur créé.", "ok");
+				}
+			},
+		);
+	}
+
 	function parseChildrenIdList(s) {
 		if (!s || !String(s).trim()) {
 			return [];
@@ -621,7 +886,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.18.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.19.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: 90,
@@ -871,6 +1136,7 @@
 			hint.style.display = "none";
 			hint.textContent = "";
 		}
+		updateUserToolbarButton();
 	}
 
 	function reloadDatabaseDetail() {
@@ -1063,6 +1329,7 @@
 			btn.style.display = "inline-block";
 			btn.textContent = "← Dimensions";
 		}
+		updateUserToolbarButton();
 	}
 
 	function selectDatabase(db) {
@@ -1133,6 +1400,12 @@
 			.then(function (session) {
 				state.apiBase = session.apiBase;
 				state.sid = session.sid;
+				return loadCurrentUserFromServer().catch(function () {
+					state.currentUserId = null;
+					state.currentUserName = null;
+				});
+			})
+			.then(function () {
 				return loadDatabases();
 			})
 			.then(function (dbs) {
@@ -1142,6 +1415,7 @@
 				state.databasePermission = null;
 				state.dimensionElements = [];
 				state.attributesDimensionId = null;
+				state.usersPanelOpen = false;
 				renderDatabaseList();
 				showView("databases");
 				setStatus(dbs.length + " base(s) chargée(s).", "ok");
@@ -1178,6 +1452,20 @@
 		}
 		if (btnCube) {
 			btnCube.addEventListener("click", openModalCreateCube);
+		}
+		var btnUsers = document.getElementById("btnToggleUsers");
+		if (btnUsers) {
+			btnUsers.addEventListener("click", toggleUsersPanel);
+		}
+		var btnUserAdd = document.getElementById("btnUserAdd");
+		if (btnUserAdd) {
+			btnUserAdd.addEventListener("click", openModalCreateUser);
+		}
+		var btnUserClose = document.getElementById("btnUserPanelClose");
+		if (btnUserClose) {
+			btnUserClose.addEventListener("click", function () {
+				setUsersPanelOpen(false);
+			});
 		}
 		var btnAddEl = document.getElementById("btnAddElement");
 		if (btnAddEl) {
