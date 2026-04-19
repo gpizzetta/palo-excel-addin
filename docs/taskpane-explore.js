@@ -37,6 +37,15 @@
 		return String(text).replace(/^\uFEFF/, "");
 	}
 
+	/** Champ CSV Palo / Jedox : guillemets optionnels autour du nom ("dwh" → dwh). */
+	function stripPaloCsvField(s) {
+		var t = String(s).trim();
+		if (t.length >= 2 && t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') {
+			return t.slice(1, -1).replace(/""/g, '"');
+		}
+		return t;
+	}
+
 	/** URL affichée dans les messages de debug (masque le mot de passe). */
 	function redactUrlForDebug(url) {
 		try {
@@ -231,7 +240,7 @@
 				continue;
 			}
 			var id = cells[0];
-			var name = cells[1];
+			var name = stripPaloCsvField(cells[1]);
 			if (!isNumericId(id) || !isPlausibleObjectName(name)) {
 				continue;
 			}
