@@ -476,14 +476,14 @@
 				return id;
 			}
 		}
-		throw new Error("Impossible de déterminer la dimension utilisateurs dans le cube #_USERS.");
+		throw new Error("Impossible de déterminer la dimension utilisateurs dans le cube #_USER_.");
 	}
 
 	function findDatabaseWithUsersCube(dbs, idx) {
 		if (idx >= dbs.length) {
 			return Promise.reject(
 				new Error(
-					'Cube « #_USERS » introuvable dans les bases accessibles (droits sur la base système ?).',
+					'Cube « #_USER_ » introuvable dans les bases accessibles (droits sur la base système ?).',
 				),
 			);
 		}
@@ -491,7 +491,7 @@
 		return loadCubesForDb(dbName).then(function (cubes) {
 			var c = null;
 			for (var i = 0; i < cubes.length; i++) {
-				if (cubes[i].name === "#_USERS") {
+				if (cubes[i].name === "#_USER_") {
 					c = cubes[i];
 					break;
 				}
@@ -540,7 +540,7 @@
 				var ctx = o.ctx;
 				var dimIds = o.dimIds;
 				if (!dimIds.length) {
-					throw new Error("Le cube #_USERS ne contient aucune dimension (cube/info).");
+					throw new Error("Le cube #_USER_ ne contient aucune dimension (cube/info).");
 				}
 				return loadDimensionsForDb(ctx.nameDatabase).then(function (dims) {
 					var idToName = {};
@@ -585,7 +585,7 @@
 			if (state.usersCubeMeta) {
 				hint.className = "show";
 				hint.textContent =
-					"Cube « #_USERS » — base « " +
+					"Cube « #_USER_ » — base « " +
 					state.usersCubeMeta.nameDatabase +
 					" », dimension « " +
 					state.usersCubeMeta.userDimensionName +

@@ -9,7 +9,7 @@
   <ProviderName>Palo</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Palo"/>
-  <Description DefaultValue="PALO.VERSION, HELLO, INFO — connexion, explorateur bases / dimensions / cubes, gestion utilisateurs (#_USERS)."/>
+  <Description DefaultValue="PALO.VERSION, HELLO, INFO — connexion, explorateur bases / dimensions / cubes, gestion utilisateurs (#_USER_)."/>
   <IconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-32.png"/>
   <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icon-64.png"/>
   <SupportUrl DefaultValue="https://github.com/gpizzetta/palo-excel-addin"/>
@@ -148,7 +148,7 @@
       <bt:LongStrings>
         <bt:String id="Palo.ConnectTip" DefaultValue="Configurer l’URL du serveur Palo et les identifiants pour ce classeur."/>
         <bt:String id="Palo.ExploreTip" DefaultValue="Lister les bases, puis les dimensions et les cubes de la base sélectionnée."/>
-        <bt:String id="Palo.UsersTip" DefaultValue="Gérer les comptes serveur (liste depuis le cube #_USERS, création, suppression)."/>
+        <bt:String id="Palo.UsersTip" DefaultValue="Gérer les comptes serveur (liste depuis le cube #_USER_, création, suppression)."/>
       </bt:LongStrings>
     </Resources>
   </VersionOverrides>
