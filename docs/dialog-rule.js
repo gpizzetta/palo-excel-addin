@@ -101,6 +101,41 @@
 		return null;
 	}
 
+	/** Valide la définition contre le cube (aires + fonctions) via l’API Jedox `/rule/parse`. */
+	function ruleParse(definition) {
+		var q = new URLSearchParams({
+			sid: ctx.sid,
+			name_database: ctx.name_database,
+			name_cube: ctx.name_cube,
+			definition: definition,
+		});
+		var url = ctx.apiBase + "/rule/parse?" + q.toString();
+		return fetch(url, {
+			method: "GET",
+			mode: "cors",
+			cache: "no-store",
+			credentials: "omit",
+		}).then(function (res) {
+			return res.text().then(function (text) {
+				if (!res.ok) {
+					throw new Error(
+						"La règle n’a pas passé la vérification (/rule/parse). HTTP " +
+							res.status +
+							"\n\n" +
+							text.slice(0, 800),
+					);
+				}
+				var t = stripBom(text).trim();
+				if (t.charAt(0) === "<" || t.toLowerCase().indexOf("<!doctype") !== -1) {
+					throw new Error(
+						"Réponse /rule/parse inattendue (HTML). Vérifiez l’URL du serveur OLAP.\n\n" + text.slice(0, 400),
+					);
+				}
+				return text;
+			});
+		});
+	}
+
 	function loadExistingRule() {
 		var q = new URLSearchParams({
 			sid: ctx.sid,
@@ -149,7 +184,7 @@
 			btn.disabled = false;
 		}
 
-		if (ctx.mode === "edit") {
+		function doModify() {
 			var qe = new URLSearchParams({
 				sid: ctx.sid,
 				name_database: ctx.name_database,
@@ -161,38 +196,48 @@
 				qe.set("comment", comment);
 			}
 			var urlE = ctx.apiBase + "/rule/modify?" + qe.toString();
-			fetch(urlE, { method: "GET", mode: "cors", cache: "no-store", credentials: "omit" })
-				.then(function (res) {
+			return fetch(urlE, { method: "GET", mode: "cors", cache: "no-store", credentials: "omit" }).then(
+				function (res) {
 					return res.text().then(function (text) {
 						if (!res.ok) {
 							throw new Error("HTTP " + res.status + " — " + text.slice(0, 500));
 						}
 						finish();
 					});
-				})
-				.catch(fail);
-			return;
+				},
+			);
 		}
 
-		var qc = new URLSearchParams({
-			sid: ctx.sid,
-			name_database: ctx.name_database,
-			name_cube: ctx.name_cube,
-			definition: def,
-			activate: "1",
-		});
-		if (comment) {
-			qc.set("comment", comment);
+		function doCreate() {
+			var qc = new URLSearchParams({
+				sid: ctx.sid,
+				name_database: ctx.name_database,
+				name_cube: ctx.name_cube,
+				definition: def,
+				activate: "1",
+			});
+			if (comment) {
+				qc.set("comment", comment);
+			}
+			var urlC = ctx.apiBase + "/rule/create?" + qc.toString();
+			return fetch(urlC, { method: "GET", mode: "cors", cache: "no-store", credentials: "omit" }).then(
+				function (res) {
+					return res.text().then(function (text) {
+						if (!res.ok) {
+							throw new Error("HTTP " + res.status + " — " + text.slice(0, 500));
+						}
+						finish();
+					});
+				},
+			);
 		}
-		var urlC = ctx.apiBase + "/rule/create?" + qc.toString();
-		fetch(urlC, { method: "GET", mode: "cors", cache: "no-store", credentials: "omit" })
-			.then(function (res) {
-				return res.text().then(function (text) {
-					if (!res.ok) {
-						throw new Error("HTTP " + res.status + " — " + text.slice(0, 500));
-					}
-					finish();
-				});
+
+		ruleParse(def)
+			.then(function () {
+				if (ctx.mode === "edit") {
+					return doModify();
+				}
+				return doCreate();
 			})
 			.catch(fail);
 	}
