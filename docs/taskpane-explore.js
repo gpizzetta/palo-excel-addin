@@ -20,12 +20,6 @@
 		attributesDimensionId: null,
 	};
 
-	var consolState = {
-		targetElement: null,
-		/** ids enfants dans l’ordre (pour `element/replace`) */
-		selectedChildIds: [],
-	};
-
 	function setStatus(msg, kind) {
 		var el = document.getElementById("status");
 		el.textContent = msg || "";
@@ -606,108 +600,7 @@
 		return permissionAllowsWrite(state.databasePermission || "");
 	}
 
-	function closeModals() {
-		var back = document.getElementById("modalBackdrop");
-		if (back) {
-			back.classList.remove("open");
-		}
-		var mAdd = document.getElementById("modalAddElement");
-		var mCon = document.getElementById("modalConsolidation");
-		if (mAdd) {
-			mAdd.style.display = "none";
-		}
-		if (mCon) {
-			mCon.style.display = "none";
-		}
-		consolState.targetElement = null;
-		consolState.selectedChildIds = [];
-	}
-
-	function openModalAddElement() {
-		if (!canManageElements()) {
-			return;
-		}
-		var nameEl = document.getElementById("inputElementName");
-		var typeEl = document.getElementById("selectElementType");
-		if (nameEl) {
-			nameEl.value = "";
-		}
-		if (typeEl) {
-			typeEl.value = "1";
-		}
-		var mAdd = document.getElementById("modalAddElement");
-		var mCon = document.getElementById("modalConsolidation");
-		var back = document.getElementById("modalBackdrop");
-		if (mAdd) {
-			mAdd.style.display = "block";
-		}
-		if (mCon) {
-			mCon.style.display = "none";
-		}
-		if (back) {
-			back.classList.add("open");
-		}
-		if (nameEl) {
-			nameEl.focus();
-		}
-	}
-
-	function refreshConsolUi() {
-		var target = consolState.targetElement;
-		if (!target) {
-			return;
-		}
-		var selectedSet = {};
-		for (var s = 0; s < consolState.selectedChildIds.length; s++) {
-			selectedSet[consolState.selectedChildIds[s]] = true;
-		}
-		var avail = document.getElementById("consolAvail");
-		if (avail) {
-			avail.innerHTML = "";
-			for (var j = 0; j < state.dimensionElements.length; j++) {
-				var e = state.dimensionElements[j];
-				if (e.id === target.id) {
-					continue;
-				}
-				if (selectedSet[e.id]) {
-					continue;
-				}
-				var opt = document.createElement("option");
-				opt.value = e.id;
-				opt.textContent = e.name + " (" + elementTypeLabel(e.type) + ", id " + e.id + ")";
-				avail.appendChild(opt);
-			}
-		}
-		var ul = document.getElementById("consolSelectedList");
-		if (!ul) {
-			return;
-		}
-		ul.innerHTML = "";
-		for (var k = 0; k < consolState.selectedChildIds.length; k++) {
-			var cid = consolState.selectedChildIds[k];
-			var child = findElementById(cid);
-			var li = document.createElement("li");
-			var span = document.createElement("span");
-			span.textContent = child ? child.name + " (id " + cid + ")" : "id " + cid;
-			var btn = document.createElement("button");
-			btn.type = "button";
-			btn.className = "secondary";
-			btn.textContent = "Retirer";
-			(function (id) {
-				btn.addEventListener("click", function () {
-					consolState.selectedChildIds = consolState.selectedChildIds.filter(function (x) {
-						return x !== id;
-					});
-					refreshConsolUi();
-				});
-			})(cid);
-			li.appendChild(span);
-			li.appendChild(btn);
-			ul.appendChild(li);
-		}
-	}
-
-	/** Dossier du complément (même origine que cette page), pour ouvrir la boîte de dialogue Office. */
+	/** Dossier du complément (même origine que cette page), pour les pages ouvertes en dialogue Office. */
 	function getAddinPageBaseUrl() {
 		var href = window.location.href.split("#")[0];
 		var i = href.lastIndexOf("/");
@@ -717,50 +610,70 @@
 		return href.substring(0, i + 1);
 	}
 
-	function openModalConsolidationInline(el) {
-		consolState.targetElement = el;
-		consolState.selectedChildIds = el.childrenIds && el.childrenIds.length ? el.childrenIds.slice() : [];
-		var sub = document.getElementById("modalConsolSubtitle");
-		if (sub) {
-			sub.textContent =
-				"Élément : " +
-				el.name +
-				" (id " +
-				el.id +
-				") — type actuel : " +
-				elementTypeLabel(el.type);
+	var OFFICE_DIALOG_OPTS = { height: 90, width: 90, displayInIframe: true };
+
+	function openOfficeDialogPage(htmlFile, queryParams, onRefreshDone) {
+		if (
+			typeof Office === "undefined" ||
+			!Office.context ||
+			!Office.context.ui ||
+			typeof Office.context.ui.displayDialogAsync !== "function"
+		) {
+			setStatus("Boîte de dialogue Office indisponible (Office.js / displayDialogAsync).", "err");
+			return;
 		}
-		var mAdd = document.getElementById("modalAddElement");
-		var mCon = document.getElementById("modalConsolidation");
-		var back = document.getElementById("modalBackdrop");
-		if (mAdd) {
-			mAdd.style.display = "none";
+		var qs = new URLSearchParams(queryParams);
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.16.0&" + qs.toString();
+		Office.context.ui.displayDialogAsync(url, OFFICE_DIALOG_OPTS, function (asyncResult) {
+			if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+				setStatus("Impossible d’ouvrir la fenêtre Office (displayDialogAsync).", "err");
+				return;
+			}
+			var dialog = asyncResult.value;
+			dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+				var msg = arg.message;
+				try {
+					dialog.close();
+				} catch (e) {}
+				if (msg === "refresh" && typeof onRefreshDone === "function") {
+					onRefreshDone();
+				}
+			});
+		});
+	}
+
+	function openModalAddElement() {
+		if (!canManageElements() || !state.selectedDb || !state.selectedDimension) {
+			return;
 		}
-		if (mCon) {
-			mCon.style.display = "block";
-		}
-		if (back) {
-			back.classList.add("open");
-		}
-		refreshConsolUi();
+		openOfficeDialogPage(
+			"dialog-add-element.html",
+			{
+				sid: state.sid,
+				apiBase: state.apiBase,
+				name_database: state.selectedDb.name,
+				name_dimension: state.selectedDimension.name,
+			},
+			function () {
+				reloadDimensionView()
+					.then(function () {
+						setStatus("Élément créé.", "ok");
+					})
+					.catch(function (err) {
+						var m = err && err.message ? err.message : String(err);
+						setStatus(m, "err");
+					});
+			},
+		);
 	}
 
 	function openModalConsolidation(el) {
-		if (!canManageElements()) {
+		if (!canManageElements() || !state.selectedDb || !state.selectedDimension) {
 			return;
 		}
-		var useDialog = false;
-		try {
-			useDialog =
-				typeof Office !== "undefined" &&
-				Office.context &&
-				Office.context.ui &&
-				typeof Office.context.ui.displayDialogAsync === "function";
-		} catch (e) {
-			useDialog = false;
-		}
-		if (useDialog) {
-			var qs = new URLSearchParams({
+		openOfficeDialogPage(
+			"dialog-consolidation.html",
+			{
 				sid: state.sid,
 				apiBase: state.apiBase,
 				name_database: state.selectedDb.name,
@@ -768,128 +681,18 @@
 				element_id: el.id,
 				element_name: el.name,
 				initial_children: (el.childrenIds || []).join(","),
-			});
-			var url = getAddinPageBaseUrl() + "dialog-consolidation.html?v=1.0.15.0&" + qs.toString();
-			Office.context.ui.displayDialogAsync(
-				url,
-				{ height: 88, width: 85, displayInIframe: true },
-				function (asyncResult) {
-					if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
-						openModalConsolidationInline(el);
-						return;
-					}
-					var dialog = asyncResult.value;
-					dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
-						var msg = arg.message;
-						try {
-							dialog.close();
-						} catch (e) {}
-						if (msg === "refresh") {
-							reloadDimensionView()
-								.then(function () {
-									setStatus("Consolidation enregistrée.", "ok");
-								})
-								.catch(function (err) {
-									var m = err && err.message ? err.message : String(err);
-									setStatus(m, "err");
-								});
-						}
+			},
+			function () {
+				reloadDimensionView()
+					.then(function () {
+						setStatus("Consolidation enregistrée.", "ok");
+					})
+					.catch(function (err) {
+						var m = err && err.message ? err.message : String(err);
+						setStatus(m, "err");
 					});
-				},
-			);
-			return;
-		}
-		openModalConsolidationInline(el);
-	}
-
-	function consolAddSelected() {
-		var avail = document.getElementById("consolAvail");
-		if (!avail) {
-			return;
-		}
-		var opts = avail.selectedOptions;
-		if (!opts || !opts.length) {
-			return;
-		}
-		for (var i = 0; i < opts.length; i++) {
-			var id = opts[i].value;
-			if (consolState.selectedChildIds.indexOf(id) === -1) {
-				consolState.selectedChildIds.push(id);
-			}
-		}
-		refreshConsolUi();
-	}
-
-	function saveConsolidation() {
-		var target = consolState.targetElement;
-		if (!target || !state.selectedDb || !state.selectedDimension) {
-			return;
-		}
-		if (consolState.selectedChildIds.length === 0) {
-			setStatus("Ajoutez au moins un enfant pour enregistrer une consolidation.", "err");
-			return;
-		}
-		var weights = consolState.selectedChildIds.map(function () {
-			return 1;
-		});
-		var q = new URLSearchParams({
-			sid: state.sid,
-			name_database: state.selectedDb.name,
-			name_dimension: state.selectedDimension.name,
-			element: target.id,
-			type: "4",
-			children: consolState.selectedChildIds.join(","),
-			weights: weights.join(","),
-		});
-		var url = state.apiBase + "/element/replace?" + q.toString();
-		setStatus("Enregistrement de la consolidation…", "");
-		fetchCsv(url)
-			.then(function () {
-				closeModals();
-				return reloadDimensionView();
-			})
-			.then(function () {
-				setStatus("Consolidation enregistrée.", "ok");
-			})
-			.catch(function (err) {
-				var msg = err && err.message ? err.message : String(err);
-				setStatus(msg, "err");
-			});
-	}
-
-	function saveAddElement() {
-		if (!state.selectedDb || !state.selectedDimension) {
-			return;
-		}
-		var nameEl = document.getElementById("inputElementName");
-		var typeEl = document.getElementById("selectElementType");
-		var name = nameEl ? nameEl.value.trim() : "";
-		var type = typeEl ? parseInt(typeEl.value, 10) : 1;
-		if (!name) {
-			setStatus("Indiquez un nom d’élément.", "err");
-			return;
-		}
-		var q = new URLSearchParams({
-			sid: state.sid,
-			name_database: state.selectedDb.name,
-			name_dimension: state.selectedDimension.name,
-			new_name: name,
-			type: String(type),
-		});
-		var url = state.apiBase + "/element/create?" + q.toString();
-		setStatus("Création de l’élément…", "");
-		fetchCsv(url)
-			.then(function () {
-				closeModals();
-				return reloadDimensionView();
-			})
-			.then(function () {
-				setStatus("Élément créé.", "ok");
-			})
-			.catch(function (err) {
-				var msg = err && err.message ? err.message : String(err);
-				setStatus(msg, "err");
-			});
+			},
+		);
 	}
 
 	function onDeleteElement(el) {
@@ -1327,7 +1130,6 @@
 				state.databasePermission = null;
 				state.dimensionElements = [];
 				state.attributesDimensionId = null;
-				closeModals();
 				renderDatabaseList();
 				showView("databases");
 				setStatus(dbs.length + " base(s) chargée(s).", "ok");
@@ -1343,7 +1145,6 @@
 
 	function onBack() {
 		if (state.currentView === "dimension") {
-			closeModals();
 			state.selectedDimension = null;
 			state.dimensionElements = [];
 			state.attributesDimensionId = null;
@@ -1374,53 +1175,6 @@
 		var btnAddEl = document.getElementById("btnAddElement");
 		if (btnAddEl) {
 			btnAddEl.addEventListener("click", openModalAddElement);
-		}
-		var modalBack = document.getElementById("modalBackdrop");
-		if (modalBack) {
-			modalBack.addEventListener("click", function (ev) {
-				if (ev.target === modalBack) {
-					closeModals();
-				}
-			});
-		}
-		var modalAddCancel = document.getElementById("modalAddCancel");
-		var modalAddOk = document.getElementById("modalAddOk");
-		if (modalAddCancel) {
-			modalAddCancel.addEventListener("click", closeModals);
-		}
-		if (modalAddOk) {
-			modalAddOk.addEventListener("click", saveAddElement);
-		}
-		var modalConsolCancel = document.getElementById("modalConsolCancel");
-		var modalConsolOk = document.getElementById("modalConsolOk");
-		if (modalConsolCancel) {
-			modalConsolCancel.addEventListener("click", closeModals);
-		}
-		if (modalConsolOk) {
-			modalConsolOk.addEventListener("click", saveConsolidation);
-		}
-		var consolBtnAdd = document.getElementById("consolBtnAdd");
-		var consolAvail = document.getElementById("consolAvail");
-		if (consolBtnAdd) {
-			consolBtnAdd.addEventListener("click", consolAddSelected);
-		}
-		if (consolAvail) {
-			consolAvail.addEventListener("dblclick", consolAddSelected);
-		}
-		document.addEventListener("keydown", function (ev) {
-			var back = document.getElementById("modalBackdrop");
-			if (ev.key === "Escape" && back && back.classList.contains("open")) {
-				closeModals();
-			}
-		});
-		var inputElName = document.getElementById("inputElementName");
-		if (inputElName) {
-			inputElName.addEventListener("keydown", function (ev) {
-				if (ev.key === "Enter") {
-					ev.preventDefault();
-					saveAddElement();
-				}
-			});
 		}
 		refreshAll();
 	});
