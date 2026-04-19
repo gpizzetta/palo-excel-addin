@@ -221,7 +221,7 @@
 </head>
 <body>
   <h1>
-    <img src="assets/palo_explore_32.png?v=1.0.17.0" alt="" width="20" height="20" />
+    <img src="assets/palo_explore_32.png?v=1.0.18.0" alt="" width="20" height="20" />
     Explorateur Palo
   </h1>
 
@@ -242,12 +242,14 @@
     <h2>Dimensions</h2>
     <p id="dimRightsHint" class="hint" style="display: none;" role="note"></p>
     <div id="dimAddRow" class="dim-add">
-      <input type="text" id="inputNewDimension" placeholder="Nom de la nouvelle dimension" autocomplete="off" aria-label="Nom de la nouvelle dimension" />
-      <button type="button" id="btnCreateDimension" class="secondary">Créer</button>
+      <button type="button" id="btnOpenCreateDimension" class="secondary">Créer une dimension…</button>
     </div>
     <ul id="listDimensions" class="list list--pick" aria-label="Dimensions"></ul>
     <p id="emptyDimensions" class="empty" style="display: none;">Aucune dimension.</p>
     <h2>Cubes</h2>
+    <div id="cubeAddRow" class="dim-add">
+      <button type="button" id="btnOpenCreateCube" class="secondary">Créer un cube…</button>
+    </div>
     <ul id="listCubes" class="list list--static" aria-label="Cubes"></ul>
     <p id="emptyCubes" class="empty" style="display: none;">Aucun cube.</p>
   </div>
@@ -270,7 +272,7 @@
     Utilise les identifiants enregistrés dans <strong>Connexion</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.17.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.17.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.18.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.18.0" type="text/javascript"></script>
 </body>
 </html>

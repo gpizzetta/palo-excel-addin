@@ -621,7 +621,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.17.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.18.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: 90,
@@ -847,10 +847,14 @@
 
 	function updateDimensionManageUi() {
 		var row = document.getElementById("dimAddRow");
+		var cubeRow = document.getElementById("cubeAddRow");
 		var hint = document.getElementById("dimRightsHint");
 		var p = state.databasePermission;
 		var canCreate = permissionAllowsWrite(p || "");
 		row.style.display = canCreate ? "flex" : "none";
+		if (cubeRow) {
+			cubeRow.style.display = canCreate ? "flex" : "none";
+		}
 		if (!hint) {
 			return;
 		}
@@ -887,21 +891,6 @@
 		});
 	}
 
-	function createDimensionOnServer(newName) {
-		var db = state.selectedDb;
-		if (!db || !permissionAllowsWrite(state.databasePermission || "")) {
-			return Promise.reject(new Error("Action non autorisée."));
-		}
-		var q = new URLSearchParams({
-			sid: state.sid,
-			name_database: db.name,
-			new_name: newName,
-			type: "0",
-		});
-		var url = state.apiBase + "/dimension/create?" + q.toString();
-		return fetchCsv(url);
-	}
-
 	function destroyDimensionOnServer(dim) {
 		var db = state.selectedDb;
 		if (!db) {
@@ -919,37 +908,56 @@
 		return fetchCsv(url);
 	}
 
-	function onCreateDimension() {
-		var input = document.getElementById("inputNewDimension");
-		var btn = document.getElementById("btnCreateDimension");
-		var name = input ? input.value.trim() : "";
-		if (!name) {
-			setStatus("Indiquez un nom de dimension.", "err");
-			return;
-		}
-		if (!permissionAllowsWrite(state.databasePermission || "")) {
+	function openModalCreateDimension() {
+		var db = state.selectedDb;
+		if (!db || !permissionAllowsWrite(state.databasePermission || "")) {
 			setStatus("Création impossible : droits insuffisants sur la base.", "err");
 			return;
 		}
-		btn.disabled = true;
-		setStatus("Création de la dimension…", "");
-		createDimensionOnServer(name)
-			.then(function () {
-				if (input) {
-					input.value = "";
-				}
-				return reloadDatabaseDetail();
-			})
-			.then(function () {
-				setStatus("Dimension créée.", "ok");
-			})
-			.catch(function (err) {
-				var msg = err && err.message ? err.message : String(err);
-				setStatus(msg, "err");
-			})
-			.then(function () {
-				btn.disabled = false;
-			});
+		openOfficeDialogPage(
+			"dialog-create-dimension.html",
+			{
+				apiBase: state.apiBase,
+				sid: state.sid,
+				name_database: db.name,
+			},
+			function () {
+				reloadDatabaseDetail()
+					.then(function () {
+						setStatus("Dimension créée.", "ok");
+					})
+					.catch(function (err) {
+						var msg = err && err.message ? err.message : String(err);
+						setStatus(msg, "err");
+					});
+			},
+		);
+	}
+
+	function openModalCreateCube() {
+		var db = state.selectedDb;
+		if (!db || !permissionAllowsWrite(state.databasePermission || "")) {
+			setStatus("Création impossible : droits insuffisants sur la base.", "err");
+			return;
+		}
+		openOfficeDialogPage(
+			"dialog-create-cube.html",
+			{
+				apiBase: state.apiBase,
+				sid: state.sid,
+				name_database: db.name,
+			},
+			function () {
+				reloadDatabaseDetail()
+					.then(function () {
+						setStatus("Cube créé.", "ok");
+					})
+					.catch(function (err) {
+						var msg = err && err.message ? err.message : String(err);
+						setStatus(msg, "err");
+					});
+			},
+		);
 	}
 
 	function onDeleteDimension(dim, ev) {
@@ -1163,18 +1171,13 @@
 	Office.onReady(function () {
 		document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 		document.getElementById("btnBack").addEventListener("click", onBack);
-		var btnCreate = document.getElementById("btnCreateDimension");
-		var inputNew = document.getElementById("inputNewDimension");
-		if (btnCreate) {
-			btnCreate.addEventListener("click", onCreateDimension);
+		var btnDim = document.getElementById("btnOpenCreateDimension");
+		var btnCube = document.getElementById("btnOpenCreateCube");
+		if (btnDim) {
+			btnDim.addEventListener("click", openModalCreateDimension);
 		}
-		if (inputNew) {
-			inputNew.addEventListener("keydown", function (ev) {
-				if (ev.key === "Enter") {
-					ev.preventDefault();
-					onCreateDimension();
-				}
-			});
+		if (btnCube) {
+			btnCube.addEventListener("click", openModalCreateCube);
 		}
 		var btnAddEl = document.getElementById("btnAddElement");
 		if (btnAddEl) {
