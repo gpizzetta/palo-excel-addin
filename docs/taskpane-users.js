@@ -632,6 +632,72 @@
 		});
 	}
 
+	function loadAllHashCubes() {
+		return loadDatabases().then(function (dbs) {
+			return Promise.all(
+				dbs.map(function (db) {
+					return loadCubesForDb(db.name).then(function (cubes) {
+						var rows = [];
+						for (var i = 0; i < cubes.length; i++) {
+							var c = cubes[i];
+							if (c.name && c.name.indexOf("#_") === 0) {
+								rows.push({
+									nameDatabase: db.name,
+									cubeId: c.id,
+									cubeName: c.name,
+								});
+							}
+						}
+						return rows;
+					});
+				}),
+			).then(function (arrays) {
+				var out = [];
+				for (var a = 0; a < arrays.length; a++) {
+					out = out.concat(arrays[a]);
+				}
+				out.sort(function (x, y) {
+					var kx = x.nameDatabase + "\0" + x.cubeName;
+					var ky = y.nameDatabase + "\0" + y.cubeName;
+					return kx < ky ? -1 : kx > ky ? 1 : 0;
+				});
+				return out;
+			});
+		});
+	}
+
+	function renderHashCubesList(rows) {
+		var ul = document.getElementById("listHashCubes");
+		var empty = document.getElementById("emptyHashCubes");
+		if (!ul || !empty) {
+			return;
+		}
+		while (ul.firstChild) {
+			ul.removeChild(ul.firstChild);
+		}
+		if (!rows.length) {
+			empty.style.display = "block";
+			return;
+		}
+		empty.style.display = "none";
+		for (var i = 0; i < rows.length; i++) {
+			var r = rows[i];
+			var li = document.createElement("li");
+			var span = document.createElement("span");
+			span.className = "user-name";
+			span.textContent = r.nameDatabase + " — " + r.cubeName;
+			span.title = "id cube " + r.cubeId;
+			li.appendChild(span);
+			ul.appendChild(li);
+		}
+	}
+
+	function refreshHashCubesPanel() {
+		return loadAllHashCubes().then(function (rows) {
+			renderHashCubesList(rows);
+		});
+	}
+
 	function onDeleteServerUser(u) {
 		if (state.currentUserId && u.id === state.currentUserId) {
 			setStatus("Vous ne pouvez pas supprimer votre propre compte depuis cette session.", "err");
@@ -640,25 +706,19 @@
 		if (!confirm('Supprimer l’utilisateur « ' + u.name + ' » (id ' + u.id + ') ?')) {
 			return;
 		}
-		var q = new URLSearchParams({ sid: state.sid, user: u.id });
-		var urls = [
-			state.apiBase + "/user/destroy?" + q.toString(),
-			state.apiBase + "/server/user_destroy?" + q.toString(),
-		];
-		function tryIdx(i) {
-			if (i >= urls.length) {
-				return Promise.reject(
-					new Error(
-						"Aucun endpoint de suppression utilisateur n’a répondu (/user/destroy, /server/user_destroy).",
-					),
-				);
-			}
-			return fetchCsv(urls[i]).catch(function () {
-				return tryIdx(i + 1);
-			});
+		if (!state.usersCubeMeta) {
+			setStatus("Métadonnées du cube #_USER_ indisponibles. Actualisez la liste.", "err");
+			return;
 		}
+		var q = new URLSearchParams({
+			sid: state.sid,
+			name_database: state.usersCubeMeta.nameDatabase,
+			name_dimension: state.usersCubeMeta.userDimensionName,
+			element: String(u.id),
+		});
+		var url = state.apiBase + "/element/destroy?" + q.toString();
 		setStatus("Suppression…", "");
-		tryIdx(0)
+		fetchCsv(url)
 			.then(function () {
 				return refreshServerUsersPanel();
 			})
@@ -690,7 +750,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.22.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.23.0&" + qs.toString();
 		var dialogOpts = {
 			height: 90,
 			width: 90,
@@ -719,11 +779,17 @@
 			setStatus("Connectez-vous d’abord (Actualiser).", "err");
 			return;
 		}
+		if (!state.usersCubeMeta) {
+			setStatus("Chargez d’abord la liste utilisateurs (Actualiser).", "err");
+			return;
+		}
 		openOfficeDialogPage(
 			"dialog-create-user.html",
 			{
 				apiBase: state.apiBase,
 				sid: state.sid,
+				name_database: state.usersCubeMeta.nameDatabase,
+				name_dimension: state.usersCubeMeta.userDimensionName,
 			},
 			function () {
 				refreshServerUsersPanel()
@@ -759,7 +825,7 @@
 			})
 			.then(function () {
 				setStatus("Chargement des utilisateurs…", "");
-				return refreshServerUsersPanel();
+				return Promise.all([refreshServerUsersPanel(), refreshHashCubesPanel()]);
 			})
 			.then(function () {
 				setStatus("Liste à jour.", "ok");
@@ -767,6 +833,7 @@
 			.catch(function (err) {
 				setStatus(err && err.message ? err.message : String(err), "err");
 				renderServerUsersList([]);
+				renderHashCubesList([]);
 			})
 			.then(function () {
 				if (btn) {

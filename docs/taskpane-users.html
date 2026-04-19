@@ -81,6 +81,12 @@
       display: none;
     }
     #userHint.show { display: block; }
+    .section-hint {
+      font-size: 11px;
+      color: #605e5c;
+      margin: 0 0 8px 0;
+      line-height: 1.45;
+    }
     ul.user-list {
       list-style: none;
       margin: 0;
@@ -133,7 +139,7 @@
 </head>
 <body>
   <h1>
-    <img src="assets/palo_user_32.png?v=1.0.22.0" alt="" width="20" height="20" />
+    <img src="assets/palo_user_32.png?v=1.0.23.0" alt="" width="20" height="20" />
     Utilisateurs Palo
   </h1>
 
@@ -143,16 +149,21 @@
   </div>
   <p id="status" role="status"></p>
 
+  <h2>Cubes système (#_…)</h2>
+  <p class="section-hint">Tous les cubes dont le nom commence par <code>#_</code> (toutes les bases accessibles).</p>
+  <ul id="listHashCubes" class="user-list" aria-label="Cubes #_"></ul>
+  <p id="emptyHashCubes" class="empty" style="display: none;">Aucun cube #_…</p>
+
   <h2>Comptes serveur</h2>
   <p id="userHint" role="note"></p>
   <ul id="listServerUsers" class="user-list" aria-label="Utilisateurs"></ul>
   <p id="emptyServerUsers" class="empty" style="display: none;">Aucun utilisateur chargé.</p>
 
   <p class="foot-hint">
-    Les comptes sont lus dans le cube système <strong>#_USER_</strong> (dimension utilisateurs). Les identifiants viennent du volet <strong>Connexion</strong>.
+    Les comptes sont lus dans le cube système <strong>#_USER_</strong> (dimension utilisateurs). La création ajoute un <strong>élément</strong> dans cette dimension (<code>/element/create</code>, type chaîne). Les identifiants de connexion viennent du volet <strong>Connexion</strong>.
   </p>
 
-  <script src="md5.js?v=1.0.22.0" type="text/javascript"></script>
-  <script src="taskpane-users.js?v=1.0.22.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.23.0" type="text/javascript"></script>
+  <script src="taskpane-users.js?v=1.0.23.0" type="text/javascript"></script>
 </body>
 </html>
