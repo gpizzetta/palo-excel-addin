@@ -27,13 +27,10 @@
 		};
 	}
 
+	/** Base HTTP Palo : chemins /server/, /database/, etc. à la racine du host (pas de préfixe /api). */
 	function apiBaseCandidates(connectionUrl) {
 		var u = new URL(connectionUrl.trim());
-		var path = u.pathname.replace(/\/$/, "");
-		if (path === "/api") {
-			return [u.origin + "/api"];
-		}
-		return [u.origin + "/api", u.origin];
+		return [u.origin];
 	}
 
 	function stripBom(text) {
