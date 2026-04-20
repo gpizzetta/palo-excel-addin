@@ -39,6 +39,33 @@
 		};
 	}
 
+	/**
+	 * Recharge les paramètres du classeur depuis le document (voir Office.Settings.refreshAsync).
+	 * Sans cela, après un changement d’URL dans le volet Connexion, les autres volets peuvent
+	 * garder l’ancienne valeur en mémoire jusqu’au rechargement du complément.
+	 */
+	function loadSettingsAsync() {
+		return new Promise(function (resolve, reject) {
+			var s = Office.context && Office.context.document && Office.context.document.settings;
+			if (!s) {
+				reject(new Error("Office.context.document.settings indisponible."));
+				return;
+			}
+			if (typeof s.refreshAsync !== "function") {
+				resolve(getSettings());
+				return;
+			}
+			s.refreshAsync(function (asyncResult) {
+				if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+					var em = asyncResult.error && asyncResult.error.message;
+					reject(new Error(em || "Échec du rechargement des paramètres (refreshAsync)."));
+					return;
+				}
+				resolve(getSettings());
+			});
+		});
+	}
+
 	/** Base HTTP Palo : chemins /server/, /database/, etc. à la racine du host (pas de préfixe /api). */
 	function apiBaseCandidates(connectionUrl) {
 		var u = new URL(connectionUrl.trim());
@@ -734,7 +761,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.26.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.28.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: dialogSize && dialogSize.height != null ? dialogSize.height : 90,
@@ -1509,15 +1536,19 @@
 	}
 
 	function refreshAll() {
-		var cfg = getSettings();
-		if (!cfg.url) {
-			setStatus("Configurez d’abord l’URL dans Connexion.", "err");
-			return;
-		}
 		var btn = document.getElementById("btnRefresh");
 		btn.disabled = true;
 		setStatus("Connexion au serveur…", "");
-		discoverAndLogin(cfg.url, cfg.username, cfg.password)
+		loadSettingsAsync()
+			.then(function (cfg) {
+				if (!cfg.url) {
+					setStatus("Configurez d’abord l’URL dans Connexion.", "err");
+					return Promise.reject(new Error("no-url"));
+				}
+				state.apiBase = "";
+				state.sid = "";
+				return discoverAndLogin(cfg.url, cfg.username, cfg.password);
+			})
 			.then(function (session) {
 				state.apiBase = session.apiBase;
 				state.sid = session.sid;
@@ -1537,6 +1568,9 @@
 				setStatus(dbs.length + " base(s) chargée(s).", "ok");
 			})
 			.catch(function (err) {
+				if (err && err.message === "no-url") {
+					return;
+				}
 				var msg = err && err.message ? err.message : String(err);
 				setStatus(msg, "err");
 			})

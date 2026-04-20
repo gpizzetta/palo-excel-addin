@@ -30,6 +30,32 @@
 		return String(text).replace(/^\uFEFF/, "");
 	}
 
+	/**
+	 * Nettoie une définition collée depuis navigateur / Word / mail : balises HTML,
+	 * entités (&nbsp;…), espaces insécables / invisibles, fins de ligne.
+	 * À appliquer avant /rule/parse et /rule/create|modify pour ne pas envoyer de HTML au serveur.
+	 */
+	function cleanRuleDefinition(raw) {
+		var s = stripBom(String(raw));
+		s = s.replace(/\u200b/g, "");
+		s = s.replace(/\ufeff/g, "");
+		s = s.replace(/\u00a0/g, " ");
+		var i;
+		for (i = 0; i < 3; i++) {
+			s = s.replace(/<[^>]+>/g, "");
+			var ta = document.createElement("textarea");
+			ta.innerHTML = s;
+			s = ta.value;
+		}
+		s = s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+		return s.trim();
+	}
+
+	function cleanComment(raw) {
+		var t = cleanRuleDefinition(raw);
+		return t.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+	}
+
 	function stripPaloCsvField(s) {
 		var t = String(s).trim();
 		if (t.length >= 2 && t.charAt(0) === '"' && t.charAt(t.length - 1) === '"') {
@@ -157,6 +183,12 @@
 				if (!found) {
 					throw new Error("Règle id " + ctx.rule + " introuvable dans /cube/rules.");
 				}
+				if (found.definition) {
+					found.definition = cleanRuleDefinition(found.definition);
+				}
+				if (found.comment) {
+					found.comment = cleanComment(found.comment);
+				}
 				return found;
 			});
 		});
@@ -164,9 +196,11 @@
 
 	function save() {
 		parseQuery();
-		var def = document.getElementById("areaDef").value;
-		var comment = document.getElementById("inputComment").value.trim();
-		if (!def.trim()) {
+		var def = cleanRuleDefinition(document.getElementById("areaDef").value);
+		document.getElementById("areaDef").value = def;
+		var comment = cleanComment(document.getElementById("inputComment").value);
+		document.getElementById("inputComment").value = comment;
+		if (!def) {
 			showErr("Indiquez une définition de règle.");
 			return;
 		}

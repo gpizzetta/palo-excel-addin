@@ -30,6 +30,29 @@
 		};
 	}
 
+	/** Recharge les paramètres du classeur pour prendre en compte un changement depuis le volet Connexion. */
+	function loadSettingsAsync() {
+		return new Promise(function (resolve, reject) {
+			var s = Office.context && Office.context.document && Office.context.document.settings;
+			if (!s) {
+				reject(new Error("Office.context.document.settings indisponible."));
+				return;
+			}
+			if (typeof s.refreshAsync !== "function") {
+				resolve(getSettings());
+				return;
+			}
+			s.refreshAsync(function (asyncResult) {
+				if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+					var em = asyncResult.error && asyncResult.error.message;
+					reject(new Error(em || "Échec du rechargement des paramètres (refreshAsync)."));
+					return;
+				}
+				resolve(getSettings());
+			});
+		});
+	}
+
 	function apiBaseCandidates(connectionUrl) {
 		var u = new URL(connectionUrl.trim());
 		return [u.origin];
@@ -762,7 +785,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.24.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.28.0&" + qs.toString();
 		var dialogOpts = {
 			height: 90,
 			width: 90,
@@ -816,17 +839,21 @@
 	}
 
 	function refreshAll() {
-		var cfg = getSettings();
-		if (!cfg.url) {
-			setStatus("Configurez d’abord l’URL dans l’onglet Connexion.", "err");
-			return;
-		}
 		var btn = document.getElementById("btnRefresh");
 		if (btn) {
 			btn.disabled = true;
 		}
 		setStatus("Connexion…", "");
-		discoverAndLogin(cfg.url, cfg.username, cfg.password)
+		loadSettingsAsync()
+			.then(function (cfg) {
+				if (!cfg.url) {
+					setStatus("Configurez d’abord l’URL dans l’onglet Connexion.", "err");
+					return Promise.reject(new Error("no-url"));
+				}
+				state.apiBase = "";
+				state.sid = "";
+				return discoverAndLogin(cfg.url, cfg.username, cfg.password);
+			})
 			.then(function (session) {
 				state.apiBase = session.apiBase;
 				state.sid = session.sid;
@@ -847,6 +874,9 @@
 				setStatus("Liste à jour.", "ok");
 			})
 			.catch(function (err) {
+				if (err && err.message === "no-url") {
+					return;
+				}
 				setStatus(err && err.message ? err.message : String(err), "err");
 				renderServerUsersList([]);
 				renderHashCubesList([]);

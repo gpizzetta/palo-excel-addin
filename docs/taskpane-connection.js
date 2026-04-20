@@ -54,6 +54,11 @@
 			btn.disabled = false;
 			if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
 				setStatus("Connexion enregistrée pour ce classeur.", "ok");
+				try {
+					if (typeof s.refreshAsync === "function") {
+						s.refreshAsync(function () {});
+					}
+				} catch (e2) {}
 			} else {
 				setStatus(
 					"Échec de l’enregistrement : " + (asyncResult.error && asyncResult.error.message),
