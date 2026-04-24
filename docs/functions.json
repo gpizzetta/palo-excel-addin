@@ -36,6 +36,34 @@
         "type": "string",
         "dimensionality": "scalar"
       }
+    },
+    {
+      "id": "DATAC",
+      "name": "DATAC",
+      "description": "Lit une cellule cube via les noms d’éléments (API /cell/value). Utilise l’URL et les identifiants du volet Connexion. Session réutilisée ~4 min.",
+      "parameters": [
+        {
+          "name": "database",
+          "description": "Nom de la base Jedox.",
+          "type": "string"
+        },
+        {
+          "name": "cube",
+          "description": "Nom du cube.",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "description": "Nom d’élément pour chaque dimension du cube (arguments répétables).",
+          "type": "string",
+          "optional": true,
+          "repeating": true
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
     }
   ]
 }
