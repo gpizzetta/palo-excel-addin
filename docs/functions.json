@@ -64,6 +64,44 @@
         "type": "string",
         "dimensionality": "scalar"
       }
+    },
+    {
+      "id": "SETDATA",
+      "name": "SETDATA",
+      "description": "Écrit une valeur dans une cellule cube via /cell/replace (équivalent PALO.SETDATA). Splash accepte FALSE/TRUE, 0..5, default/add/set.",
+      "parameters": [
+        {
+          "name": "value",
+          "description": "Valeur à écrire (nombre, texte, référence ou formule Excel).",
+          "type": "any"
+        },
+        {
+          "name": "splash",
+          "description": "Mode de splash: FALSE/0 (aucun), TRUE/1 (défaut), ou 0..5.",
+          "type": "any"
+        },
+        {
+          "name": "database",
+          "description": "Nom de la base Jedox.",
+          "type": "string"
+        },
+        {
+          "name": "cube",
+          "description": "Nom du cube.",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "description": "Nom d’élément pour chaque dimension du cube (arguments répétables).",
+          "type": "string",
+          "optional": true,
+          "repeating": true
+        }
+      ],
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      }
     }
   ]
 }

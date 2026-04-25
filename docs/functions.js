@@ -306,6 +306,141 @@ function info(url) {
 		});
 	}
 
+function parsePaloBooleanLike(value) {
+	if (typeof value === "boolean") {
+		return value;
+	}
+	if (value === undefined || value === null) {
+		return null;
+	}
+	var s = String(value).trim().toLowerCase();
+	if (!s) {
+		return null;
+	}
+	if (s === "1" || s === "true" || s === "vrai" || s === "yes" || s === "y" || s === "on") {
+		return true;
+	}
+	if (s === "0" || s === "false" || s === "faux" || s === "no" || s === "n" || s === "off") {
+		return false;
+	}
+	return null;
+}
+
+function normalizeSplashMode(splash) {
+	if (splash === undefined || splash === null || splash === "") {
+		return 0;
+	}
+	if (typeof splash === "number") {
+		if (!isFinite(splash)) {
+			throw new Error("Paramètre splash invalide.");
+		}
+		var n = Math.round(splash);
+		if (n < 0 || n > 5) {
+			throw new Error("Paramètre splash hors plage (0..5).");
+		}
+		return n;
+	}
+	var boolLike = parsePaloBooleanLike(splash);
+	if (boolLike !== null) {
+		return boolLike ? 1 : 0;
+	}
+	var s = String(splash).trim().toLowerCase();
+	if (s === "default") {
+		return 1;
+	}
+	if (s === "add" || s === "add_base") {
+		return 2;
+	}
+	if (s === "set" || s === "set_base") {
+		return 3;
+	}
+	if (s === "set_populated") {
+		return 4;
+	}
+	if (s === "add_populated") {
+		return 5;
+	}
+	var parsed = parseInt(s, 10);
+	if (!isNaN(parsed) && String(parsed) === s) {
+		if (parsed < 0 || parsed > 5) {
+			throw new Error("Paramètre splash hors plage (0..5).");
+		}
+		return parsed;
+	}
+	throw new Error("Paramètre splash invalide (attendu: booléen, 0..5, default/add/set).");
+}
+
+function parsePaloStatus(text, operationLabel) {
+	var lines = stripBom(text)
+		.split(/\r?\n/)
+		.map(function (line) {
+			return line.replace(/\s+$/, "");
+		})
+		.filter(function (line) {
+			return line.length;
+		});
+	if (!lines.length) {
+		return;
+	}
+	var first = lines[0];
+	if (first.charAt(0) === "<" || first.toLowerCase().indexOf("<!doctype") !== -1) {
+		throw new Error(operationLabel + " : HTML renvoyé au lieu du CSV Palo.");
+	}
+	var cells = first.indexOf(";") >= 0 ? first.split(";") : first.split(",");
+	var c0 = cells.length ? cells[0].trim() : "";
+	if (/^[0-9]{1,6}$/.test(c0)) {
+		var code = parseInt(c0, 10);
+		if (code > 0) {
+			throw new Error(cells.slice(1).join("; ") || operationLabel + " a échoué.");
+		}
+	}
+}
+
+function stringifySetDataValue(value) {
+	if (value === undefined || value === null) {
+		return "";
+	}
+	if (typeof value === "number") {
+		if (!isFinite(value)) {
+			throw new Error("Valeur numérique invalide.");
+		}
+		return String(value);
+	}
+	if (typeof value === "boolean") {
+		return value ? "1" : "0";
+	}
+	return String(value);
+}
+
+function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
+	var namePath = elementNames.join(",");
+	var valueAsString = stringifySetDataValue(value);
+	var q = new URLSearchParams({
+		sid: sid,
+		name_database: nameDatabase,
+		name_cube: nameCube,
+		name_path: namePath,
+		value: valueAsString,
+		splash: String(splashMode),
+		mode: "1",
+	});
+	var url = apiBase + "/cell/replace?" + q.toString();
+	return fetch(url, {
+		method: "GET",
+		mode: "cors",
+		cache: "no-store",
+		credentials: "omit",
+	}).then(function (res) {
+		return res.text().then(function (text) {
+			if (!res.ok) {
+				throw new Error("cell/replace HTTP " + res.status + " — " + text.slice(0, 500));
+			}
+			parsePaloStatus(text, "cell/replace");
+			return valueAsString;
+		});
+	});
+}
+
 	/**
 	 * Lecture d’une cellule cube (équivalent Jedox PALO.DATAC : coordonnées par noms d’éléments).
 	 * Utilise les identifiants du volet Connexion. Session réutilisée quelques minutes (évite un login par cellule).
@@ -337,7 +472,40 @@ function info(url) {
 			});
 	}
 
+/**
+ * Écriture d’une cellule cube (équivalent Jedox PALO.SETDATA).
+ * Signature: value, splash, database, cube, element1, [element2], ...
+ */
+function setdata(value, splash, database, cube, element) {
+	var db = database != null ? String(database).trim() : "";
+	var cubeName = cube != null ? String(cube).trim() : "";
+	var parts = normalizePathElements(element);
+	return loadSettingsAsync()
+		.then(function (cfg) {
+			if (!cfg.url) {
+				throw new Error("Configurez l’URL dans le volet Connexion (Palo).");
+			}
+			if (!cfg.username) {
+				throw new Error("Utilisateur de connexion manquant (volet Connexion).");
+			}
+			if (!db) {
+				throw new Error("Nom de base manquant.");
+			}
+			if (!cubeName) {
+				throw new Error("Nom de cube manquant.");
+			}
+			if (!parts.length) {
+				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
+			}
+			var splashMode = normalizeSplashMode(splash);
+			return getCachedSession(cfg).then(function (sess) {
+				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
+			});
+		});
+}
+
 CustomFunctions.associate("HELLO", hello);
 CustomFunctions.associate("VERSION", version);
 CustomFunctions.associate("INFO", info);
 CustomFunctions.associate("DATAC", datac);
+CustomFunctions.associate("SETDATA", setdata);
