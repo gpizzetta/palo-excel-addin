@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.31.0";
+var ADDIN_VERSION = "1.0.32.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -391,7 +391,17 @@ function parsePaloStatus(text, operationLabel) {
 	if (/^[0-9]{1,6}$/.test(c0)) {
 		var code = parseInt(c0, 10);
 		if (code > 0) {
-			throw new Error(cells.slice(1).join("; ") || operationLabel + " a échoué.");
+			var details = cells
+				.slice(1)
+				.map(function (c) {
+					return String(c || "").trim();
+				})
+				.filter(Boolean)
+				.join("; ");
+			if (!details) {
+				details = "code " + code + " (réponse: " + first.slice(0, 180) + ")";
+			}
+			throw new Error(operationLabel + " a échoué: " + details);
 		}
 	}
 }
@@ -422,7 +432,6 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		name_path: namePath,
 		value: valueAsString,
 		splash: String(splashMode),
-		mode: "1",
 	});
 	var url = apiBase + "/cell/replace?" + q.toString();
 	return fetch(url, {
