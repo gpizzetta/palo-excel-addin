@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.30.0";
+var ADDIN_VERSION = "1.0.31.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -441,6 +441,18 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	});
 }
 
+function formatSetdataError(err) {
+	var msg = err && err.message ? String(err.message) : String(err);
+	if (!msg || msg === "[object Object]") {
+		msg = "Erreur inconnue lors de l'ecriture dans le cube.";
+	}
+	msg = msg.replace(/\s+/g, " ").trim();
+	if (msg.length > 350) {
+		msg = msg.slice(0, 350) + "...";
+	}
+	return "PALO.SETDATA: " + msg;
+}
+
 	/**
 	 * Lecture d’une cellule cube (équivalent Jedox PALO.DATAC : coordonnées par noms d’éléments).
 	 * Utilise les identifiants du volet Connexion. Session réutilisée quelques minutes (évite un login par cellule).
@@ -501,6 +513,9 @@ function setdata(value, splash, database, cube, element) {
 			return getCachedSession(cfg).then(function (sess) {
 				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
 			});
+		})
+		.catch(function (err) {
+			return formatSetdataError(err);
 		});
 }
 

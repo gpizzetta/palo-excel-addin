@@ -45,17 +45,17 @@
         {
           "name": "database",
           "description": "Nom de la base Jedox.",
-          "type": "string"
+          "type": "any"
         },
         {
           "name": "cube",
           "description": "Nom du cube.",
-          "type": "string"
+          "type": "any"
         },
         {
           "name": "element",
           "description": "Nom d’élément pour chaque dimension du cube (arguments répétables).",
-          "type": "string",
+          "type": "any",
           "optional": true,
           "repeating": true
         }
