@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.38.0";
+var ADDIN_VERSION = "1.0.39.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -270,14 +270,7 @@ function info(url) {
 	}
 
 	function fetchCellValue(apiBase, sid, nameDatabase, nameCube, elementNames) {
-		var namePath = elementNames.join(",");
-		var q = new URLSearchParams({
-			sid: sid,
-			name_database: nameDatabase,
-			name_cube: nameCube,
-			name_path: namePath,
-		});
-		var url = apiBase + "/cell/value?" + q.toString();
+		var url = buildCellValueRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames);
 		return fetch(url, {
 			method: "GET",
 			mode: "cors",
@@ -559,8 +552,19 @@ function appendRequestUrlToMessage(message, url) {
 	return m + " — url=" + u;
 }
 
-function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
-	var namePath = elementNames.join(",");
+function buildCellValueRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames) {
+	var namePath = (elementNames || []).join(",");
+	var q = new URLSearchParams({
+		sid: sid,
+		name_database: nameDatabase,
+		name_cube: nameCube,
+		name_path: namePath,
+	});
+	return String(apiBase).replace(/\/$/, "") + "/cell/value?" + q.toString();
+}
+
+function buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
+	var namePath = (elementNames || []).join(",");
 	var valueAsString = stringifySetDataValue(value);
 	var sm =
 		splashMode === undefined || splashMode === null || splashMode === ""
@@ -577,8 +581,13 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		value: valueAsString,
 		splash: String(sm),
 	});
+	return String(apiBase).replace(/\/$/, "") + "/cell/replace?" + q.toString();
+}
+
+function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
-	var url = apiBase + "/cell/replace?" + q.toString();
+	var valueAsString = stringifySetDataValue(value);
+	var url = buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode);
 	return fetch(url, {
 		method: "GET",
 		mode: "cors",
@@ -620,18 +629,27 @@ function formatSetdataError(err, ctx) {
 		details.push("splashMode=" + String(ctx.splashMode));
 		details.push("value=" + ctx.valuePreview);
 	}
-	var out = "PALO.SETDATA: " + msg;
+	var urlRedacted = ctx && ctx.requestUrlRedacted ? String(ctx.requestUrlRedacted).trim() : "";
+	if (urlRedacted) {
+		var urlDup = msg.indexOf(" — url=");
+		if (urlDup !== -1) {
+			msg = msg.slice(0, urlDup).trim();
+		}
+	}
+	var out = "PALO.SETDATA:";
+	if (urlRedacted) {
+		out += " url=" + urlRedacted + " |";
+	}
+	out += " " + msg;
 	if (details.length) {
 		out += " — " + details.join(" ; ");
 	}
 	if (ctx && typeof ctx.splashMode === "number" && ctx.splashMode >= 2) {
-		out +=
-			" | Splash HTTP 2–5 : répartition consolidés (doc /cell/replace). Ancien complément Excel C++ : entiers 2=SET→HTTP 3, 3=ADD→HTTP 2.";
+		out += " | splash≥2 : modes consolidés (doc HTTP /cell/replace).";
 	}
-	out +=
-		" | API CSV …/cell/replace (pas la page HTML …/api/cell/replace). Si erreur avec splash=0 : droits, règle cube, type de cellule (mesure texte vs nombre).";
-	if (out.length > 2400) {
-		out = out.slice(0, 2400) + "...";
+	out += " | CSV /cell/replace (pas la doc HTML /api/…).";
+	if (out.length > 4000) {
+		out = out.slice(0, 4000) + "...";
 	}
 	return out;
 }
@@ -662,7 +680,18 @@ function formatSetdataError(err, ctx) {
 					throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 				}
 				return getCachedSession(cfg).then(function (sess) {
-					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts);
+					var urlDbg = buildCellValueRequestUrl(sess.apiBase, sess.sid, db, cubeName, parts);
+					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts).catch(function (e) {
+						var m = appendRequestUrlToMessage(
+							String(e && e.message ? e.message : e).replace(/\s+/g, " ").trim(),
+							urlDbg,
+						);
+						var uCut = m.indexOf(" — url=");
+						if (uCut !== -1) {
+							m = m.slice(0, uCut).trim();
+						}
+						return "PALO.DATAC: url=" + redactPaloSidInUrl(urlDbg) + " | " + m;
+					});
 				});
 			})
 			.catch(function (err) {
@@ -732,7 +761,22 @@ function setdata(value, splash, database, cube, element) {
 				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 			}
 			return getCachedSession(cfg).then(function (sess) {
-				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
+				var urlDbg = redactPaloSidInUrl(
+					buildCellReplaceRequestUrl(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode),
+				);
+				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode).catch(
+					function (e) {
+						return formatSetdataError(e, {
+							database: db,
+							cube: cubeName,
+							path: parts,
+							splashArg: splashArg,
+							splashMode: splashMode,
+							valuePreview: valuePreview,
+							requestUrlRedacted: urlDbg,
+						});
+					},
+				);
 			});
 		})
 		.catch(function (err) {
@@ -743,6 +787,7 @@ function setdata(value, splash, database, cube, element) {
 				splashArg: splashArg,
 				splashMode: splashMode,
 				valuePreview: valuePreview,
+				requestUrlRedacted: "",
 			});
 		});
 }
