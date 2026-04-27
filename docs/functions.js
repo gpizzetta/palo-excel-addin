@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.39.0";
+var ADDIN_VERSION = "1.0.40.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -252,15 +252,15 @@ function info(url) {
 				return line.length;
 			});
 		if (!lines.length) {
-			throw new Error("Réponse cell/value vide.");
+			throw new Error(shortResponseExcerpt(text) || "(vide)");
 		}
 		var line = lines[0];
 		if (line.charAt(0) === "<" || line.toLowerCase().indexOf("<!doctype") !== -1) {
-			throw new Error("Réponse cell/value : HTML au lieu du CSV Palo.");
+			throw new Error(shortResponseExcerpt(line));
 		}
 		var cells = line.indexOf(";") >= 0 ? line.split(";") : line.split(",");
 		if (cells.length < 3) {
-			throw new Error("Réponse cell/value illisible : " + line.slice(0, 160));
+			throw new Error(shortResponseExcerpt(line));
 		}
 		var type = parseInt(cells[0].trim(), 10);
 		var existsRaw = stripPaloCsvField(cells[1]);
@@ -281,7 +281,7 @@ function info(url) {
 				return res.text().then(function (text) {
 					try {
 						if (!res.ok) {
-							throw new Error("cell/value HTTP " + res.status + " — " + text.slice(0, 500));
+							throw new Error(shortResponseExcerpt(text) || "HTTP " + res.status);
 						}
 						var o = parseCellValueFirstLine(text);
 						if (o.type === 99 || isNaN(o.type)) {
@@ -299,12 +299,12 @@ function info(url) {
 						}
 						return String(o.rawVal);
 					} catch (inner) {
-						throw new Error(appendRequestUrlToMessage(inner.message || String(inner), url));
+						throw new Error(inner.message || String(inner));
 					}
 				});
 			})
 			.catch(function (err) {
-				return Promise.reject(new Error(appendRequestUrlToMessage(err.message || String(err), url)));
+				return Promise.reject(new Error(err.message || String(err)));
 			});
 	}
 
@@ -439,7 +439,7 @@ function looksLikePaloErrorDetail(s) {
 	);
 }
 
-function parsePaloStatus(text, operationLabel) {
+function parsePaloStatus(text) {
 	var raw = stripBom(text);
 	var lines = raw
 		.split(/\r?\n/)
@@ -453,7 +453,7 @@ function parsePaloStatus(text, operationLabel) {
 		return;
 	}
 	if (lines[0].charAt(0) === "<" || lines[0].toLowerCase().indexOf("<!doctype") !== -1) {
-		throw new Error(operationLabel + " : HTML renvoyé au lieu du CSV Palo.");
+		throw new Error(shortResponseExcerpt(lines[0]));
 	}
 	for (var li = 0; li < lines.length; li++) {
 		var line = lines[li];
@@ -475,36 +475,12 @@ function parsePaloStatus(text, operationLabel) {
 				continue;
 			}
 		}
-		var details = cells
-			.slice(1)
-			.map(function (c) {
-				return stripPaloCsvField(String(c || "").trim());
-			})
-			.filter(Boolean)
-			.join(" — ");
-		if (!details) {
-			details = "(pas de détail)";
-		}
-		throw new Error(
-			operationLabel +
-				" code " +
-				code +
-				": " +
-				details +
-				" [ligne" +
-				(li + 1) +
-				"=" +
-				line.slice(0, 260) +
-				"]",
-		);
+		var serverLine = line.length > 800 ? line.slice(0, 800) + "..." : line;
+		throw new Error(serverLine);
 	}
 	var low = raw.toLowerCase();
 	if (low.indexOf("erreur interne") !== -1 || low.indexOf("internal error") !== -1) {
-		throw new Error(
-			operationLabel +
-				" : réponse sans code d’erreur Palo standard mais contient « erreur interne » — extrait : " +
-				shortResponseExcerpt(raw),
-		);
+		throw new Error(shortResponseExcerpt(raw));
 	}
 }
 
@@ -537,19 +513,6 @@ function shortResponseExcerpt(text) {
 
 function redactPaloSidInUrl(url) {
 	return String(url || "").replace(/sid=[^&]*/gi, "sid=***");
-}
-
-/** Ajoute l’URL complète (sid masqué) au message d’erreur pour contrôle côté navigateur / curl. */
-function appendRequestUrlToMessage(message, url) {
-	var m = String(message == null ? "" : message).trim();
-	var u = redactPaloSidInUrl(url);
-	if (!u) {
-		return m;
-	}
-	if (m.indexOf(" — url=") !== -1) {
-		return m;
-	}
-	return m + " — url=" + u;
 }
 
 function buildCellValueRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames) {
@@ -598,60 +561,58 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 			return res.text().then(function (text) {
 				try {
 					if (!res.ok) {
-						throw new Error(
-							"cell/replace HTTP " + res.status + " — " + shortResponseExcerpt(text),
-						);
+						throw new Error(shortResponseExcerpt(text) || "HTTP " + res.status);
 					}
-					parsePaloStatus(text, "cell/replace");
+					parsePaloStatus(text);
 					return valueAsString;
 				} catch (inner) {
-					throw new Error(appendRequestUrlToMessage(inner.message || String(inner), url));
+					throw new Error(inner.message || String(inner));
 				}
 			});
 		})
 		.catch(function (err) {
-			return Promise.reject(new Error(appendRequestUrlToMessage(err.message || String(err), url)));
+			return Promise.reject(new Error(err.message || String(err)));
 		});
 }
 
-function formatSetdataError(err, ctx) {
-	var msg = err && err.message ? String(err.message) : String(err);
-	if (!msg || msg === "[object Object]") {
-		msg = "Erreur inconnue lors de l'ecriture dans le cube.";
+function normalizeOneLineText(s) {
+	return String(s == null ? "" : s).replace(/\s+/g, " ").trim();
+}
+
+function stripLegacyUrlSuffix(msg) {
+	var m = String(msg == null ? "" : msg);
+	var idx = m.indexOf(" — url=");
+	if (idx !== -1) {
+		return m.slice(0, idx).trim();
 	}
-	msg = msg.replace(/\s+/g, " ").trim();
-	var details = [];
-	if (ctx) {
-		details.push("db=" + (ctx.database || "(vide)"));
-		details.push("cube=" + (ctx.cube || "(vide)"));
-		details.push("path=[" + (ctx.path || []).join(" | ") + "]");
-		details.push("splashArg=" + (ctx.splashArg === undefined ? "(absent)" : String(ctx.splashArg)));
-		details.push("splashMode=" + String(ctx.splashMode));
-		details.push("value=" + ctx.valuePreview);
+	return m.trim();
+}
+
+/** Affichage cellule : uniquement l’URL (sid masqué) et le corps / ligne renvoyé par le serveur. */
+function formatUrlAndServerResponse(urlRedacted, serverText) {
+	var u = normalizeOneLineText(urlRedacted);
+	var t = normalizeOneLineText(stripLegacyUrlSuffix(serverText));
+	if (!u) {
+		return t || "(vide)";
 	}
-	var urlRedacted = ctx && ctx.requestUrlRedacted ? String(ctx.requestUrlRedacted).trim() : "";
-	if (urlRedacted) {
-		var urlDup = msg.indexOf(" — url=");
-		if (urlDup !== -1) {
-			msg = msg.slice(0, urlDup).trim();
-		}
+	if (!t) {
+		return "url=" + u + " | (vide)";
 	}
-	var out = "PALO.SETDATA:";
-	if (urlRedacted) {
-		out += " url=" + urlRedacted + " |";
-	}
-	out += " " + msg;
-	if (details.length) {
-		out += " — " + details.join(" ; ");
-	}
-	if (ctx && typeof ctx.splashMode === "number" && ctx.splashMode >= 2) {
-		out += " | splash≥2 : modes consolidés (doc HTTP /cell/replace).";
-	}
-	out += " | CSV /cell/replace (pas la doc HTML /api/…).";
+	var out = "url=" + u + " | " + t;
 	if (out.length > 4000) {
 		out = out.slice(0, 4000) + "...";
 	}
 	return out;
+}
+
+function formatSetdataError(err, requestUrlRedacted) {
+	var urlRedacted = requestUrlRedacted != null ? String(requestUrlRedacted).trim() : "";
+	var msg = err && err.message ? String(err.message) : String(err);
+	if (!msg || msg === "[object Object]") {
+		msg = "(vide)";
+	}
+	msg = normalizeOneLineText(stripLegacyUrlSuffix(msg));
+	return formatUrlAndServerResponse(urlRedacted, msg);
 }
 
 	/**
@@ -682,21 +643,14 @@ function formatSetdataError(err, ctx) {
 				return getCachedSession(cfg).then(function (sess) {
 					var urlDbg = buildCellValueRequestUrl(sess.apiBase, sess.sid, db, cubeName, parts);
 					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts).catch(function (e) {
-						var m = appendRequestUrlToMessage(
-							String(e && e.message ? e.message : e).replace(/\s+/g, " ").trim(),
-							urlDbg,
-						);
-						var uCut = m.indexOf(" — url=");
-						if (uCut !== -1) {
-							m = m.slice(0, uCut).trim();
-						}
-						return "PALO.DATAC: url=" + redactPaloSidInUrl(urlDbg) + " | " + m;
+						var m = e && e.message ? e.message : String(e);
+						return formatUrlAndServerResponse(redactPaloSidInUrl(urlDbg), m);
 					});
 				});
 			})
 			.catch(function (err) {
 				var msg = err && err.message ? err.message : String(err);
-				return "PALO.DATAC: " + String(msg).replace(/\s+/g, " ").trim();
+				return formatUrlAndServerResponse("", msg);
 			});
 	}
 
@@ -718,27 +672,13 @@ function setdata(value, splash, database, cube, element) {
 	try {
 		splashMode = normalizeSplashMode(splash);
 	} catch (e) {
-		return formatSetdataError(e, {
-			database: db,
-			cube: cubeName,
-			path: parts,
-			splashArg: splashArg,
-			splashMode: "(erreur)",
-			valuePreview: "(voir splash)",
-		});
+		return formatSetdataError(e, "");
 	}
 	var valuePreview;
 	try {
 		valuePreview = stringifySetDataValue(value);
 	} catch (e2) {
-		return formatSetdataError(e2, {
-			database: db,
-			cube: cubeName,
-			path: parts,
-			splashArg: splashArg,
-			splashMode: splashMode,
-			valuePreview: "(valeur invalide)",
-		});
+		return formatSetdataError(e2, "");
 	}
 	if (valuePreview.length > 80) {
 		valuePreview = valuePreview.slice(0, 80) + "...";
@@ -766,29 +706,13 @@ function setdata(value, splash, database, cube, element) {
 				);
 				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode).catch(
 					function (e) {
-						return formatSetdataError(e, {
-							database: db,
-							cube: cubeName,
-							path: parts,
-							splashArg: splashArg,
-							splashMode: splashMode,
-							valuePreview: valuePreview,
-							requestUrlRedacted: urlDbg,
-						});
+						return formatSetdataError(e, urlDbg);
 					},
 				);
 			});
 		})
 		.catch(function (err) {
-			return formatSetdataError(err, {
-				database: db,
-				cube: cubeName,
-				path: parts,
-				splashArg: splashArg,
-				splashMode: splashMode,
-				valuePreview: valuePreview,
-				requestUrlRedacted: "",
-			});
+			return formatSetdataError(err, "");
 		});
 }
 
