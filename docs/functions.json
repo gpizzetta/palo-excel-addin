@@ -68,7 +68,7 @@
     {
       "id": "SETDATA",
       "name": "SETDATA",
-      "description": "Écrit une valeur dans une cellule cube via /cell/replace (équivalent PALO.SETDATA). Splash accepte FALSE/TRUE, 0..5, default/add/set.",
+      "description": "Écrit une valeur via l’API CSV /cell/replace (pas la page HTML /api/cell/replace). Splash: 0 aucun, 1 défaut Jedox, 2–5 modes base (consolidés). FALSE/TRUE, 0..5, default/add/set.",
       "parameters": [
         {
           "name": "value",

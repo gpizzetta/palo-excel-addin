@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.34.0";
+var ADDIN_VERSION = "1.0.35.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -424,21 +424,23 @@ function parsePaloStatus(text, operationLabel) {
 		throw new Error(operationLabel + " : HTML renvoyé au lieu du CSV Palo.");
 	}
 	var cells = first.indexOf(";") >= 0 ? first.split(";") : first.split(",");
-	var c0 = cells.length ? cells[0].trim() : "";
+	var c0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
 	if (/^[0-9]{1,6}$/.test(c0)) {
 		var code = parseInt(c0, 10);
 		if (code > 0) {
 			var details = cells
 				.slice(1)
 				.map(function (c) {
-					return String(c || "").trim();
+					return stripPaloCsvField(String(c || "").trim());
 				})
 				.filter(Boolean)
-				.join("; ");
+				.join(" — ");
 			if (!details) {
-				details = "code " + code + " (réponse: " + first.slice(0, 180) + ")";
+				details = "(pas de détail)";
 			}
-			throw new Error(operationLabel + " a échoué: " + details);
+			throw new Error(
+				operationLabel + " code " + code + ": " + details + " [ligne1=" + first.slice(0, 240) + "]",
+			);
 		}
 	}
 }
@@ -487,7 +489,10 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		name_path: namePath,
 		value: valueAsString,
 		splash: String(sm),
+		/** Doc Jedox : attendre la fin des push rules / partie async (défaut souvent 0). */
+		wait: "1",
 	});
+	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
 	var url = apiBase + "/cell/replace?" + q.toString();
 	return fetch(url, {
 		method: "GET",
@@ -531,8 +536,13 @@ function formatSetdataError(err, ctx) {
 	if (details.length) {
 		out += " — " + details.join(" ; ");
 	}
-	if (out.length > 550) {
-		out = out.slice(0, 550) + "...";
+	if (ctx && typeof ctx.splashMode === "number" && ctx.splashMode >= 2) {
+		out +=
+			" | Splash 2–5 = modes Jedox sur chemins consolidés (répartition vers la base). Pour une intersection feuille, essayez splash 0 ou 1.";
+	}
+	out += " | API CSV: …/cell/replace (la page /api/cell/replace est la doc HTML, pas l’URL d’appel).";
+	if (out.length > 900) {
+		out = out.slice(0, 900) + "...";
 	}
 	return out;
 }
