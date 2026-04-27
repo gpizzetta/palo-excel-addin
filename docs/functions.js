@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.33.0";
+var ADDIN_VERSION = "1.0.34.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -231,14 +231,15 @@ function info(url) {
 		if (Array.isArray(pathElements)) {
 			var out = [];
 			for (var i = 0; i < pathElements.length; i++) {
-				var v = pathElements[i];
+				var v = unwrapExcelScalar(pathElements[i]);
 				if (v != null && String(v).trim() !== "") {
 					out.push(String(v).trim());
 				}
 			}
 			return out;
 		}
-		return [String(pathElements).trim()].filter(Boolean);
+		var one = unwrapExcelScalar(pathElements);
+		return [String(one).trim()].filter(Boolean);
 	}
 
 	function parseCellValueFirstLine(text) {
@@ -305,6 +306,42 @@ function info(url) {
 			});
 		});
 	}
+
+/**
+ * Excel peut passer une référence de cellule comme scalaire imbriqué [[3]] ou matrice Office.
+ * On extrait la valeur utile avant splash / valeur / noms.
+ */
+function unwrapExcelScalar(value) {
+	if (value === undefined || value === null) {
+		return value;
+	}
+	var cur = value;
+	for (var guard = 0; guard < 10; guard++) {
+		if (Array.isArray(cur)) {
+			if (!cur.length) {
+				return undefined;
+			}
+			cur = cur[0];
+			continue;
+		}
+		if (cur && typeof cur === "object") {
+			if (Array.isArray(cur.values) && cur.values.length) {
+				var row0 = cur.values[0];
+				cur = Array.isArray(row0) && row0.length ? row0[0] : row0;
+				continue;
+			}
+			if (typeof cur.valueOf === "function") {
+				var v = cur.valueOf();
+				if (v !== cur) {
+					cur = v;
+					continue;
+				}
+			}
+		}
+		break;
+	}
+	return cur;
+}
 
 function parsePaloBooleanLike(value) {
 	if (typeof value === "boolean") {
@@ -436,13 +473,20 @@ function shortResponseExcerpt(text) {
 function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	var namePath = elementNames.join(",");
 	var valueAsString = stringifySetDataValue(value);
+	var sm =
+		splashMode === undefined || splashMode === null || splashMode === ""
+			? 0
+			: Math.round(Number(splashMode));
+	if (isNaN(sm) || sm < 0 || sm > 5) {
+		sm = 0;
+	}
 	var q = new URLSearchParams({
 		sid: sid,
 		name_database: nameDatabase,
 		name_cube: nameCube,
 		name_path: namePath,
 		value: valueAsString,
-		splash: String(splashMode),
+		splash: String(sm),
 	});
 	var url = apiBase + "/cell/replace?" + q.toString();
 	return fetch(url, {
@@ -479,7 +523,8 @@ function formatSetdataError(err, ctx) {
 		details.push("db=" + (ctx.database || "(vide)"));
 		details.push("cube=" + (ctx.cube || "(vide)"));
 		details.push("path=[" + (ctx.path || []).join(" | ") + "]");
-		details.push("splash=" + String(ctx.splashMode));
+		details.push("splashArg=" + (ctx.splashArg === undefined ? "(absent)" : String(ctx.splashArg)));
+		details.push("splashMode=" + String(ctx.splashMode));
 		details.push("value=" + ctx.valuePreview);
 	}
 	var out = "PALO.SETDATA: " + msg;
@@ -528,11 +573,41 @@ function formatSetdataError(err, ctx) {
  * Signature: value, splash, database, cube, element1, [element2], ...
  */
 function setdata(value, splash, database, cube, element) {
+	value = unwrapExcelScalar(value);
+	splash = unwrapExcelScalar(splash);
+	database = unwrapExcelScalar(database);
+	cube = unwrapExcelScalar(cube);
+
 	var db = database != null ? String(database).trim() : "";
 	var cubeName = cube != null ? String(cube).trim() : "";
 	var parts = normalizePathElements(element);
-	var splashMode = null;
-	var valuePreview = stringifySetDataValue(value);
+	var splashArg = splash;
+	var splashMode;
+	try {
+		splashMode = normalizeSplashMode(splash);
+	} catch (e) {
+		return formatSetdataError(e, {
+			database: db,
+			cube: cubeName,
+			path: parts,
+			splashArg: splashArg,
+			splashMode: "(erreur)",
+			valuePreview: "(voir splash)",
+		});
+	}
+	var valuePreview;
+	try {
+		valuePreview = stringifySetDataValue(value);
+	} catch (e2) {
+		return formatSetdataError(e2, {
+			database: db,
+			cube: cubeName,
+			path: parts,
+			splashArg: splashArg,
+			splashMode: splashMode,
+			valuePreview: "(valeur invalide)",
+		});
+	}
 	if (valuePreview.length > 80) {
 		valuePreview = valuePreview.slice(0, 80) + "...";
 	}
@@ -553,7 +628,6 @@ function setdata(value, splash, database, cube, element) {
 			if (!parts.length) {
 				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 			}
-			splashMode = normalizeSplashMode(splash);
 			return getCachedSession(cfg).then(function (sess) {
 				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
 			});
@@ -563,6 +637,7 @@ function setdata(value, splash, database, cube, element) {
 				database: db,
 				cube: cubeName,
 				path: parts,
+				splashArg: splashArg,
 				splashMode: splashMode,
 				valuePreview: valuePreview,
 			});
