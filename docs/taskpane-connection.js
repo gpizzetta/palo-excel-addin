@@ -22,8 +22,17 @@
 		var passEl = document.getElementById("password");
 		try {
 			if (s.get(KEYS.url)) urlEl.value = s.get(KEYS.url);
+			else if (typeof localStorage !== "undefined" && localStorage.getItem(KEYS.url)) {
+				urlEl.value = localStorage.getItem(KEYS.url);
+			}
 			if (s.get(KEYS.username)) userEl.value = s.get(KEYS.username);
+			else if (typeof localStorage !== "undefined" && localStorage.getItem(KEYS.username)) {
+				userEl.value = localStorage.getItem(KEYS.username);
+			}
 			if (s.get(KEYS.password)) passEl.value = s.get(KEYS.password);
+			else if (typeof localStorage !== "undefined" && localStorage.getItem(KEYS.password)) {
+				passEl.value = localStorage.getItem(KEYS.password);
+			}
 		} catch (e) {
 			setStatus("Lecture des paramètres : " + (e.message || e), "err");
 		}
@@ -53,7 +62,17 @@
 		s.saveAsync(function (asyncResult) {
 			btn.disabled = false;
 			if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-				setStatus("Connexion enregistrée pour ce classeur.", "ok");
+				try {
+					if (typeof localStorage !== "undefined") {
+						localStorage.setItem(KEYS.url, url);
+						localStorage.setItem(KEYS.username, username);
+						localStorage.setItem(KEYS.password, password);
+					}
+				} catch (lsErr) {}
+				setStatus(
+					"Connexion enregistrée pour ce classeur (copie locale pour les formules PALO.DATAC / SETDATA).",
+					"ok",
+				);
 				try {
 					if (typeof s.refreshAsync === "function") {
 						s.refreshAsync(function () {});

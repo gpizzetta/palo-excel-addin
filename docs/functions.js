@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.43.0";
+var ADDIN_VERSION = "1.0.44.0";
 
 /**
  * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
@@ -90,38 +90,71 @@ function info(url) {
 				return;
 			}
 			Office.onReady(function () {
-				if (!Office.context || !Office.context.document || !Office.context.document.settings) {
-					reject(new Error("Paramètres du classeur indisponibles (Office.context.document.settings)."));
-					return;
-				}
+				/** Sans runtime partagé, les Custom Functions n’ont souvent pas document.settings → ne pas rejeter ici. */
 				resolve();
 			});
 		});
 	}
 
+	function readSettingsFromLocalStorage() {
+		try {
+			if (typeof localStorage === "undefined") {
+				return { url: "", username: "", password: "" };
+			}
+			return {
+				url: (localStorage.getItem(KEYS.url) || "").trim(),
+				username: (localStorage.getItem(KEYS.username) || "").trim(),
+				password: localStorage.getItem(KEYS.password) || "",
+			};
+		} catch (e) {
+			return { url: "", username: "", password: "" };
+		}
+	}
+
+	function mergePaloConnectionFromLocal(cfg) {
+		var loc = readSettingsFromLocalStorage();
+		var docUrl = cfg.url != null ? String(cfg.url).trim() : "";
+		var docUser = cfg.username != null ? String(cfg.username).trim() : "";
+		var docPass = cfg.password != null ? String(cfg.password) : "";
+		return {
+			url: docUrl || loc.url || "",
+			username: docUser || loc.username || "",
+			password: docPass || loc.password || "",
+		};
+	}
+
 	function loadSettingsAsync() {
 		return officeReady().then(function () {
-			return new Promise(function (resolve, reject) {
-				var s = Office.context.document.settings;
-				function read() {
+			return new Promise(function (resolve) {
+				var s = Office.context && Office.context.document && Office.context.document.settings;
+				function readFromDocument() {
 					resolve({
 						url: (s.get(KEYS.url) || "").trim(),
 						username: (s.get(KEYS.username) || "").trim(),
 						password: s.get(KEYS.password) || "",
 					});
 				}
+				if (!s) {
+					resolve(readSettingsFromLocalStorage());
+					return;
+				}
 				if (typeof s.refreshAsync === "function") {
 					s.refreshAsync(function (ar) {
 						if (ar.status !== Office.AsyncResultStatus.Succeeded) {
-							var em = ar.error && ar.error.message;
-							reject(new Error(em || "refreshAsync des paramètres a échoué."));
+							resolve(readSettingsFromLocalStorage());
 							return;
 						}
-						read();
+						readFromDocument();
 					});
 				} else {
-					read();
+					try {
+						readFromDocument();
+					} catch (e) {
+						resolve(readSettingsFromLocalStorage());
+					}
 				}
+			}).then(function (cfg) {
+				return mergePaloConnectionFromLocal(cfg);
 			});
 		});
 	}
