@@ -574,6 +574,7 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		return Promise.resolve(formatUrlAndServerResponse("", se.message || String(se)));
 	}
 	var url = buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode);
+	console.log(url);
 	var urlRed = redactPaloSidInUrl(url);
 	/** Toujours résoudre : Excel masque souvent les reject par « Une erreur interne s’est produite. » */
 	return fetch(url, {
@@ -584,6 +585,7 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	})
 		.then(function (res) {
 			return res.text().then(function (text) {
+				console.log(text);
 				try {
 					if (!res.ok) {
 						return formatUrlAndServerResponse(
