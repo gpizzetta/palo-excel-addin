@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.37.0";
+var ADDIN_VERSION = "1.0.38.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -283,28 +283,36 @@ function info(url) {
 			mode: "cors",
 			cache: "no-store",
 			credentials: "omit",
-		}).then(function (res) {
-			return res.text().then(function (text) {
-				if (!res.ok) {
-					throw new Error("cell/value HTTP " + res.status + " — " + text.slice(0, 500));
-				}
-				var o = parseCellValueFirstLine(text);
-				if (o.type === 99 || isNaN(o.type)) {
-					return o.rawVal ? String(o.rawVal) : "#ERROR";
-				}
-				if (!o.exists) {
-					return "";
-				}
-				if (o.type === 1) {
-					var n = parseFloat(String(o.rawVal).replace(",", "."));
-					return isNaN(n) ? String(o.rawVal) : String(n);
-				}
-				if (o.type === 2) {
-					return String(o.rawVal);
-				}
-				return String(o.rawVal);
+		})
+			.then(function (res) {
+				return res.text().then(function (text) {
+					try {
+						if (!res.ok) {
+							throw new Error("cell/value HTTP " + res.status + " — " + text.slice(0, 500));
+						}
+						var o = parseCellValueFirstLine(text);
+						if (o.type === 99 || isNaN(o.type)) {
+							return o.rawVal ? String(o.rawVal) : "#ERROR";
+						}
+						if (!o.exists) {
+							return "";
+						}
+						if (o.type === 1) {
+							var n = parseFloat(String(o.rawVal).replace(",", "."));
+							return isNaN(n) ? String(o.rawVal) : String(n);
+						}
+						if (o.type === 2) {
+							return String(o.rawVal);
+						}
+						return String(o.rawVal);
+					} catch (inner) {
+						throw new Error(appendRequestUrlToMessage(inner.message || String(inner), url));
+					}
+				});
+			})
+			.catch(function (err) {
+				return Promise.reject(new Error(appendRequestUrlToMessage(err.message || String(err), url)));
 			});
-		});
 	}
 
 /**
@@ -534,6 +542,23 @@ function shortResponseExcerpt(text) {
 	return t;
 }
 
+function redactPaloSidInUrl(url) {
+	return String(url || "").replace(/sid=[^&]*/gi, "sid=***");
+}
+
+/** Ajoute l’URL complète (sid masqué) au message d’erreur pour contrôle côté navigateur / curl. */
+function appendRequestUrlToMessage(message, url) {
+	var m = String(message == null ? "" : message).trim();
+	var u = redactPaloSidInUrl(url);
+	if (!u) {
+		return m;
+	}
+	if (m.indexOf(" — url=") !== -1) {
+		return m;
+	}
+	return m + " — url=" + u;
+}
+
 function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	var namePath = elementNames.join(",");
 	var valueAsString = stringifySetDataValue(value);
@@ -559,22 +584,25 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		mode: "cors",
 		cache: "no-store",
 		credentials: "omit",
-	}).then(function (res) {
-		return res.text().then(function (text) {
-			if (!res.ok) {
-				throw new Error(
-					"cell/replace HTTP " +
-						res.status +
-						" — " +
-						shortResponseExcerpt(text) +
-						" — url=" +
-						url.replace(/sid=[^&]*/i, "sid=***"),
-				);
-			}
-			parsePaloStatus(text, "cell/replace");
-			return valueAsString;
+	})
+		.then(function (res) {
+			return res.text().then(function (text) {
+				try {
+					if (!res.ok) {
+						throw new Error(
+							"cell/replace HTTP " + res.status + " — " + shortResponseExcerpt(text),
+						);
+					}
+					parsePaloStatus(text, "cell/replace");
+					return valueAsString;
+				} catch (inner) {
+					throw new Error(appendRequestUrlToMessage(inner.message || String(inner), url));
+				}
+			});
+		})
+		.catch(function (err) {
+			return Promise.reject(new Error(appendRequestUrlToMessage(err.message || String(err), url)));
 		});
-	});
 }
 
 function formatSetdataError(err, ctx) {
@@ -602,8 +630,8 @@ function formatSetdataError(err, ctx) {
 	}
 	out +=
 		" | API CSV …/cell/replace (pas la page HTML …/api/cell/replace). Si erreur avec splash=0 : droits, règle cube, type de cellule (mesure texte vs nombre).";
-	if (out.length > 900) {
-		out = out.slice(0, 900) + "...";
+	if (out.length > 2400) {
+		out = out.slice(0, 2400) + "...";
 	}
 	return out;
 }
@@ -636,6 +664,10 @@ function formatSetdataError(err, ctx) {
 				return getCachedSession(cfg).then(function (sess) {
 					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts);
 				});
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				return "PALO.DATAC: " + String(msg).replace(/\s+/g, " ").trim();
 			});
 	}
 
