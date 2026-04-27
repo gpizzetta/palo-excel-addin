@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.40.0";
+var ADDIN_VERSION = "1.0.41.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -271,6 +271,8 @@ function info(url) {
 
 	function fetchCellValue(apiBase, sid, nameDatabase, nameCube, elementNames) {
 		var url = buildCellValueRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames);
+		var urlRed = redactPaloSidInUrl(url);
+		/** Toujours résoudre : Excel remplace souvent tout reject par « Une erreur interne s’est produite. » */
 		return fetch(url, {
 			method: "GET",
 			mode: "cors",
@@ -281,7 +283,10 @@ function info(url) {
 				return res.text().then(function (text) {
 					try {
 						if (!res.ok) {
-							throw new Error(shortResponseExcerpt(text) || "HTTP " + res.status);
+							return formatUrlAndServerResponse(
+								urlRed,
+								excerptCellApiBody(text) || "HTTP " + res.status,
+							);
 						}
 						var o = parseCellValueFirstLine(text);
 						if (o.type === 99 || isNaN(o.type)) {
@@ -299,12 +304,12 @@ function info(url) {
 						}
 						return String(o.rawVal);
 					} catch (inner) {
-						throw new Error(inner.message || String(inner));
+						return formatUrlAndServerResponse(urlRed, inner.message || String(inner));
 					}
 				});
 			})
 			.catch(function (err) {
-				return Promise.reject(new Error(err.message || String(err)));
+				return formatUrlAndServerResponse(urlRed, err.message || String(err));
 			});
 	}
 
@@ -511,6 +516,19 @@ function shortResponseExcerpt(text) {
 	return t;
 }
 
+/** Corps de réponse HTTP pour affichage d’erreur cellule (plus long que shortResponseExcerpt). */
+function excerptCellApiBody(text) {
+	var t = stripBom(String(text || "")).replace(/\s+/g, " ").trim();
+	if (!t) {
+		return "(vide)";
+	}
+	var max = 1600;
+	if (t.length > max) {
+		return t.slice(0, max) + "...";
+	}
+	return t;
+}
+
 function redactPaloSidInUrl(url) {
 	return String(url || "").replace(/sid=[^&]*/gi, "sid=***");
 }
@@ -549,8 +567,15 @@ function buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elemen
 
 function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
-	var valueAsString = stringifySetDataValue(value);
+	var valueAsString;
+	try {
+		valueAsString = stringifySetDataValue(value);
+	} catch (se) {
+		return Promise.resolve(formatUrlAndServerResponse("", se.message || String(se)));
+	}
 	var url = buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode);
+	var urlRed = redactPaloSidInUrl(url);
+	/** Toujours résoudre : Excel masque souvent les reject par « Une erreur interne s’est produite. » */
 	return fetch(url, {
 		method: "GET",
 		mode: "cors",
@@ -561,17 +586,20 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 			return res.text().then(function (text) {
 				try {
 					if (!res.ok) {
-						throw new Error(shortResponseExcerpt(text) || "HTTP " + res.status);
+						return formatUrlAndServerResponse(
+							urlRed,
+							excerptCellApiBody(text) || "HTTP " + res.status,
+						);
 					}
 					parsePaloStatus(text);
 					return valueAsString;
 				} catch (inner) {
-					throw new Error(inner.message || String(inner));
+					return formatUrlAndServerResponse(urlRed, inner.message || String(inner));
 				}
 			});
 		})
 		.catch(function (err) {
-			return Promise.reject(new Error(err.message || String(err)));
+			return formatUrlAndServerResponse(urlRed, err.message || String(err));
 		});
 }
 
@@ -641,11 +669,7 @@ function formatSetdataError(err, requestUrlRedacted) {
 					throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 				}
 				return getCachedSession(cfg).then(function (sess) {
-					var urlDbg = buildCellValueRequestUrl(sess.apiBase, sess.sid, db, cubeName, parts);
-					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts).catch(function (e) {
-						var m = e && e.message ? e.message : String(e);
-						return formatUrlAndServerResponse(redactPaloSidInUrl(urlDbg), m);
-					});
+					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts);
 				});
 			})
 			.catch(function (err) {
@@ -701,14 +725,7 @@ function setdata(value, splash, database, cube, element) {
 				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 			}
 			return getCachedSession(cfg).then(function (sess) {
-				var urlDbg = redactPaloSidInUrl(
-					buildCellReplaceRequestUrl(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode),
-				);
-				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode).catch(
-					function (e) {
-						return formatSetdataError(e, urlDbg);
-					},
-				);
+				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
 			});
 		})
 		.catch(function (err) {
