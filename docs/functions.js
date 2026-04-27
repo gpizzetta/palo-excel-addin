@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.42.0";
+var ADDIN_VERSION = "1.0.43.0";
 
 /**
  * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
@@ -21,6 +21,10 @@ var sessionCache = {
 	at: 0,
 };
 var SESSION_TTL_MS = 4 * 60 * 1000;
+
+/** Dernière URL d’appel (sid masqué) pour le message si Excel masque le rejet réel. */
+var lastPaloCellValueUrlRedacted = "";
+var lastPaloReplaceCellUrlRedacted = "";
 
 function hello() {
 	return "hello world";
@@ -279,6 +283,7 @@ function info(url) {
 	function fetchCellValue(apiBase, sid, nameDatabase, nameCube, elementNames) {
 		var url = buildCellValueRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames);
 		var urlRed = redactPaloSidInUrl(url);
+		lastPaloCellValueUrlRedacted = urlRed;
 		/** Toujours résoudre : Excel remplace souvent tout reject par « Une erreur interne s’est produite. » */
 		return fetch(url, {
 			method: "GET",
@@ -587,6 +592,7 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	}
 	var url = buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode);
 	var urlRed = redactPaloSidInUrl(url);
+	lastPaloReplaceCellUrlRedacted = urlRed;
 	/** Toujours résoudre : Excel masque souvent les reject par « Une erreur interne s’est produite. » */
 	return fetch(url, {
 		method: "GET",
@@ -642,8 +648,8 @@ function sanitizeCfCellText(s) {
 	t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
 	t = t.replace(/\uFEFF/g, "");
 	t = t.replace(/"/g, "'");
-	if (t.length > 8000) {
-		t = t.slice(0, 8000) + "...";
+	if (t.length > 3500) {
+		t = t.slice(0, 3500) + "...";
 	}
 	return t.replace(/\s+/g, " ").trim();
 }
@@ -692,30 +698,44 @@ function formatSetdataError(err, requestUrlRedacted) {
 		var db = database != null ? String(database).trim() : "";
 		var cubeName = cube != null ? String(cube).trim() : "";
 		var parts = normalizePathElements(element);
+		lastPaloCellValueUrlRedacted = "";
 		return loadSettingsAsync()
-			.then(function (cfg) {
+			.catch(function (e) {
+				return formatDatacCellError("", e.message || String(e));
+			})
+			.then(function (cfgOrStr) {
+				if (typeof cfgOrStr === "string") {
+					return cfgOrStr;
+				}
+				var cfg = cfgOrStr;
 				if (!cfg.url) {
-					throw new Error("Configurez l’URL dans le volet Connexion (Palo).");
+					return formatDatacCellError("", "Configurez l’URL dans le volet Connexion (Palo).");
 				}
 				if (!cfg.username) {
-					throw new Error("Utilisateur de connexion manquant (volet Connexion).");
+					return formatDatacCellError("", "Utilisateur de connexion manquant (volet Connexion).");
 				}
 				if (!db) {
-					throw new Error("Nom de base manquant.");
+					return formatDatacCellError("", "Nom de base manquant.");
 				}
 				if (!cubeName) {
-					throw new Error("Nom de cube manquant.");
+					return formatDatacCellError("", "Nom de cube manquant.");
 				}
 				if (!parts.length) {
-					throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
+					return formatDatacCellError("", "Indiquez au moins un nom d’élément (un par dimension du cube).");
 				}
-				return getCachedSession(cfg).then(function (sess) {
-					return fetchCellValue(sess.apiBase, sess.sid, db, cubeName, parts);
-				});
+				return getCachedSession(cfg)
+					.catch(function (e2) {
+						return formatDatacCellError("", e2.message || String(e2));
+					})
+					.then(function (sessOrStr) {
+						if (typeof sessOrStr === "string") {
+							return sessOrStr;
+						}
+						return fetchCellValue(sessOrStr.apiBase, sessOrStr.sid, db, cubeName, parts);
+					});
 			})
 			.catch(function (err) {
-				var msg = err && err.message ? err.message : String(err);
-				return formatDatacCellError("", msg);
+				return formatDatacCellError(lastPaloCellValueUrlRedacted, err.message || String(err));
 			});
 	}
 
@@ -748,29 +768,44 @@ function setdata(value, splash, database, cube, element) {
 	if (valuePreview.length > 80) {
 		valuePreview = valuePreview.slice(0, 80) + "...";
 	}
+	lastPaloReplaceCellUrlRedacted = "";
 	return loadSettingsAsync()
-		.then(function (cfg) {
+		.catch(function (e) {
+			return formatSetdataCellError("", e.message || String(e));
+		})
+		.then(function (cfgOrStr) {
+			if (typeof cfgOrStr === "string") {
+				return cfgOrStr;
+			}
+			var cfg = cfgOrStr;
 			if (!cfg.url) {
-				throw new Error("Configurez l’URL dans le volet Connexion (Palo).");
+				return formatSetdataCellError("", "Configurez l’URL dans le volet Connexion (Palo).");
 			}
 			if (!cfg.username) {
-				throw new Error("Utilisateur de connexion manquant (volet Connexion).");
+				return formatSetdataCellError("", "Utilisateur de connexion manquant (volet Connexion).");
 			}
 			if (!db) {
-				throw new Error("Nom de base manquant.");
+				return formatSetdataCellError("", "Nom de base manquant.");
 			}
 			if (!cubeName) {
-				throw new Error("Nom de cube manquant.");
+				return formatSetdataCellError("", "Nom de cube manquant.");
 			}
 			if (!parts.length) {
-				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
+				return formatSetdataCellError("", "Indiquez au moins un nom d’élément (un par dimension du cube).");
 			}
-			return getCachedSession(cfg).then(function (sess) {
-				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
-			});
+			return getCachedSession(cfg)
+				.catch(function (e2) {
+					return formatSetdataCellError("", e2.message || String(e2));
+				})
+				.then(function (sessOrStr) {
+					if (typeof sessOrStr === "string") {
+						return sessOrStr;
+					}
+					return replaceCellValue(sessOrStr.apiBase, sessOrStr.sid, db, cubeName, parts, value, splashMode);
+				});
 		})
 		.catch(function (err) {
-			return formatSetdataError(err, "");
+			return formatSetdataError(err, lastPaloReplaceCellUrlRedacted);
 		});
 }
 
