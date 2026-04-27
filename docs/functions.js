@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.35.0";
+var ADDIN_VERSION = "1.0.36.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -363,6 +363,14 @@ function parsePaloBooleanLike(value) {
 	return null;
 }
 
+/**
+ * Entier splash pour l’URL HTTP /cell/replace (doc Jedox OLAP : 0..5).
+ * Réf. C++ Excel : GenericCell::getSplashMode() (PaloSpreadsheetFuncs) pour un nombre
+ * n’accepte que 0..3 : 0 none, 1 default, 2 = MODE_SPLASH_SET, 3 = MODE_SPLASH_ADD.
+ * Sur le fil HTTP, « set base / add base » sont 3 et 2 (ordre inverse des libellés C++).
+ * Ici les littéraux numériques suivent la doc HTTP ; pour les libellés texte, utiliser
+ * add_base / set_base (voir chaînes ci-dessous).
+ */
 function normalizeSplashMode(splash) {
 	if (splash === undefined || splash === null || splash === "") {
 		return 0;
@@ -373,7 +381,7 @@ function normalizeSplashMode(splash) {
 		}
 		var n = Math.round(splash);
 		if (n < 0 || n > 5) {
-			throw new Error("Paramètre splash hors plage (0..5).");
+			throw new Error("Paramètre splash hors plage (0..5, doc HTTP /cell/replace).");
 		}
 		return n;
 	}
@@ -404,7 +412,9 @@ function normalizeSplashMode(splash) {
 		}
 		return parsed;
 	}
-	throw new Error("Paramètre splash invalide (attendu: booléen, 0..5, default/add/set).");
+	throw new Error(
+		"Paramètre splash invalide (booléen, 0..5 selon doc HTTP, ou mots default/add_base/set_base…).",
+	);
 }
 
 function parsePaloStatus(text, operationLabel) {
@@ -419,13 +429,16 @@ function parsePaloStatus(text, operationLabel) {
 	if (!lines.length) {
 		return;
 	}
-	var first = lines[0];
-	if (first.charAt(0) === "<" || first.toLowerCase().indexOf("<!doctype") !== -1) {
+	if (lines[0].charAt(0) === "<" || lines[0].toLowerCase().indexOf("<!doctype") !== -1) {
 		throw new Error(operationLabel + " : HTML renvoyé au lieu du CSV Palo.");
 	}
-	var cells = first.indexOf(";") >= 0 ? first.split(";") : first.split(",");
-	var c0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
-	if (/^[0-9]{1,6}$/.test(c0)) {
+	for (var li = 0; li < lines.length; li++) {
+		var line = lines[li];
+		var cells = line.indexOf(";") >= 0 ? line.split(";") : line.split(",");
+		var c0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
+		if (!/^[0-9]{1,10}$/.test(c0)) {
+			continue;
+		}
 		var code = parseInt(c0, 10);
 		if (code > 0) {
 			var details = cells
@@ -439,7 +452,16 @@ function parsePaloStatus(text, operationLabel) {
 				details = "(pas de détail)";
 			}
 			throw new Error(
-				operationLabel + " code " + code + ": " + details + " [ligne1=" + first.slice(0, 240) + "]",
+				operationLabel +
+					" code " +
+					code +
+					": " +
+					details +
+					" [ligne" +
+					(li + 1) +
+					"=" +
+					line.slice(0, 260) +
+					"]",
 			);
 		}
 	}
@@ -488,10 +510,11 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		name_cube: nameCube,
 		name_path: namePath,
 		value: valueAsString,
-		splash: String(sm),
-		/** Doc Jedox : attendre la fin des push rules / partie async (défaut souvent 0). */
-		wait: "1",
+		mode: "0",
 	});
+	if (sm !== 0) {
+		q.set("splash", String(sm));
+	}
 	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
 	var url = apiBase + "/cell/replace?" + q.toString();
 	return fetch(url, {
@@ -538,9 +561,10 @@ function formatSetdataError(err, ctx) {
 	}
 	if (ctx && typeof ctx.splashMode === "number" && ctx.splashMode >= 2) {
 		out +=
-			" | Splash 2–5 = modes Jedox sur chemins consolidés (répartition vers la base). Pour une intersection feuille, essayez splash 0 ou 1.";
+			" | Splash HTTP 2–5 : répartition consolidés (doc /cell/replace). Ancien complément Excel C++ : entiers 2=SET→HTTP 3, 3=ADD→HTTP 2.";
 	}
-	out += " | API CSV: …/cell/replace (la page /api/cell/replace est la doc HTML, pas l’URL d’appel).";
+	out +=
+		" | API CSV …/cell/replace (pas la page HTML …/api/cell/replace). Si erreur avec splash=0 : droits, règle cube, type de cellule (mesure texte vs nombre).";
 	if (out.length > 900) {
 		out = out.slice(0, 900) + "...";
 	}
