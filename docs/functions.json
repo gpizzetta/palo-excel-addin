@@ -61,7 +61,7 @@
         }
       ],
       "result": {
-        "type": "string",
+        "type": "any",
         "dimensionality": "scalar"
       }
     },
@@ -99,7 +99,7 @@
         }
       ],
       "result": {
-        "type": "string",
+        "type": "any",
         "dimensionality": "scalar"
       }
     }

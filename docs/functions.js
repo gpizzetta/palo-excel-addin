@@ -1,5 +1,12 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.41.1";
+var ADDIN_VERSION = "1.0.42.0";
+
+/**
+ * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
+ * (chargement via functions.html), pas dans le volet Connexion. La console F12 du navigateur
+ * sur le classeur ne montre en général pas ces logs. Voir la doc Microsoft « Debug Excel custom functions »
+ * (attacher les outils au WebView2 / runtime des fonctions, ou basculer en runtime partagé).
+ */
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -280,36 +287,41 @@ function info(url) {
 			credentials: "omit",
 		})
 			.then(function (res) {
-				return res.text().then(function (text) {
-					try {
-						if (!res.ok) {
-							return formatUrlAndServerResponse(
-								urlRed,
-								excerptCellApiBody(text) || "HTTP " + res.status,
-							);
-						}
-						var o = parseCellValueFirstLine(text);
-						if (o.type === 99 || isNaN(o.type)) {
-							return o.rawVal ? String(o.rawVal) : "#ERROR";
-						}
-						if (!o.exists) {
-							return "";
-						}
-						if (o.type === 1) {
-							var n = parseFloat(String(o.rawVal).replace(",", "."));
-							return isNaN(n) ? String(o.rawVal) : String(n);
-						}
-						if (o.type === 2) {
+				return res.text().then(
+					function (text) {
+						try {
+							if (!res.ok) {
+								return formatDatacCellError(
+									urlRed,
+									excerptCellApiBody(text) || "HTTP " + res.status,
+								);
+							}
+							var o = parseCellValueFirstLine(text);
+							if (o.type === 99 || isNaN(o.type)) {
+								return o.rawVal ? String(o.rawVal) : "#ERROR";
+							}
+							if (!o.exists) {
+								return "";
+							}
+							if (o.type === 1) {
+								var n = parseFloat(String(o.rawVal).replace(",", "."));
+								return isNaN(n) ? String(o.rawVal) : String(n);
+							}
+							if (o.type === 2) {
+								return String(o.rawVal);
+							}
 							return String(o.rawVal);
+						} catch (inner) {
+							return formatDatacCellError(urlRed, inner.message || String(inner));
 						}
-						return String(o.rawVal);
-					} catch (inner) {
-						return formatUrlAndServerResponse(urlRed, inner.message || String(inner));
-					}
-				});
+					},
+					function (textErr) {
+						return formatDatacCellError(urlRed, textErr.message || String(textErr));
+					},
+				);
 			})
 			.catch(function (err) {
-				return formatUrlAndServerResponse(urlRed, err.message || String(err));
+				return formatDatacCellError(urlRed, err.message || String(err));
 			});
 	}
 
@@ -571,10 +583,9 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	try {
 		valueAsString = stringifySetDataValue(value);
 	} catch (se) {
-		return Promise.resolve(formatUrlAndServerResponse("", se.message || String(se)));
+		return Promise.resolve(formatSetdataCellError("", se.message || String(se)));
 	}
 	var url = buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode);
-	console.log(url);
 	var urlRed = redactPaloSidInUrl(url);
 	/** Toujours résoudre : Excel masque souvent les reject par « Une erreur interne s’est produite. » */
 	return fetch(url, {
@@ -584,24 +595,28 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		credentials: "omit",
 	})
 		.then(function (res) {
-			return res.text().then(function (text) {
-				console.log(text);
-				try {
-					if (!res.ok) {
-						return formatUrlAndServerResponse(
-							urlRed,
-							excerptCellApiBody(text) || "HTTP " + res.status,
-						);
+			return res.text().then(
+				function (text) {
+					try {
+						if (!res.ok) {
+							return formatSetdataCellError(
+								urlRed,
+								excerptCellApiBody(text) || "HTTP " + res.status,
+							);
+						}
+						parsePaloStatus(text);
+						return valueAsString;
+					} catch (inner) {
+						return formatSetdataCellError(urlRed, inner.message || String(inner));
 					}
-					parsePaloStatus(text);
-					return valueAsString;
-				} catch (inner) {
-					return formatUrlAndServerResponse(urlRed, inner.message || String(inner));
-				}
-			});
+				},
+				function (textErr) {
+					return formatSetdataCellError(urlRed, textErr.message || String(textErr));
+				},
+			);
 		})
 		.catch(function (err) {
-			return formatUrlAndServerResponse(urlRed, err.message || String(err));
+			return formatSetdataCellError(urlRed, err.message || String(err));
 		});
 }
 
@@ -618,21 +633,45 @@ function stripLegacyUrlSuffix(msg) {
 	return m.trim();
 }
 
+/**
+ * Chaîne renvoyée aux fonctions personnalisées : caractères de contrôle / guillemets peuvent
+ * faire échouer la sérialisation côté Excel → cellule vide.
+ */
+function sanitizeCfCellText(s) {
+	var t = String(s == null ? "" : s);
+	t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, " ");
+	t = t.replace(/\uFEFF/g, "");
+	t = t.replace(/"/g, "'");
+	if (t.length > 8000) {
+		t = t.slice(0, 8000) + "...";
+	}
+	return t.replace(/\s+/g, " ").trim();
+}
+
 /** Affichage cellule : uniquement l’URL (sid masqué) et le corps / ligne renvoyé par le serveur. */
 function formatUrlAndServerResponse(urlRedacted, serverText) {
 	var u = normalizeOneLineText(urlRedacted);
 	var t = normalizeOneLineText(stripLegacyUrlSuffix(serverText));
+	var out;
 	if (!u) {
-		return t || "(vide)";
+		out = t || "(vide)";
+	} else if (!t) {
+		out = "url=" + u + " | (vide)";
+	} else {
+		out = "url=" + u + " | " + t;
+		if (out.length > 4000) {
+			out = out.slice(0, 4000) + "...";
+		}
 	}
-	if (!t) {
-		return "url=" + u + " | (vide)";
-	}
-	var out = "url=" + u + " | " + t;
-	if (out.length > 4000) {
-		out = out.slice(0, 4000) + "...";
-	}
-	return out;
+	return sanitizeCfCellText(out);
+}
+
+function formatDatacCellError(urlRedacted, serverText) {
+	return sanitizeCfCellText("PALO.DATAC: " + formatUrlAndServerResponse(urlRedacted, serverText));
+}
+
+function formatSetdataCellError(urlRedacted, serverText) {
+	return sanitizeCfCellText("PALO.SETDATA: " + formatUrlAndServerResponse(urlRedacted, serverText));
 }
 
 function formatSetdataError(err, requestUrlRedacted) {
@@ -642,7 +681,7 @@ function formatSetdataError(err, requestUrlRedacted) {
 		msg = "(vide)";
 	}
 	msg = normalizeOneLineText(stripLegacyUrlSuffix(msg));
-	return formatUrlAndServerResponse(urlRedacted, msg);
+	return formatSetdataCellError(urlRedacted, msg);
 }
 
 	/**
@@ -676,7 +715,7 @@ function formatSetdataError(err, requestUrlRedacted) {
 			})
 			.catch(function (err) {
 				var msg = err && err.message ? err.message : String(err);
-				return formatUrlAndServerResponse("", msg);
+				return formatDatacCellError("", msg);
 			});
 	}
 
