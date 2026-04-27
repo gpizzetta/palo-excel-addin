@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.32.0";
+var ADDIN_VERSION = "1.0.33.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -422,6 +422,17 @@ function stringifySetDataValue(value) {
 	return String(value);
 }
 
+function shortResponseExcerpt(text) {
+	var t = stripBom(String(text || "")).replace(/\s+/g, " ").trim();
+	if (!t) {
+		return "(vide)";
+	}
+	if (t.length > 220) {
+		return t.slice(0, 220) + "...";
+	}
+	return t;
+}
+
 function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	var namePath = elementNames.join(",");
 	var valueAsString = stringifySetDataValue(value);
@@ -442,7 +453,14 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	}).then(function (res) {
 		return res.text().then(function (text) {
 			if (!res.ok) {
-				throw new Error("cell/replace HTTP " + res.status + " — " + text.slice(0, 500));
+				throw new Error(
+					"cell/replace HTTP " +
+						res.status +
+						" — " +
+						shortResponseExcerpt(text) +
+						" — url=" +
+						url.replace(/sid=[^&]*/i, "sid=***"),
+				);
 			}
 			parsePaloStatus(text, "cell/replace");
 			return valueAsString;
@@ -450,16 +468,28 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 	});
 }
 
-function formatSetdataError(err) {
+function formatSetdataError(err, ctx) {
 	var msg = err && err.message ? String(err.message) : String(err);
 	if (!msg || msg === "[object Object]") {
 		msg = "Erreur inconnue lors de l'ecriture dans le cube.";
 	}
 	msg = msg.replace(/\s+/g, " ").trim();
-	if (msg.length > 350) {
-		msg = msg.slice(0, 350) + "...";
+	var details = [];
+	if (ctx) {
+		details.push("db=" + (ctx.database || "(vide)"));
+		details.push("cube=" + (ctx.cube || "(vide)"));
+		details.push("path=[" + (ctx.path || []).join(" | ") + "]");
+		details.push("splash=" + String(ctx.splashMode));
+		details.push("value=" + ctx.valuePreview);
 	}
-	return "PALO.SETDATA: " + msg;
+	var out = "PALO.SETDATA: " + msg;
+	if (details.length) {
+		out += " — " + details.join(" ; ");
+	}
+	if (out.length > 550) {
+		out = out.slice(0, 550) + "...";
+	}
+	return out;
 }
 
 	/**
@@ -501,6 +531,11 @@ function setdata(value, splash, database, cube, element) {
 	var db = database != null ? String(database).trim() : "";
 	var cubeName = cube != null ? String(cube).trim() : "";
 	var parts = normalizePathElements(element);
+	var splashMode = null;
+	var valuePreview = stringifySetDataValue(value);
+	if (valuePreview.length > 80) {
+		valuePreview = valuePreview.slice(0, 80) + "...";
+	}
 	return loadSettingsAsync()
 		.then(function (cfg) {
 			if (!cfg.url) {
@@ -518,13 +553,19 @@ function setdata(value, splash, database, cube, element) {
 			if (!parts.length) {
 				throw new Error("Indiquez au moins un nom d’élément (un par dimension du cube).");
 			}
-			var splashMode = normalizeSplashMode(splash);
+			splashMode = normalizeSplashMode(splash);
 			return getCachedSession(cfg).then(function (sess) {
 				return replaceCellValue(sess.apiBase, sess.sid, db, cubeName, parts, value, splashMode);
 			});
 		})
 		.catch(function (err) {
-			return formatSetdataError(err);
+			return formatSetdataError(err, {
+				database: db,
+				cube: cubeName,
+				path: parts,
+				splashMode: splashMode,
+				valuePreview: valuePreview,
+			});
 		});
 }
 
