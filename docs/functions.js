@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.36.0";
+var ADDIN_VERSION = "1.0.37.0";
 
 var KEYS = {
 	url: "palo_connection_url",
@@ -417,8 +417,30 @@ function normalizeSplashMode(splash) {
 	);
 }
 
+function looksLikePaloErrorDetail(s) {
+	var t = String(s || "")
+		.toLowerCase()
+		.replace(/\s+/g, " ")
+		.trim();
+	if (!t) {
+		return false;
+	}
+	return (
+		t.indexOf("erreur") !== -1 ||
+		t.indexOf("error") !== -1 ||
+		t.indexOf("invalid") !== -1 ||
+		t.indexOf("wrong") !== -1 ||
+		t.indexOf("missing") !== -1 ||
+		t.indexOf("failed") !== -1 ||
+		t.indexOf("internal") !== -1 ||
+		t.indexOf("permission") !== -1 ||
+		t.indexOf("denied") !== -1
+	);
+}
+
 function parsePaloStatus(text, operationLabel) {
-	var lines = stripBom(text)
+	var raw = stripBom(text);
+	var lines = raw
 		.split(/\r?\n/)
 		.map(function (line) {
 			return line.replace(/\s+$/, "");
@@ -440,30 +462,48 @@ function parsePaloStatus(text, operationLabel) {
 			continue;
 		}
 		var code = parseInt(c0, 10);
-		if (code > 0) {
-			var details = cells
-				.slice(1)
-				.map(function (c) {
-					return stripPaloCsvField(String(c || "").trim());
-				})
-				.filter(Boolean)
-				.join(" — ");
-			if (!details) {
-				details = "(pas de détail)";
-			}
-			throw new Error(
-				operationLabel +
-					" code " +
-					code +
-					": " +
-					details +
-					" [ligne" +
-					(li + 1) +
-					"=" +
-					line.slice(0, 260) +
-					"]",
-			);
+		if (code === 0) {
+			continue;
 		}
+		var c1 = cells.length > 1 ? stripPaloCsvField(String(cells[1] || "").trim()) : "";
+		if (code < 100) {
+			if (c1 === "ok" || c1 === "1" || c1 === "true" || c1 === "0") {
+				continue;
+			}
+			if (!looksLikePaloErrorDetail(c1) && !looksLikePaloErrorDetail(line)) {
+				continue;
+			}
+		}
+		var details = cells
+			.slice(1)
+			.map(function (c) {
+				return stripPaloCsvField(String(c || "").trim());
+			})
+			.filter(Boolean)
+			.join(" — ");
+		if (!details) {
+			details = "(pas de détail)";
+		}
+		throw new Error(
+			operationLabel +
+				" code " +
+				code +
+				": " +
+				details +
+				" [ligne" +
+				(li + 1) +
+				"=" +
+				line.slice(0, 260) +
+				"]",
+		);
+	}
+	var low = raw.toLowerCase();
+	if (low.indexOf("erreur interne") !== -1 || low.indexOf("internal error") !== -1) {
+		throw new Error(
+			operationLabel +
+				" : réponse sans code d’erreur Palo standard mais contient « erreur interne » — extrait : " +
+				shortResponseExcerpt(raw),
+		);
 	}
 }
 
@@ -510,11 +550,8 @@ function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, va
 		name_cube: nameCube,
 		name_path: namePath,
 		value: valueAsString,
-		mode: "0",
+		splash: String(sm),
 	});
-	if (sm !== 0) {
-		q.set("splash", String(sm));
-	}
 	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
 	var url = apiBase + "/cell/replace?" + q.toString();
 	return fetch(url, {
