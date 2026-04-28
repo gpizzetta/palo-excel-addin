@@ -402,6 +402,46 @@
 		return out;
 	}
 
+	function excelFormulaStringLiteral(s) {
+		return '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"';
+	}
+
+	function buildEnameFormula(nameDatabase, nameDimension, elementName) {
+		return (
+			"=PALO.ENAME(" +
+			excelFormulaStringLiteral(nameDatabase) +
+			"," +
+			excelFormulaStringLiteral(nameDimension) +
+			"," +
+			excelFormulaStringLiteral(elementName) +
+			")"
+		);
+	}
+
+	function insertEnameFormulaForElement(el) {
+		var db = state.selectedDb;
+		var dim = state.selectedDimension;
+		if (!db || !dim) {
+			setStatus("Sélectionnez d’abord une base et une dimension.", "err");
+			return;
+		}
+		var formula = buildEnameFormula(db.name, dim.name, el.name);
+		setStatus("Insertion de PALO.ENAME dans la cellule active…", "");
+		Excel.run(function (ctx) {
+			var cell = ctx.workbook.getActiveCell();
+			cell.formulas = [[formula]];
+			cell.select();
+			return ctx.sync();
+		})
+			.then(function () {
+				setStatus("Formule insérée : " + formula, "ok");
+			})
+			.catch(function (err) {
+				var msg = err && err.message ? err.message : String(err);
+				setStatus("Insertion impossible : " + msg, "err");
+			});
+	}
+
 	function elementTypeLabel(typeNum) {
 		if (typeNum === 1) {
 			return "N";
@@ -912,6 +952,20 @@
 				var main = document.createElement("span");
 				main.className = "el-main";
 				main.textContent = el.name;
+				var selectedDbName = state.selectedDb ? state.selectedDb.name : "";
+				var selectedDimName = state.selectedDimension ? state.selectedDimension.name : "";
+				main.title =
+					'Insérer dans la cellule active: =PALO.ENAME("' +
+					selectedDbName +
+					'","' +
+					selectedDimName +
+					'","' +
+					el.name +
+					'")';
+				main.addEventListener("click", function (e) {
+					e.stopPropagation();
+					insertEnameFormulaForElement(el);
+				});
 				var ty = document.createElement("span");
 				ty.className = "el-type";
 				ty.textContent = "(" + elementTypeLabel(el.type) + ")";

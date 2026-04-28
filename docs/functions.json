@@ -102,6 +102,32 @@
         "type": "any",
         "dimensionality": "scalar"
       }
+    },
+    {
+      "id": "ENAME",
+      "name": "ENAME",
+      "description": "Résout le nom d’un élément d’une dimension (par id numérique ou nom exact), via /dimension/elements.",
+      "parameters": [
+        {
+          "name": "database",
+          "description": "Nom de la base Jedox.",
+          "type": "any"
+        },
+        {
+          "name": "dimension",
+          "description": "Nom de la dimension.",
+          "type": "any"
+        },
+        {
+          "name": "element",
+          "description": "Id numérique ou nom de l’élément.",
+          "type": "any"
+        }
+      ],
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      }
     }
   ]
 }

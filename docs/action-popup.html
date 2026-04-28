@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Action Palo</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; margin: 16px; }
+    h3 { margin: 0 0 12px 0; font-size: 16px; }
+    .k { color: #666; font-size: 12px; margin-top: 8px; }
+    .v { font-weight: 600; margin-top: 2px; word-break: break-word; }
+    .hint { margin-top: 12px; font-size: 12px; color: #555; }
+    button { margin-top: 16px; padding: 6px 10px; }
+  </style>
+</head>
+<body>
+  <h3>Action</h3>
+  <div class="k">Cellule</div>
+  <div class="v" id="address">(inconnue)</div>
+  <div class="k">Fonction détectée</div>
+  <div class="v" id="func">(aucune)</div>
+  <div class="k">Formule</div>
+  <div class="v" id="formula"></div>
+  <div class="hint">Affiche le nom de fonction trouvé dans la cellule active.</div>
+  <button id="btnClose" type="button">Fermer</button>
+
+  <script type="text/javascript">
+    (function () {
+      function q(name) {
+        var p = new URLSearchParams(window.location.search);
+        return p.get(name) || "";
+      }
+      function set(id, txt) {
+        document.getElementById(id).textContent = txt;
+      }
+      Office.onReady(function () {
+        var funcName = q("func");
+        set("address", q("address") || "(inconnue)");
+        set("func", funcName || "(aucune)");
+        set("formula", q("formula") || q("value") || "(vide)");
+        document.getElementById("btnClose").addEventListener("click", function () {
+          try {
+            Office.context.ui.messageParent("close");
+          } catch (e) {
+            window.close();
+          }
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

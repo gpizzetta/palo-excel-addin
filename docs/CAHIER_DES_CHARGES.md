@@ -250,6 +250,33 @@ Implémentations dans `SpreadsheetFuncs.cpp` / `SpreadsheetFuncs.h`, utilisées 
 
 ---
 
+## G. Héritage Excel 2010 — `PALO.DATAC`, écriture cube et syntaxes « commande »
+
+### G.1 Où est le « code historique » ?
+
+- **Ce dépôt (`palo-excel-addin`)** ne contient **pas** l’add-in **COM / C++** d’Excel 2010 (aucun `PaloSpreadsheetFuncs` ni `.xll` ici). L’implémentation actuelle est **JavaScript** dans **`docs/functions.js`** : **`PALO.DATAC`** → lecture HTTP **`/cell/value`** ; **`PALO.SETDATA`** → écriture **`/cell/replace`** (splash explicite).
+- La **référence source** de l’ancien tableur Jedox / Palo est la bibliothèque client **`PaloSpreadsheetFuncs`** (Jedox ~5.1), décrite en **section B** et pointée depuis le **contexte** (dépôt miroir **`jedox-mirror`**, chemins type `molap/client_libraries/5.1/PaloSpreadsheetFuncs/`, fichiers **`SpreadsheetFuncs.h`** / **`SpreadsheetFuncs.cpp`**). C’est là qu’il faut chercher les signatures **`FPaloGetdata*`** / **`FPaloSetdata*`** et le comportement exact des fonctions Excel historiques.
+
+### G.2 `PALO.DATAC` vs `PALO.GETDATA_C` vs écriture
+
+- Dans l’**inventaire C++** (section **B**), la lecture par **noms d’éléments** (coordonnées « texte ») est surtout portée par **`FPaloGetdataC`** → convention mécanique **`PALO.GETDATA_C`**. Sous **Jedox / Palo for Excel**, le nom **`PALO.DATAC`** est en pratique l’**alias utilisateur** de cette famille **« get data by coordinate names »** (souvent avec **collecte** des appels pour un même cube — voir doc Jedox *Data functions*).
+- L’**écriture** dans le cube (y compris sur consolidés / **splash**) côté client historique repose sur les entrées **`FPaloSetdata`**, **`FPaloSetdataA`**, etc. (section **B**, lignes 56–60) → exposées en **`PALO.SETDATA`** et variantes — **pas** sur une « sous-commande » documentée **à l’intérieur** de **`PALO.DATAC`** dans la documentation Jedox actuelle.
+
+### G.3 Syntaxes spéciales (`#`, `!`, etc.) et « `<valeur> like …` »
+
+- Les modes de **splashing** / répartition (ex. préfixes **`#`**, **`!`**, **`!!`** selon les guides Jedox) concernent la **saisie / l’écriture** et le **comportement OLAP**, documentés côté **Jedox** (splashing, saisie manuelle), à distinguer d’une syntaxe d’**arguments** `PALO.DATAC(base; cube; …)` standard.
+- Une chaîne du type **`<valeur> like réalisé;2025`** (exemple utilisateur) **n’apparaît pas** dans ce dépôt ni dans le tableau **`FPalo*`** du cahier. Pistes de clarification si vous retrouvez un classeur 2010 :
+  - confusion avec **`PALO.DATA`** / **`PALO.SETDATA`** ou avec une **saisie dans la cellule** (comportement « palo data » vs formule) ;
+  - **`réalisé`** / **`2025`** comme **noms d’éléments** de dimensions (séparateurs `;` vs virgule selon locale Excel) ;
+  - **feuille / macro** métier, ou mot **`like`** issu du **langage de règles** (hors formule tableur).
+
+### G.4 Liens documentation Jedox (hors dépôt)
+
+- [Jedox Data Functions](https://knowledgebase.jedox.com/jedox/planning/jedox-data-functions.htm) — rôles **`PALO.DATA`**, **`PALO.DATAC`**, **`PALO.SETDATA`**, collecte d’appels.
+- [Splashing — troubleshooting](https://knowledgebase.jedox.com/jedox/planning/splashing-troubleshooting.htm) — écriture consolidée / erreurs fréquentes.
+
+---
+
 ## F. Suivi
 
 - [x] Référencer le code **`PaloSpreadsheetFuncs`** (5.1) — miroir [jedox-mirror](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs) ; inventaire **150** entrées + helpers section **B.3**.

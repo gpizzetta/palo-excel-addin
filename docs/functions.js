@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.44.0";
+var ADDIN_VERSION = "1.0.47.0";
 
 /**
  * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
@@ -25,6 +25,7 @@ var SESSION_TTL_MS = 4 * 60 * 1000;
 /** Dernière URL d’appel (sid masqué) pour le message si Excel masque le rejet réel. */
 var lastPaloCellValueUrlRedacted = "";
 var lastPaloReplaceCellUrlRedacted = "";
+var lastPaloElementUrlRedacted = "";
 
 function hello() {
 	return "hello world";
@@ -615,6 +616,92 @@ function buildCellReplaceRequestUrl(apiBase, sid, nameDatabase, nameCube, elemen
 	return String(apiBase).replace(/\/$/, "") + "/cell/replace?" + q.toString();
 }
 
+function buildDimensionElementsRequestUrl(apiBase, sid, nameDatabase, nameDimension) {
+	var q = new URLSearchParams({
+		sid: sid,
+		name_database: nameDatabase,
+		name_dimension: nameDimension,
+		show_permission: "0",
+	});
+	return String(apiBase).replace(/\/$/, "") + "/dimension/elements?" + q.toString();
+}
+
+function splitPaloCsvLine(line) {
+	return line.indexOf(";") >= 0 ? line.split(";") : line.split(",");
+}
+
+function fetchElementName(apiBase, sid, nameDatabase, nameDimension, elementRef) {
+	var elementInput = String(elementRef == null ? "" : elementRef).trim();
+	var url = buildDimensionElementsRequestUrl(apiBase, sid, nameDatabase, nameDimension);
+	var urlRed = redactPaloSidInUrl(url);
+	lastPaloElementUrlRedacted = urlRed;
+	return fetch(url, {
+		method: "GET",
+		mode: "cors",
+		cache: "no-store",
+		credentials: "omit",
+	})
+		.then(function (res) {
+			return res.text().then(
+				function (text) {
+					try {
+						if (!res.ok) {
+							return formatEnameCellError(urlRed, excerptCellApiBody(text) || "HTTP " + res.status);
+						}
+						var lines = stripBom(text)
+							.split(/\r?\n/)
+							.map(function (line) {
+								return line.replace(/\s+$/, "");
+							})
+							.filter(function (line) {
+								return line.length;
+							});
+						if (!lines.length) {
+							return formatEnameCellError(urlRed, "Réponse /dimension/elements vide.");
+						}
+						if (
+							lines[0].charAt(0) === "<" ||
+							lines[0].toLowerCase().indexOf("<!doctype") !== -1
+						) {
+							return formatEnameCellError(urlRed, shortResponseExcerpt(lines[0]));
+						}
+						var wantId = /^\d+$/.test(elementInput) ? elementInput : "";
+						var wantLower = elementInput.toLowerCase();
+						for (var i = 0; i < lines.length; i++) {
+							var cells = splitPaloCsvLine(lines[i]);
+							if (!cells || cells.length < 2) {
+								continue;
+							}
+							var id = stripPaloCsvField(cells[0]).trim();
+							var name = stripPaloCsvField(cells[1]).trim();
+							if (!name) {
+								continue;
+							}
+							if (wantId && id === wantId) {
+								return name;
+							}
+							if (!wantId && name.toLowerCase() === wantLower) {
+								return name;
+							}
+						}
+						return formatEnameCellError(
+							urlRed,
+							"Élément introuvable dans la dimension '" + nameDimension + "': " + elementInput,
+						);
+					} catch (inner) {
+						return formatEnameCellError(urlRed, inner.message || String(inner));
+					}
+				},
+				function (textErr) {
+					return formatEnameCellError(urlRed, textErr.message || String(textErr));
+				},
+			);
+		})
+		.catch(function (err) {
+			return formatEnameCellError(urlRed, err.message || String(err));
+		});
+}
+
 function replaceCellValue(apiBase, sid, nameDatabase, nameCube, elementNames, value, splashMode) {
 	/** L’UI « API » du serveur est sous /api/... (HTML) ; l’endpoint CSV est /cell/replace (sans /api/). */
 	var valueAsString;
@@ -711,6 +798,10 @@ function formatDatacCellError(urlRedacted, serverText) {
 
 function formatSetdataCellError(urlRedacted, serverText) {
 	return sanitizeCfCellText("PALO.SETDATA: " + formatUrlAndServerResponse(urlRedacted, serverText));
+}
+
+function formatEnameCellError(urlRedacted, serverText) {
+	return sanitizeCfCellText("PALO.ENAME: " + formatUrlAndServerResponse(urlRedacted, serverText));
 }
 
 function formatSetdataError(err, requestUrlRedacted) {
@@ -842,8 +933,60 @@ function setdata(value, splash, database, cube, element) {
 		});
 }
 
+function ename(database, dimension, element) {
+	database = unwrapExcelScalar(database);
+	dimension = unwrapExcelScalar(dimension);
+	element = unwrapExcelScalar(element);
+
+	var db = database != null ? String(database).trim() : "";
+	var dim = dimension != null ? String(dimension).trim() : "";
+	var el = element != null ? String(element).trim() : "";
+	lastPaloElementUrlRedacted = "";
+
+	if (!db) {
+		return formatEnameCellError("", "Nom de base manquant.");
+	}
+	if (!dim) {
+		return formatEnameCellError("", "Nom de dimension manquant.");
+	}
+	if (!el) {
+		return formatEnameCellError("", "Nom ou id d’élément manquant.");
+	}
+
+	return loadSettingsAsync()
+		.catch(function (e) {
+			return formatEnameCellError("", e.message || String(e));
+		})
+		.then(function (cfgOrStr) {
+			if (typeof cfgOrStr === "string") {
+				return cfgOrStr;
+			}
+			var cfg = cfgOrStr;
+			if (!cfg.url) {
+				return formatEnameCellError("", "Configurez l’URL dans le volet Connexion (Palo).");
+			}
+			if (!cfg.username) {
+				return formatEnameCellError("", "Utilisateur de connexion manquant (volet Connexion).");
+			}
+			return getCachedSession(cfg)
+				.catch(function (e2) {
+					return formatEnameCellError("", e2.message || String(e2));
+				})
+				.then(function (sessOrStr) {
+					if (typeof sessOrStr === "string") {
+						return sessOrStr;
+					}
+					return fetchElementName(sessOrStr.apiBase, sessOrStr.sid, db, dim, el);
+				});
+		})
+		.catch(function (err) {
+			return formatEnameCellError(lastPaloElementUrlRedacted, err.message || String(err));
+		});
+}
+
 CustomFunctions.associate("HELLO", hello);
 CustomFunctions.associate("VERSION", version);
 CustomFunctions.associate("INFO", info);
 CustomFunctions.associate("DATAC", datac);
 CustomFunctions.associate("SETDATA", setdata);
+CustomFunctions.associate("ENAME", ename);
