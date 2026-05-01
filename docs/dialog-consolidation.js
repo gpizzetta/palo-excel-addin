@@ -314,6 +314,20 @@
 			showErr("Ajoutez au moins un enfant pour une consolidation.");
 			return;
 		}
+		/**
+		 * Doc Jedox /element/replace : « name_children » si le paramètre « children » (ids) est omis.
+		 * Les ids numériques (ex. 0 pour le premier élément) sont parfois mal interprétés en chaîne de requête ;
+		 * les noms évitent ce cas et restent alignés sur l’API.
+		 */
+		var childNames = [];
+		for (var ci = 0; ci < ctx.selectedChildIds.length; ci++) {
+			var ch = findElementById(ctx.selectedChildIds[ci]);
+			if (!ch || !ch.name) {
+				showErr("Enfant introuvable (id " + ctx.selectedChildIds[ci] + ").");
+				return;
+			}
+			childNames.push(ch.name);
+		}
 		var weights = ctx.selectedChildIds.map(function () {
 			return 1;
 		});
@@ -323,7 +337,7 @@
 			name_dimension: ctx.name_dimension,
 			element: ctx.targetEl.id,
 			type: "4",
-			children: ctx.selectedChildIds.join(","),
+			name_children: childNames.join(","),
 			weights: weights.join(","),
 		});
 		var url = ctx.apiBase + "/element/replace?" + q.toString();

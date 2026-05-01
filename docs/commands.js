@@ -33,7 +33,7 @@
 			value: payload.value || "",
 			address: payload.address || "",
 		});
-		return base + "action-popup.html?v=1.0.49.0&" + q.toString();
+		return base + "action-popup.html?v=1.0.50.0&" + q.toString();
 	}
 
 	function applyFormulaToAddress(address, formula) {
