@@ -329,7 +329,10 @@
 		var url = ctx.apiBase + "/element/replace?" + q.toString();
 		document.getElementById("btnSave").disabled = true;
 		fetchCsv(url)
-			.then(function () {
+			.then(function (text) {
+				if (typeof assertPaloCsvMutationOk === "function") {
+					assertPaloCsvMutationOk(text);
+				}
 				if (Office && Office.context && Office.context.ui && Office.context.ui.messageParent) {
 					Office.context.ui.messageParent("refresh", { targetOrigin: "*" });
 				}

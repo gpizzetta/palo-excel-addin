@@ -801,7 +801,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.28.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.49.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: dialogSize && dialogSize.height != null ? dialogSize.height : 90,
@@ -815,12 +815,23 @@
 			}
 			var dialog = asyncResult.value;
 			dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
-				var msg = arg.message;
+				var msg = arg && arg.message != null ? String(arg.message) : "";
 				try {
 					dialog.close();
 				} catch (e) {}
-				if (msg === "refresh" && typeof onRefreshDone === "function") {
-					onRefreshDone();
+				if (msg === "refresh") {
+					if (typeof onRefreshDone === "function") {
+						onRefreshDone({});
+					}
+					return;
+				}
+				try {
+					var payload = JSON.parse(msg);
+					if (payload && payload.action === "refresh" && typeof onRefreshDone === "function") {
+						onRefreshDone(payload);
+					}
+				} catch (e1) {
+					/* ex. "cancel" */
 				}
 			});
 		});
@@ -838,10 +849,24 @@
 				name_database: state.selectedDb.name,
 				name_dimension: state.selectedDimension.name,
 			},
-			function () {
+			function (payload) {
 				reloadDimensionView()
 					.then(function () {
 						setStatus("Élément créé.", "ok");
+						var want =
+							payload && payload.openConsolidationForName
+								? String(payload.openConsolidationForName).trim()
+								: "";
+						if (!want) {
+							return;
+						}
+						var list = state.dimensionElements || [];
+						for (var i = 0; i < list.length; i++) {
+							if (list[i].name === want && list[i].type === 4) {
+								openModalConsolidation(list[i]);
+								break;
+							}
+						}
 					})
 					.catch(function (err) {
 						var m = err && err.message ? err.message : String(err);

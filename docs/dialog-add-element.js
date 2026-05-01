@@ -41,8 +41,18 @@
 					if (!res.ok) {
 						throw new Error("HTTP " + res.status + " — " + text.slice(0, 500));
 					}
+					if (typeof assertPaloCsvMutationOk === "function") {
+						assertPaloCsvMutationOk(text);
+					}
 					if (Office && Office.context && Office.context.ui && Office.context.ui.messageParent) {
-						Office.context.ui.messageParent("refresh", { targetOrigin: "*" });
+						var msg =
+							type === 4
+								? JSON.stringify({
+										action: "refresh",
+										openConsolidationForName: name,
+								  })
+								: "refresh";
+						Office.context.ui.messageParent(msg, { targetOrigin: "*" });
 					}
 				});
 			})
