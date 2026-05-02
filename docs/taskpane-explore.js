@@ -28,6 +28,37 @@
 		selectedCube: null,
 	};
 
+	function exploreIconTrashHtml() {
+		return typeof paloIconSvgTrash2 === "function" ? paloIconSvgTrash2() : "";
+	}
+
+	function exploreIconLayersHtml() {
+		return typeof paloIconSvgLayers === "function" ? paloIconSvgLayers() : "";
+	}
+
+	function setupDeleteIconButton(btn, className, ariaLabel) {
+		btn.className = className + " palo-icon-btn";
+		btn.setAttribute("aria-label", ariaLabel);
+		var svg = exploreIconTrashHtml();
+		if (svg) {
+			btn.innerHTML = svg;
+		} else {
+			btn.textContent = "Supprimer";
+		}
+	}
+
+	function setupConsolidationIconButton(btn) {
+		btn.className = "el-consol secondary palo-icon-btn";
+		btn.title = "Définir les enfants (consolidation)";
+		btn.setAttribute("aria-label", "Consolidation — définir les enfants");
+		var svg = exploreIconLayersHtml();
+		if (svg) {
+			btn.innerHTML = svg;
+		} else {
+			btn.textContent = "Consolidation";
+		}
+	}
+
 	function setStatus(msg, kind) {
 		var el = document.getElementById("status");
 		el.textContent = msg || "";
@@ -841,7 +872,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.63.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.66.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: dialogSize && dialogSize.height != null ? dialogSize.height : 90,
@@ -1041,17 +1072,14 @@
 					actions.className = "el-actions";
 					var bCons = document.createElement("button");
 					bCons.type = "button";
-					bCons.className = "el-consol secondary";
-					bCons.textContent = "Consolidation";
-					bCons.title = "Définir les enfants (consolidation)";
+					setupConsolidationIconButton(bCons);
 					bCons.addEventListener("click", function (e) {
 						e.stopPropagation();
 						openModalConsolidation(el);
 					});
 					var bDel = document.createElement("button");
 					bDel.type = "button";
-					bDel.className = "el-del";
-					bDel.textContent = "Supprimer";
+					setupDeleteIconButton(bDel, "el-del", "Supprimer l’élément « " + el.name + " »");
 					bDel.addEventListener("click", function (e) {
 						e.stopPropagation();
 						onDeleteElement(el);
@@ -1319,8 +1347,7 @@
 						});
 						var bDel = document.createElement("button");
 						bDel.type = "button";
-						bDel.className = "rule-del";
-						bDel.textContent = "Supprimer";
+						setupDeleteIconButton(bDel, "rule-del", "Supprimer la règle id " + r.id);
 						bDel.addEventListener("click", function () {
 							onDeleteRule(r);
 						});
@@ -1561,9 +1588,7 @@
 					if (canDeleteDimensionRow(dim)) {
 						var delBtn = document.createElement("button");
 						delBtn.type = "button";
-						delBtn.className = "dim-del";
-						delBtn.setAttribute("aria-label", "Supprimer la dimension " + dim.name);
-						delBtn.textContent = "Supprimer";
+						setupDeleteIconButton(delBtn, "dim-del", "Supprimer la dimension " + dim.name);
 						delBtn.addEventListener("click", function (e) {
 							onDeleteDimension(dim, e);
 						});
