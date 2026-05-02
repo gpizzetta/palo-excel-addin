@@ -42,7 +42,7 @@
 		if (payload.enameEl) {
 			q.set("ename_el", payload.enameEl);
 		}
-		return base + "action-popup.html?v=1.0.56.0&" + q.toString();
+		return base + "action-popup.html?v=1.0.57.0&" + q.toString();
 	}
 
 	function isLocalA1Notation(loc) {
