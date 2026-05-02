@@ -51,7 +51,10 @@
 		if (payload.enameEl) {
 			q.set("ename_el", payload.enameEl);
 		}
-		return base + "action-popup.html?v=1.0.62.0&" + q.toString();
+		if (payload.datacResolvedJson) {
+			q.set("datac_r", payload.datacResolvedJson);
+		}
+		return base + "action-popup.html?v=1.0.63.0&" + q.toString();
 	}
 
 	function isLocalA1Notation(loc) {
@@ -190,6 +193,95 @@
 		});
 	}
 
+	/**
+	 * Résout tous les arguments de PALO.DATAC : littéraux "…" ou valeurs lues depuis références
+	 * de cellule simples (même classeur), comme pour PALO.ENAME.
+	 */
+	function resolvePaloDatacArgsFromFormula(ctx, cell, formula) {
+		if (typeof parsePaloDatacAllArgExpressions !== "function") {
+			return Promise.resolve(null);
+		}
+		var exprs = parsePaloDatacAllArgExpressions(formula);
+		if (!exprs || exprs.length < 3) {
+			return Promise.resolve(null);
+		}
+		var n = exprs.length;
+		var resolved = new Array(n);
+		var pending = [];
+		for (var i = 0; i < n; i++) {
+			var lit =
+				typeof tryExcelFormulaStringLiteral === "function"
+					? tryExcelFormulaStringLiteral(exprs[i])
+					: null;
+			if (lit !== null) {
+				resolved[i] = lit;
+			} else {
+				pending.push({ i: i, expr: exprs[i] });
+			}
+		}
+		if (!pending.length) {
+			for (var k = 0; k < n; k++) {
+				if (!String(resolved[k] || "").trim()) {
+					return Promise.resolve(null);
+				}
+			}
+			return Promise.resolve(resolved);
+		}
+		for (var p = 0; p < pending.length; p++) {
+			var addr = parseSingleCellReference(pending[p].expr);
+			if (!addr) {
+				return Promise.resolve(null);
+			}
+			if (addr.external) {
+				return Promise.resolve(null);
+			}
+			pending[p]._addr = addr;
+			if (addr.sheet) {
+				if (typeof ctx.workbook.worksheets.getItemOrNullObject === "function") {
+					pending[p]._ws = ctx.workbook.worksheets.getItemOrNullObject(addr.sheet);
+					pending[p]._ws.load("isNullObject");
+				} else {
+					pending[p]._ws = ctx.workbook.worksheets.getItem(addr.sheet);
+					pending[p]._wsReady = true;
+				}
+			} else {
+				pending[p]._ws = cell.worksheet;
+				pending[p]._wsReady = true;
+			}
+		}
+		return ctx.sync().then(function () {
+			for (var pi = 0; pi < pending.length; pi++) {
+				var pobj = pending[pi];
+				var ws = pobj._ws;
+				if (!pobj._wsReady && ws.isNullObject) {
+					return null;
+				}
+				var rng = ws.getRange(pobj._addr.local);
+				rng.load("values");
+				pobj.rng = rng;
+			}
+			return ctx.sync().then(function () {
+				for (var q = 0; q < pending.length; q++) {
+					var it = pending[q];
+					var v =
+						it.rng.values &&
+						it.rng.values[0] &&
+						it.rng.values[0][0] !== undefined &&
+						it.rng.values[0][0] !== null
+							? String(it.rng.values[0][0]).trim()
+							: "";
+					resolved[it.i] = v;
+				}
+				for (var j = 0; j < n; j++) {
+					if (!String(resolved[j] || "").trim()) {
+						return null;
+					}
+				}
+				return resolved;
+			});
+		});
+	}
+
 	function applyFormulaToAddress(address, formula) {
 		return Excel.run(function (ctx) {
 			var parts = String(address || "").trim().lastIndexOf("!");
@@ -290,21 +382,37 @@
 					value: value,
 					functionName: fn,
 				};
-				if (!isEnameRibbonFunction(fn) || !formula) {
-					return payload;
+				if (isEnameRibbonFunction(fn) && formula) {
+					return resolvePaloEnameArgsFromFormula(ctx, cell, formula)
+						.then(function (triple) {
+							if (triple && triple[0] && triple[1] && triple[2]) {
+								payload.enameDb = triple[0];
+								payload.enameDim = triple[1];
+								payload.enameEl = triple[2];
+							}
+							return payload;
+						})
+						.catch(function () {
+							return payload;
+						});
 				}
-				return resolvePaloEnameArgsFromFormula(ctx, cell, formula)
-					.then(function (triple) {
-						if (triple && triple[0] && triple[1] && triple[2]) {
-							payload.enameDb = triple[0];
-							payload.enameDim = triple[1];
-							payload.enameEl = triple[2];
-						}
-						return payload;
-					})
-					.catch(function () {
-						return payload;
-					});
+				if (isDatacRibbonFunction(fn, formula) && formula) {
+					return resolvePaloDatacArgsFromFormula(ctx, cell, formula)
+						.then(function (arr) {
+							if (arr && arr.length >= 3) {
+								try {
+									payload.datacResolvedJson = JSON.stringify(arr);
+								} catch (eJson) {
+									/* ignore */
+								}
+							}
+							return payload;
+						})
+						.catch(function () {
+							return payload;
+						});
+				}
+				return payload;
 			});
 		}).catch(function (err) {
 			return {

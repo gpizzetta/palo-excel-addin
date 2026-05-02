@@ -190,6 +190,35 @@
 		return { database: db, cube: cube, path: path };
 	}
 
+	/**
+	 * Paramètre datac_r : tableau JSON [base, cube, el1, …] rempli par commands.js
+	 * après lecture des cellules référencées (même logique que PALO.ENAME).
+	 */
+	function parseDatacResolvedFromQuery() {
+		var raw = q("datac_r");
+		if (!raw) {
+			return null;
+		}
+		try {
+			var arr = JSON.parse(raw);
+			if (!Array.isArray(arr) || arr.length < 3) {
+				return null;
+			}
+			var db = String(arr[0] == null ? "" : arr[0]).trim();
+			var cube = String(arr[1] == null ? "" : arr[1]).trim();
+			var path = [];
+			for (var i = 2; i < arr.length; i++) {
+				path.push(String(arr[i] == null ? "" : arr[i]).trim());
+			}
+			if (!db || !cube || !path.length) {
+				return null;
+			}
+			return { database: db, cube: cube, path: path };
+		} catch (eParse) {
+			return null;
+		}
+	}
+
 	function readSettingsFromLocalStorage() {
 		try {
 			if (typeof localStorage === "undefined") {
@@ -442,7 +471,10 @@
 					}
 					return;
 				}
-				var parsedPath = parseDatacLiteralPathForReplace(params.formula);
+				var parsedPath = parseDatacResolvedFromQuery();
+				if (!parsedPath) {
+					parsedPath = parseDatacLiteralPathForReplace(params.formula);
+				}
 				if (parsedPath.error) {
 					if (err) {
 						err.style.color = "#a4262c";
