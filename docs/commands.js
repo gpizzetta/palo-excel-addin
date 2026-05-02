@@ -42,7 +42,7 @@
 		if (payload.enameEl) {
 			q.set("ename_el", payload.enameEl);
 		}
-		return base + "action-popup.html?v=1.0.58.0&" + q.toString();
+		return base + "action-popup.html?v=1.0.59.0&" + q.toString();
 	}
 
 	function isLocalA1Notation(loc) {
@@ -199,57 +199,67 @@
 		});
 	}
 
+	/** Délai court après fermeture du menu contextuel : sinon displayDialogAsync peut échouer au 1er clic. */
+	var ACTION_DIALOG_OPEN_DELAY_MS = 50;
+
 	function openActionDialog(payload, event) {
 		var dialogUrl = buildActionDialogUrl(payload);
 		var size = isEnameRibbonFunction(payload.functionName)
 			? { height: 55, width: 38, displayInIframe: true }
 			: { height: 40, width: 40, displayInIframe: true };
-		Office.context.ui.displayDialogAsync(dialogUrl, size, function (asyncResult) {
-			if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
-				var dialog = asyncResult.value;
-				dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
-					var raw =
-						arg && typeof arg.message === "string"
-							? arg.message
-							: typeof arg === "string"
-								? arg
-								: "";
-					if (raw === "close") {
-						try {
-							dialog.close();
-						} catch (e) {}
-						return;
-					}
-					try {
-						var o = JSON.parse(raw);
-						if (o && o.action === "updateFormula" && o.formula && o.address) {
-							applyFormulaToAddress(o.address, o.formula)
-								.then(function () {
-									try {
-										dialog.close();
-									} catch (e2) {}
-								})
-								.catch(function () {
-									try {
-										dialog.close();
-									} catch (e3) {}
-								});
+		return new Promise(function (resolve) {
+			Office.context.ui.displayDialogAsync(dialogUrl, size, function (asyncResult) {
+				if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+					var dialog = asyncResult.value;
+					dialog.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+						var raw =
+							arg && typeof arg.message === "string"
+								? arg.message
+								: typeof arg === "string"
+									? arg
+									: "";
+						if (raw === "close") {
+							try {
+								dialog.close();
+							} catch (e) {}
 							return;
 						}
-					} catch (e) {
-						/* ignore */
-					}
-					try {
-						dialog.close();
-					} catch (e4) {}
-				});
-			}
-			event.completed();
+						try {
+							var o = JSON.parse(raw);
+							if (o && o.action === "updateFormula" && o.formula && o.address) {
+								applyFormulaToAddress(o.address, o.formula)
+									.then(function () {
+										try {
+											dialog.close();
+										} catch (e2) {}
+									})
+									.catch(function () {
+										try {
+											dialog.close();
+										} catch (e3) {}
+									});
+								return;
+							}
+						} catch (e) {
+							/* ignore */
+						}
+						try {
+							dialog.close();
+						} catch (e4) {}
+					});
+				}
+				try {
+					event.completed();
+				} catch (eDone) {
+					/* déjà appelé ou hôte strict */
+				}
+				resolve();
+			});
 		});
 	}
 
 	function showActionPopup(event) {
-		Excel.run(function (ctx) {
+		var chain = Excel.run(function (ctx) {
 			var cell = ctx.workbook.getActiveCell();
 			cell.load(["address", "formulas", "values"]);
 			cell.worksheet.load("name");
@@ -285,21 +295,31 @@
 						return payload;
 					});
 			});
-		})
-			.catch(function (err) {
-				return {
-					address: "",
-					formula: "",
-					value: "",
-					functionName: "",
-					error: err && err.message ? err.message : String(err),
-				};
-			})
+		}).catch(function (err) {
+			return {
+				address: "",
+				formula: "",
+				value: "",
+				functionName: "",
+				error: err && err.message ? err.message : String(err),
+			};
+		});
+
+		return chain
 			.then(function (payload) {
 				if (payload.error) {
 					payload.formula = "Erreur lecture cellule: " + escapeHtml(payload.error);
 				}
-				openActionDialog(payload, event);
+				return new Promise(function (resolve) {
+					window.setTimeout(function () {
+						openActionDialog(payload, event).then(resolve).catch(resolve);
+					}, ACTION_DIALOG_OPEN_DELAY_MS);
+				});
+			})
+			.catch(function () {
+				try {
+					event.completed();
+				} catch (e2) {}
 			});
 	}
 
