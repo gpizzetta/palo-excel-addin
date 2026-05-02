@@ -1,5 +1,5 @@
 /* global Office */
-/* Popup « Action » : pour PALO.ENAME, charge les éléments de la dimension (tri alphabétique) et met à jour la formule au clic. */
+/* Popup « Action » : PALO.ENAME (liste d’éléments) ; PALO.DATAC (saisie LIKE/COPY → conversion PALO.SETDATA). */
 (function () {
 	var KEYS = {
 		url: "palo_connection_url",
@@ -243,6 +243,80 @@
 			: /^PALO\.ENAME\s*\(/i.test(g);
 	}
 
+	function isDatacContext(funcParam, formula) {
+		var u = String(funcParam || "").toUpperCase();
+		if (u === "PALO.DATAC" || u === "DATAC" || /\.DATAC$/i.test(String(funcParam || ""))) {
+			return true;
+		}
+		var g = String(formula || "").replace(/^\s*=\s*/, "");
+		g = g.replace(/^_xlfn\./i, "");
+		return /^PALO\.DATAC\s*\(/i.test(g);
+	}
+
+	function buildSetdataFormulaFromDatac(originalFormula, userCommandText, splashExpr) {
+		if (typeof parsePaloDatacAllArgExpressions !== "function") {
+			return null;
+		}
+		var args = parsePaloDatacAllArgExpressions(originalFormula);
+		if (!args || args.length < 3) {
+			return null;
+		}
+		var raw = String(originalFormula || "").trim();
+		var mLead = raw.match(/^(\s*=\s*)(_xlfn\.)?/i);
+		if (!mLead) {
+			return null;
+		}
+		var eqPart = mLead[1];
+		var xlfnPart = mLead[2] || "";
+		var se = splashExpr != null ? String(splashExpr).trim() : "1";
+		if (!/^-?[0-9]+$/.test(se)) {
+			se = "1";
+		}
+		var valueLit = excelFormulaStringLiteral(userCommandText);
+		var body = valueLit + "," + se + "," + args.join(",");
+		return eqPart + xlfnPart + "PALO.SETDATA(" + body + ")";
+	}
+
+	function runDatacLikeCopyPanel(params) {
+		var panel = document.getElementById("datacLikeCopyPanel");
+		var ta = document.getElementById("datacCommandInput");
+		var err = document.getElementById("datacErr");
+		var dh = document.getElementById("defaultHint");
+		if (dh) {
+			dh.style.display = "none";
+		}
+		if (panel) {
+			panel.style.display = "block";
+		}
+		if (err) {
+			err.textContent = "";
+		}
+		var btn = document.getElementById("btnDatacToSetdata");
+		if (btn) {
+			btn.addEventListener("click", function () {
+				if (err) {
+					err.textContent = "";
+				}
+				var text = ta ? String(ta.value).trim() : "";
+				if (!text) {
+					if (err) {
+						err.textContent = "Saisissez une commande (ex. 100 LIKE dim:élém;année:2025 ou COPY …).";
+					}
+					return;
+				}
+				var nf = buildSetdataFormulaFromDatac(params.formula, text, "1");
+				if (!nf) {
+					if (err) {
+						err.textContent =
+							"Impossible de lire PALO.DATAC (base, cube, au moins un élément). Vérifiez la formule.";
+					}
+					return;
+				}
+				sendUpdateFormula(params.address, nf);
+			});
+		}
+	}
+
 	function excelFormulaStringLiteral(s) {
 		return '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"';
 	}
@@ -461,6 +535,12 @@
 				dh.style.display = "none";
 			}
 			runEnamePicker({ address: address, formula: formula });
+		} else if (isDatacContext(funcName, formula)) {
+			var dh2 = document.getElementById("defaultHint");
+			if (dh2) {
+				dh2.style.display = "none";
+			}
+			runDatacLikeCopyPanel({ address: address, formula: formula });
 		}
 	});
 })();

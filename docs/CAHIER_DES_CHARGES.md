@@ -274,6 +274,7 @@ Implémentations dans `SpreadsheetFuncs.cpp` / `SpreadsheetFuncs.h`, utilisées 
 
 - [Jedox Data Functions](https://knowledgebase.jedox.com/jedox/planning/jedox-data-functions.htm) — rôles **`PALO.DATA`**, **`PALO.DATAC`**, **`PALO.SETDATA`**, collecte d’appels.
 - [Splashing — troubleshooting](https://knowledgebase.jedox.com/jedox/planning/splashing-troubleshooting.htm) — écriture consolidée / erreurs fréquentes.
+- **Ce dépôt** — comportement historique **`LIKE` / `COPY`** et flux **Action** sur **`PALO.DATAC`** : voir [`docs/palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md).
 
 ---
 

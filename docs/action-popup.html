@@ -35,6 +35,20 @@
     }
     button.ename-item:hover { background: #e8f4fc; }
     #elistErr { color: #a4262c; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+    #datacLikeCopyPanel { display: none; margin-top: 14px; }
+    #datacLikeCopyPanel textarea {
+      width: 100%;
+      min-height: 72px;
+      box-sizing: border-box;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 13px;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    #datacLikeCopyPanel .datac-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    #datacLikeCopyPanel button.secondary { padding: 6px 10px; }
+    #datacErr { color: #a4262c; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
   </style>
 </head>
 <body>
@@ -54,10 +68,23 @@
     <div id="elistErr"></div>
   </div>
 
+  <div id="datacLikeCopyPanel">
+    <div class="k">Écriture type Jedox (LIKE / COPY)</div>
+    <p class="hint" id="datacHint">
+      Saisissez une commande du même style que l’ancien plugin (ex. <code>100 LIKE dim:élém;année:2025</code> ou <code>COPY dim:élém;année:2025</code>).
+      Voir la doc du dépôt : <code>docs/palo-like-copy-datac-action.md</code>.
+    </p>
+    <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 100 LIKE Réalisé;2025"></textarea>
+    <div class="datac-actions">
+      <button type="button" id="btnDatacToSetdata">Remplacer par PALO.SETDATA (splash 1)</button>
+    </div>
+    <div id="datacErr"></div>
+  </div>
+
   <button id="btnClose" type="button">Fermer</button>
 
-  <script src="ename-formula-args.js?v=1.0.59.0" type="text/javascript"></script>
-  <script src="md5.js?v=1.0.59.0" type="text/javascript"></script>
-  <script src="action-popup.js?v=1.0.59.0" type="text/javascript"></script>
+  <script src="ename-formula-args.js?v=1.0.60.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.60.0" type="text/javascript"></script>
+  <script src="action-popup.js?v=1.0.60.0" type="text/javascript"></script>
 </body>
 </html>

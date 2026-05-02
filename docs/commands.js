@@ -24,6 +24,15 @@
 		return u === "PALO.ENAME" || u === "ENAME" || /\.ENAME$/i.test(String(name || ""));
 	}
 
+	function isDatacRibbonFunction(name, formula) {
+		var u = String(name || "").toUpperCase();
+		if (u === "PALO.DATAC" || u === "DATAC" || /\.DATAC$/i.test(String(name || ""))) {
+			return true;
+		}
+		var g = String(formula || "").replace(/^\s*=\s*/, "");
+		return /^_xlfn\.PALO\.DATAC\s*\(/i.test(g) || /^PALO\.DATAC\s*\(/i.test(g.replace(/^_xlfn\./i, ""));
+	}
+
 	function buildActionDialogUrl(payload) {
 		var base = window.location.href.split("#")[0];
 		base = base.slice(0, base.lastIndexOf("/") + 1);
@@ -42,7 +51,7 @@
 		if (payload.enameEl) {
 			q.set("ename_el", payload.enameEl);
 		}
-		return base + "action-popup.html?v=1.0.59.0&" + q.toString();
+		return base + "action-popup.html?v=1.0.60.0&" + q.toString();
 	}
 
 	function isLocalA1Notation(loc) {
@@ -206,7 +215,9 @@
 		var dialogUrl = buildActionDialogUrl(payload);
 		var size = isEnameRibbonFunction(payload.functionName)
 			? { height: 55, width: 38, displayInIframe: true }
-			: { height: 40, width: 40, displayInIframe: true };
+			: isDatacRibbonFunction(payload.functionName, payload.formula)
+				? { height: 48, width: 44, displayInIframe: true }
+				: { height: 40, width: 40, displayInIframe: true };
 		return new Promise(function (resolve) {
 			Office.context.ui.displayDialogAsync(dialogUrl, size, function (asyncResult) {
 				if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {

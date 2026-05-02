@@ -1,4 +1,4 @@
-/* Parse des 3 premiers arguments de =PALO.ENAME(...) — partagé par commands.js et action-popup.js */
+/* Parse des arguments de =PALO.ENAME(...) / =PALO.DATAC(...) — partagé par commands.js et action-popup.js */
 (function (g) {
 	function parseTopLevelArgs(inner) {
 		var args = [];
@@ -104,6 +104,68 @@
 		return f.slice(start + 1, end);
 	}
 
+	function findPaloDatacArgumentListInner(formula) {
+		var f = String(formula == null ? "" : formula).trim();
+		if (f.charAt(0) === "=") {
+			f = f.slice(1).trim();
+		}
+		f = f.replace(/^_xlfn\./i, "");
+		if (!/^PALO\.DATAC\s*\(/i.test(f)) {
+			return null;
+		}
+		var start = f.indexOf("(");
+		var depth = 0;
+		var inStr = false;
+		var end = -1;
+		for (var i = start; i < f.length; i++) {
+			var c = f.charAt(i);
+			if (inStr) {
+				if (c === '"') {
+					if (i + 1 < f.length && f.charAt(i + 1) === '"') {
+						i++;
+						continue;
+					}
+					inStr = false;
+				}
+				continue;
+			}
+			if (c === '"') {
+				inStr = true;
+				continue;
+			}
+			if (c === "(") {
+				depth++;
+				continue;
+			}
+			if (c === ")") {
+				depth--;
+				if (depth === 0) {
+					end = i;
+					break;
+				}
+			}
+		}
+		if (end < 0) {
+			return null;
+		}
+		return f.slice(start + 1, end);
+	}
+
+	/** Tous les arguments expression de =PALO.DATAC(db, cube, el1, …) — au moins 3. */
+	function parsePaloDatacAllArgExpressions(formula) {
+		var inner = findPaloDatacArgumentListInner(formula);
+		if (!inner) {
+			return null;
+		}
+		var args = parseTopLevelArgs(inner);
+		if (args.length < 3) {
+			return null;
+		}
+		return args.map(function (a) {
+			return a.trim();
+		});
+	}
+
 	function parsePaloEnameFirstThreeArgExpressions(formula) {
 		var inner = findPaloEnameArgumentListInner(formula);
 		if (!inner) {
@@ -141,5 +203,6 @@
 	}
 
 	g.parsePaloEnameFirstThreeArgExpressions = parsePaloEnameFirstThreeArgExpressions;
+	g.parsePaloDatacAllArgExpressions = parsePaloDatacAllArgExpressions;
 	g.tryExcelFormulaStringLiteral = tryExcelFormulaStringLiteral;
 })(typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : this);
