@@ -1,5 +1,5 @@
 /* global Office */
-/* Popup « Action » : PALO.ENAME (liste d’éléments) ; PALO.DATAC (saisie LIKE/COPY → conversion PALO.SETDATA). */
+/* Popup « Action » : PALO.ENAME (liste d’éléments) ; PALO.DATAC (LIKE/COPY → /cell/replace, formule inchangée). */
 (function () {
 	var KEYS = {
 		url: "palo_connection_url",
@@ -29,6 +29,165 @@
 
 	function splitPaloCsvLine(line) {
 		return line.indexOf(";") >= 0 ? line.split(";") : line.split(",");
+	}
+
+	function looksLikePaloErrorDetail(s) {
+		var t = String(s || "")
+			.toLowerCase()
+			.replace(/\s+/g, " ")
+			.trim();
+		if (!t) {
+			return false;
+		}
+		return (
+			t.indexOf("erreur") !== -1 ||
+			t.indexOf("error") !== -1 ||
+			t.indexOf("invalid") !== -1 ||
+			t.indexOf("wrong") !== -1 ||
+			t.indexOf("missing") !== -1 ||
+			t.indexOf("failed") !== -1 ||
+			t.indexOf("internal") !== -1 ||
+			t.indexOf("permission") !== -1 ||
+			t.indexOf("denied") !== -1
+		);
+	}
+
+	function shortResponseExcerpt(text) {
+		var t = stripBom(String(text || "")).replace(/\s+/g, " ").trim();
+		if (!t) {
+			return "(vide)";
+		}
+		if (t.length > 220) {
+			return t.slice(0, 220) + "...";
+		}
+		return t;
+	}
+
+	function excerptCellApiBody(text) {
+		var t = stripBom(String(text || "")).replace(/\s+/g, " ").trim();
+		if (!t) {
+			return "(vide)";
+		}
+		var max = 1600;
+		if (t.length > max) {
+			return t.slice(0, max) + "...";
+		}
+		return t;
+	}
+
+	function redactPaloSidInUrl(url) {
+		return String(url || "").replace(/sid=[^&]*/gi, "sid=***");
+	}
+
+	function parsePaloStatus(text) {
+		var raw = stripBom(text);
+		var lines = raw
+			.split(/\r?\n/)
+			.map(function (line) {
+				return line.replace(/\s+$/, "");
+			})
+			.filter(function (line) {
+				return line.length;
+			});
+		if (!lines.length) {
+			return;
+		}
+		if (lines[0].charAt(0) === "<" || lines[0].toLowerCase().indexOf("<!doctype") !== -1) {
+			throw new Error(shortResponseExcerpt(lines[0]));
+		}
+		for (var li = 0; li < lines.length; li++) {
+			var line = lines[li];
+			var cells = splitPaloCsvLine(line);
+			var c0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
+			if (!/^[0-9]{1,10}$/.test(c0)) {
+				continue;
+			}
+			var code = parseInt(c0, 10);
+			if (code === 0) {
+				continue;
+			}
+			var c1 = cells.length > 1 ? stripPaloCsvField(String(cells[1] || "").trim()) : "";
+			if (code < 100) {
+				if (c1 === "ok" || c1 === "1" || c1 === "true" || c1 === "0") {
+					continue;
+				}
+				if (!looksLikePaloErrorDetail(c1) && !looksLikePaloErrorDetail(line)) {
+					continue;
+				}
+			}
+			var serverLine = line.length > 800 ? line.slice(0, 800) + "..." : line;
+			throw new Error(serverLine);
+		}
+		var low = raw.toLowerCase();
+		if (low.indexOf("erreur interne") !== -1 || low.indexOf("internal error") !== -1) {
+			throw new Error(shortResponseExcerpt(raw));
+		}
+	}
+
+	function fetchCellReplaceSplash(apiBase, sid, database, cube, pathArr, valueText, splashMode) {
+		var namePath = (pathArr || []).join(",");
+		var valueStr = String(valueText == null ? "" : valueText);
+		var sm = Math.round(Number(splashMode));
+		if (isNaN(sm) || sm < 0 || sm > 5) {
+			sm = 1;
+		}
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: database,
+			name_cube: cube,
+			name_path: namePath,
+			value: valueStr,
+			splash: String(sm),
+		});
+		var url = String(apiBase).replace(/\/$/, "") + "/cell/replace?" + q.toString();
+		return fetch(url, {
+			method: "GET",
+			mode: "cors",
+			cache: "no-store",
+			credentials: "omit",
+		}).then(function (res) {
+			return res.text().then(function (text) {
+				if (!res.ok) {
+					throw new Error(
+						"HTTP " + res.status + " — " + (excerptCellApiBody(text) || redactPaloSidInUrl(url)),
+					);
+				}
+				parsePaloStatus(text);
+			});
+		});
+	}
+
+	/** Base, cube et chemin en littéraux "…" uniquement (requis pour appeler /cell/replace depuis le popup). */
+	function parseDatacLiteralPathForReplace(formula) {
+		if (typeof parsePaloDatacAllArgExpressions !== "function" || typeof tryExcelFormulaStringLiteral !== "function") {
+			return { error: "Analyseur de formule indisponible." };
+		}
+		var args = parsePaloDatacAllArgExpressions(formula);
+		if (!args || args.length < 3) {
+			return { error: "Formule PALO.DATAC : au moins base, cube et un élément sont requis." };
+		}
+		var db = tryExcelFormulaStringLiteral(args[0]);
+		var cube = tryExcelFormulaStringLiteral(args[1]);
+		if (db == null || cube == null) {
+			return {
+				error:
+					"Pour le splash depuis ce popup, la base et le cube doivent être des chaînes littérales entre guillemets dans la formule.",
+			};
+		}
+		var path = [];
+		for (var i = 2; i < args.length; i++) {
+			var el = tryExcelFormulaStringLiteral(args[i]);
+			if (el == null) {
+				return {
+					error:
+						"Chaque élément du chemin doit être un littéral \"…\" (argument " +
+						(i - 1) +
+						"). Les références de cellules ne sont pas résolues ici pour l’écriture.",
+				};
+			}
+			path.push(el);
+		}
+		return { database: db, cube: cube, path: path };
 	}
 
 	function readSettingsFromLocalStorage() {
@@ -253,30 +412,6 @@
 		return /^PALO\.DATAC\s*\(/i.test(g);
 	}
 
-	function buildSetdataFormulaFromDatac(originalFormula, userCommandText, splashExpr) {
-		if (typeof parsePaloDatacAllArgExpressions !== "function") {
-			return null;
-		}
-		var args = parsePaloDatacAllArgExpressions(originalFormula);
-		if (!args || args.length < 3) {
-			return null;
-		}
-		var raw = String(originalFormula || "").trim();
-		var mLead = raw.match(/^(\s*=\s*)(_xlfn\.)?/i);
-		if (!mLead) {
-			return null;
-		}
-		var eqPart = mLead[1];
-		var xlfnPart = mLead[2] || "";
-		var se = splashExpr != null ? String(splashExpr).trim() : "1";
-		if (!/^-?[0-9]+$/.test(se)) {
-			se = "1";
-		}
-		var valueLit = excelFormulaStringLiteral(userCommandText);
-		var body = valueLit + "," + se + "," + args.join(",");
-		return eqPart + xlfnPart + "PALO.SETDATA(" + body + ")";
-	}
-
 	function runDatacLikeCopyPanel(params) {
 		var panel = document.getElementById("datacLikeCopyPanel");
 		var ta = document.getElementById("datacCommandInput");
@@ -290,29 +425,68 @@
 		}
 		if (err) {
 			err.textContent = "";
+			err.style.color = "";
 		}
-		var btn = document.getElementById("btnDatacToSetdata");
+		var btn = document.getElementById("btnDatacSplash");
 		if (btn) {
 			btn.addEventListener("click", function () {
 				if (err) {
 					err.textContent = "";
+					err.style.color = "";
 				}
 				var text = ta ? String(ta.value).trim() : "";
 				if (!text) {
 					if (err) {
+						err.style.color = "#a4262c";
 						err.textContent = "Saisissez une commande (ex. 100 LIKE dim:élém;année:2025 ou COPY …).";
 					}
 					return;
 				}
-				var nf = buildSetdataFormulaFromDatac(params.formula, text, "1");
-				if (!nf) {
+				var parsedPath = parseDatacLiteralPathForReplace(params.formula);
+				if (parsedPath.error) {
 					if (err) {
-						err.textContent =
-							"Impossible de lire PALO.DATAC (base, cube, au moins un élément). Vérifiez la formule.";
+						err.style.color = "#a4262c";
+						err.textContent = parsedPath.error;
 					}
 					return;
 				}
-				sendUpdateFormula(params.address, nf);
+				btn.disabled = true;
+				loadSettingsAsync()
+					.then(function (cfg) {
+						if (!cfg.url || !cfg.username) {
+							throw new Error("Configurez l’URL et l’utilisateur dans le volet Connexion (Palo).");
+						}
+						return getCachedSession(cfg);
+					})
+					.then(function (sess) {
+						if (!sess || !sess.apiBase || !sess.sid) {
+							throw new Error("Connexion serveur impossible.");
+						}
+						return fetchCellReplaceSplash(
+							sess.apiBase,
+							sess.sid,
+							parsedPath.database,
+							parsedPath.cube,
+							parsedPath.path,
+							text,
+							1,
+						);
+					})
+					.then(function () {
+						if (err) {
+							err.style.color = "#107c10";
+							err.textContent =
+								"Splash appliqué sur le cube. La formule PALO.DATAC de la cellule n’a pas été modifiée. Recalculez la feuille si la valeur affichée ne se met pas à jour.";
+						}
+						btn.disabled = false;
+					})
+					.catch(function (e) {
+						if (err) {
+							err.style.color = "#a4262c";
+							err.textContent = e && e.message ? e.message : String(e);
+						}
+						btn.disabled = false;
+					});
 			});
 		}
 	}

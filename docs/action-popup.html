@@ -72,19 +72,21 @@
     <div class="k">Écriture type Jedox (LIKE / COPY)</div>
     <p class="hint" id="datacHint">
       Saisissez une commande du même style que l’ancien plugin (ex. <code>100 LIKE dim:élém;année:2025</code> ou <code>COPY dim:élém;année:2025</code>).
-      Voir la doc du dépôt : <code>docs/palo-like-copy-datac-action.md</code>.
+      L’écriture cube (splash) est envoyée au serveur ; la formule <code>PALO.DATAC</code> de la cellule <strong>n’est pas modifiée</strong>.
+      Base, cube et chaque élément du chemin doivent être des chaînes littérales <code>"…"</code> dans la formule.
+      Voir <code>docs/palo-like-copy-datac-action.md</code>.
     </p>
     <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 100 LIKE Réalisé;2025"></textarea>
     <div class="datac-actions">
-      <button type="button" id="btnDatacToSetdata">Remplacer par PALO.SETDATA (splash 1)</button>
+      <button type="button" id="btnDatacSplash">Appliquer le splash (conserver PALO.DATAC)</button>
     </div>
     <div id="datacErr"></div>
   </div>
 
   <button id="btnClose" type="button">Fermer</button>
 
-  <script src="ename-formula-args.js?v=1.0.61.0" type="text/javascript"></script>
-  <script src="md5.js?v=1.0.61.0" type="text/javascript"></script>
-  <script src="action-popup.js?v=1.0.61.0" type="text/javascript"></script>
+  <script src="ename-formula-args.js?v=1.0.62.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.62.0" type="text/javascript"></script>
+  <script src="action-popup.js?v=1.0.62.0" type="text/javascript"></script>
 </body>
 </html>

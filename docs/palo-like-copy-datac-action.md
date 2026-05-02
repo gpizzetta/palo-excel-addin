@@ -57,10 +57,9 @@ Lorsque l’utilisateur ouvre **Action** sur une formule **`PALO.DATAC`** :
    ou  
    `COPY dimension1:élémA;dimension2:élémB`  
    (et variantes documentées côté Jedox / §2–3).
-2. Un bouton permet de **remplacer** la formule de la cellule par  
-   **`=PALO.SETDATA("…chaîne saisie…", 1, <mêmes arguments que le DATAC>)`**  
-   (splash `1` = *default* côté HTTP, aligné sur `normalizeSplashMode` dans `functions.js`). L’utilisateur peut ensuite ajuster le splash ou la formule à la main si besoin.
-3. Tant que le parser complet LIKE/COPY n’est pas porté en JS, le **résultat effectif** sur le cube dépend du **serveur** et de la valeur transmise comme chaîne brute ; la doc ci-dessus sert de **référence fonctionnelle** pour le portage ultérieur.
+2. Un bouton envoie la chaîne au serveur via **`GET /cell/replace`** (même contrat que `PALO.SETDATA` dans `functions.js`) avec **splash `1`** (*default* HTTP), en utilisant le **chemin** dérivé des arguments de **`PALO.DATAC`**. La **formule de la cellule reste `=PALO.DATAC(...)`** ; elle n’est pas remplacée par `PALO.SETDATA`.
+3. **Contrainte actuelle du popup** : base, cube et chaque coordonnée doivent être des **littéraux** `"…"` dans la formule (pas de références de cellules résolues côté dialogue). Sinon un message d’erreur invite à simplifier la formule ou à utiliser une autre voie.
+4. Tant que le parser complet LIKE/COPY n’est pas porté en JS, le **comportement sur le cube** dépend surtout du **serveur** et de la chaîne envoyée telle quelle ; la doc §2–3 reste la **référence fonctionnelle** pour un portage ultérieur côté client.
 
 ## 6. Références externes
 
