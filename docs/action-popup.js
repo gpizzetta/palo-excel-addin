@@ -211,140 +211,21 @@
 		return String(apiBase).replace(/\/$/, "") + "/dimension/elements?" + q.toString();
 	}
 
-	function parseStringLiteral(arg) {
-		var t = String(arg == null ? "" : arg).trim();
-		if (t.length < 2 || t.charAt(0) !== '"') {
-			return null;
-		}
-		var out = "";
-		for (var i = 1; i < t.length; i++) {
-			var c = t.charAt(i);
-			if (c === '"') {
-				if (i + 1 < t.length && t.charAt(i + 1) === '"') {
-					out += '"';
-					i++;
-					continue;
-				}
-				if (i === t.length - 1) {
-					return out;
-				}
-				return null;
-			}
-			out += c;
-		}
-		return null;
-	}
-
-	function parseTopLevelArgs(inner) {
-		var args = [];
-		var cur = "";
-		var depth = 0;
-		var inStr = false;
-		var i = 0;
-		while (i < inner.length) {
-			var c = inner.charAt(i);
-			if (inStr) {
-				if (c === '"') {
-					if (i + 1 < inner.length && inner.charAt(i + 1) === '"') {
-						cur += '""';
-						i += 2;
-						continue;
-					}
-					inStr = false;
-					cur += c;
-					i++;
-					continue;
-				}
-				cur += c;
-				i++;
-				continue;
-			}
-			if (c === '"') {
-				inStr = true;
-				cur += c;
-				i++;
-				continue;
-			}
-			if (c === "(") {
-				depth++;
-				cur += c;
-				i++;
-				continue;
-			}
-			if (c === ")") {
-				depth--;
-				cur += c;
-				i++;
-				continue;
-			}
-			if (c === "," && depth === 0) {
-				args.push(cur.trim());
-				cur = "";
-				i++;
-				continue;
-			}
-			cur += c;
-			i++;
-		}
-		if (cur.trim()) {
-			args.push(cur.trim());
-		}
-		return args;
-	}
-
+	/** Littéraux uniquement (sans résolution Excel côté commands). */
 	function parseEnameLiteralArgs(formula) {
-		var f = String(formula == null ? "" : formula).trim();
-		if (f.charAt(0) === "=") {
-			f = f.slice(1).trim();
-		}
-		f = f.replace(/^_xlfn\./i, "");
-		var m = f.match(/^PALO\.ENAME\s*\(/i);
-		if (!m) {
+		if (typeof parsePaloEnameFirstThreeArgExpressions !== "function") {
 			return null;
 		}
-		var start = f.indexOf("(");
-		var depth = 0;
-		var inStr = false;
-		var end = -1;
-		for (var i = start; i < f.length; i++) {
-			var c = f.charAt(i);
-			if (inStr) {
-				if (c === '"') {
-					if (i + 1 < f.length && f.charAt(i + 1) === '"') {
-						i++;
-						continue;
-					}
-					inStr = false;
-				}
-				continue;
-			}
-			if (c === '"') {
-				inStr = true;
-				continue;
-			}
-			if (c === "(") {
-				depth++;
-				continue;
-			}
-			if (c === ")") {
-				depth--;
-				if (depth === 0) {
-					end = i;
-					break;
-				}
-			}
-		}
-		if (end < 0) {
+		if (typeof tryExcelFormulaStringLiteral !== "function") {
 			return null;
 		}
-		var inner = f.slice(start + 1, end);
-		var args = parseTopLevelArgs(inner);
-		if (args.length < 3) {
+		var exprs = parsePaloEnameFirstThreeArgExpressions(formula);
+		if (!exprs) {
 			return null;
 		}
-		var db = parseStringLiteral(args[0]);
-		var dim = parseStringLiteral(args[1]);
-		var el = parseStringLiteral(args[2]);
+		var db = tryExcelFormulaStringLiteral(exprs[0]);
+		var dim = tryExcelFormulaStringLiteral(exprs[1]);
+		var el = tryExcelFormulaStringLiteral(exprs[2]);
 		if (db == null || dim == null || el == null) {
 			return null;
 		}
@@ -465,7 +346,15 @@
 
 	function runEnamePicker(params) {
 		var formulaRaw = q("formula");
-		var parsed = parseEnameLiteralArgs(formulaRaw);
+		var dbQ = q("ename_db");
+		var dimQ = q("ename_dim");
+		var elQ = q("ename_el");
+		var parsed = null;
+		if (dbQ && dimQ && elQ) {
+			parsed = { database: dbQ, dimension: dimQ, element: elQ };
+		} else {
+			parsed = parseEnameLiteralArgs(formulaRaw);
+		}
 		var elHost = document.getElementById("enamePicker");
 		var elList = document.getElementById("enameList");
 		var elHint = document.getElementById("enameHint");
@@ -475,8 +364,10 @@
 			}
 			setText(
 				"elistErr",
-				"PALO.ENAME : les trois premiers arguments doivent être des chaînes littérales " +
-					'(ex. ="Base","Dim","Élément") pour afficher la liste.',
+				"Impossible d’obtenir la base, la dimension et l’élément. Utilisez des chaînes " +
+					'(ex. "dwh","Dim","Paris"), ou des références vers ce classeur : A1, Feuille!B2, \'Ma feuille\'!C3 (valeurs lues par le complément). ' +
+					"Références vers un autre fichier du type [Autre.xlsx]Feuille!A1 : Excel les calcule, mais le complément ne peut pas les lire — mettez la valeur dans une cellule de ce classeur (ex. =[Autre.xlsx]Feuille!A1) et référencez cette cellule. " +
+					"Formules complexes : cellules intermédiaires.",
 			);
 			return;
 		}

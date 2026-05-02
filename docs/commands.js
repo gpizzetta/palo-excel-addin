@@ -33,7 +33,152 @@
 			value: payload.value || "",
 			address: payload.address || "",
 		});
-		return base + "action-popup.html?v=1.0.50.0&" + q.toString();
+		if (payload.enameDb) {
+			q.set("ename_db", payload.enameDb);
+		}
+		if (payload.enameDim) {
+			q.set("ename_dim", payload.enameDim);
+		}
+		if (payload.enameEl) {
+			q.set("ename_el", payload.enameEl);
+		}
+		return base + "action-popup.html?v=1.0.52.0&" + q.toString();
+	}
+
+	function isLocalA1Notation(loc) {
+		return /^\$?[A-Za-z]{1,3}\$?[0-9]{1,7}$/.test(String(loc || "").trim());
+	}
+
+	/**
+	 * Référence une cellule : même classeur — A1, Feuille!B2, 'Ma feuille'!C3.
+	 * Autre classeur — [fichier.xlsx]Feuil!A1 : détecté mais non résolu ici (voir message dans le popup).
+	 */
+	function parseSingleCellReference(expr) {
+		var t = String(expr || "").trim();
+		if (!t) {
+			return null;
+		}
+		if (t.indexOf(":") >= 0) {
+			return null;
+		}
+		/** Excel : [Classeur.xlsx]Feuille!$A$1 — le moteur de calcul Excel y accède ; Office.js ne lit que le classeur hôte. */
+		var extM = t.match(/^\[([^\]]+)\]([^!]+)!(.+)$/);
+		if (extM) {
+			var locExt = extM[3].trim();
+			if (!isLocalA1Notation(locExt)) {
+				return null;
+			}
+			return { external: true };
+		}
+		if (/[\[\]#@]/.test(t)) {
+			return null;
+		}
+		if (/^'/.test(t)) {
+			var m = t.match(/^'((?:''|[^'])*)'!(.+)$/);
+			if (!m) {
+				return null;
+			}
+			var sheet = m[1].replace(/''/g, "'");
+			var loc = m[2].trim();
+			if (!isLocalA1Notation(loc)) {
+				return null;
+			}
+			return { sheet: sheet, local: loc };
+		}
+		var bang = t.indexOf("!");
+		if (bang >= 0) {
+			var sheetPart = t.slice(0, bang).trim();
+			var loc = t.slice(bang + 1).trim();
+			if (!sheetPart || !isLocalA1Notation(loc)) {
+				return null;
+			}
+			return { sheet: sheetPart, local: loc };
+		}
+		if (!isLocalA1Notation(t)) {
+			return null;
+		}
+		return { sheet: null, local: t };
+	}
+
+
+	/**
+	 * Résout base / dimension / élément : chaînes littérales ou valeurs des cellules référencées
+	 * (équivalent pratique à « remonter à la source » pour des références simples).
+	 */
+	function resolvePaloEnameArgsFromFormula(ctx, cell, formula) {
+		if (typeof parsePaloEnameFirstThreeArgExpressions !== "function") {
+			return Promise.resolve(null);
+		}
+		var exprs = parsePaloEnameFirstThreeArgExpressions(formula);
+		if (!exprs) {
+			return Promise.resolve(null);
+		}
+		var resolved = [null, null, null];
+		var pending = [];
+		for (var i = 0; i < 3; i++) {
+			var lit =
+				typeof tryExcelFormulaStringLiteral === "function"
+					? tryExcelFormulaStringLiteral(exprs[i])
+					: null;
+			if (lit !== null) {
+				resolved[i] = lit;
+			} else {
+				pending.push({ i: i, expr: exprs[i] });
+			}
+		}
+		if (!pending.length) {
+			return resolved[0] && resolved[1] && resolved[2]
+				? Promise.resolve(resolved)
+				: Promise.resolve(null);
+		}
+		for (var p = 0; p < pending.length; p++) {
+			var addr = parseSingleCellReference(pending[p].expr);
+			if (!addr) {
+				return Promise.resolve(null);
+			}
+			if (addr.external) {
+				return Promise.resolve(null);
+			}
+			pending[p]._addr = addr;
+			if (addr.sheet) {
+				if (typeof ctx.workbook.worksheets.getItemOrNullObject === "function") {
+					pending[p]._ws = ctx.workbook.worksheets.getItemOrNullObject(addr.sheet);
+					pending[p]._ws.load("isNullObject");
+				} else {
+					pending[p]._ws = ctx.workbook.worksheets.getItem(addr.sheet);
+					pending[p]._wsReady = true;
+				}
+			} else {
+				pending[p]._ws = cell.worksheet;
+				pending[p]._wsReady = true;
+			}
+		}
+		return ctx.sync().then(function () {
+			for (var pi = 0; pi < pending.length; pi++) {
+				var pobj = pending[pi];
+				var ws = pobj._ws;
+				if (!pobj._wsReady && ws.isNullObject) {
+					return null;
+				}
+				var rng = ws.getRange(pobj._addr.local);
+				rng.load("values");
+				pobj.rng = rng;
+			}
+			return ctx.sync().then(function () {
+				for (var q = 0; q < pending.length; q++) {
+					var it = pending[q];
+					var v =
+						it.rng.values &&
+						it.rng.values[0] &&
+						it.rng.values[0][0] !== undefined &&
+						it.rng.values[0][0] !== null
+							? String(it.rng.values[0][0]).trim()
+							: "";
+					resolved[it.i] = v;
+				}
+				return resolved[0] && resolved[1] && resolved[2] ? resolved : null;
+			});
+		});
 	}
 
 	function applyFormulaToAddress(address, formula) {
@@ -107,6 +252,7 @@
 		Excel.run(function (ctx) {
 			var cell = ctx.workbook.getActiveCell();
 			cell.load(["address", "formulas", "values"]);
+			cell.worksheet.load("name");
 			return ctx.sync().then(function () {
 				var formula = "";
 				if (cell.formulas && cell.formulas[0] && cell.formulas[0][0] != null) {
@@ -117,12 +263,27 @@
 					value = String(cell.values[0][0]);
 				}
 				var fn = detectFunctionName(formula);
-				return {
+				var payload = {
 					address: cell.address || "",
 					formula: formula,
 					value: value,
 					functionName: fn,
 				};
+				if (!isEnameRibbonFunction(fn) || !formula) {
+					return payload;
+				}
+				return resolvePaloEnameArgsFromFormula(ctx, cell, formula)
+					.then(function (triple) {
+						if (triple && triple[0] && triple[1] && triple[2]) {
+							payload.enameDb = triple[0];
+							payload.enameDim = triple[1];
+							payload.enameEl = triple[2];
+						}
+						return payload;
+					})
+					.catch(function () {
+						return payload;
+					});
 			});
 		})
 			.catch(function (err) {
