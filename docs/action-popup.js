@@ -259,6 +259,30 @@
 		);
 	}
 
+	/**
+	 * Ne remplace que le 3ᵉ argument (élément) ; conserve les expressions d’origine
+	 * pour la base et la dimension (littéraux ou références de cellules).
+	 */
+	function buildUpdatedEnameFormulaPreservingArgs12(originalFormula, newElementName) {
+		var raw = String(originalFormula || "").trim();
+		if (!raw || typeof parsePaloEnameFirstThreeArgExpressions !== "function") {
+			return null;
+		}
+		var exprs = parsePaloEnameFirstThreeArgExpressions(raw);
+		if (!exprs || exprs.length < 3) {
+			return null;
+		}
+		var mLead = raw.match(/^(\s*=\s*)(_xlfn\.)?/i);
+		if (!mLead) {
+			return null;
+		}
+		var eqPart = mLead[1];
+		var xlfnPart = mLead[2] || "";
+		var newThird = excelFormulaStringLiteral(newElementName);
+		var body = exprs[0] + "," + exprs[1] + "," + newThird;
+		return eqPart + xlfnPart + "PALO.ENAME(" + body + ")";
+	}
+
 	function fetchDimensionElementNamesSorted(apiBase, sid, nameDatabase, nameDimension) {
 		var url = buildDimensionElementsRequestUrl(apiBase, sid, nameDatabase, nameDimension);
 		return fetch(url, {
@@ -406,7 +430,9 @@
 						row.className = "ename-item";
 						row.textContent = name;
 						row.addEventListener("click", function () {
-							var newFormula = buildEnameFormula(parsed.database, parsed.dimension, name);
+							var newFormula =
+								buildUpdatedEnameFormulaPreservingArgs12(formulaRaw, name) ||
+								buildEnameFormula(parsed.database, parsed.dimension, name);
 							sendUpdateFormula(params.address, newFormula);
 						});
 						elList.appendChild(row);
