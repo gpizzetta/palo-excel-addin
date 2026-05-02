@@ -5,7 +5,7 @@
   xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
   xsi:type="TaskPaneApp">
   <Id>0aa7607a-b26c-4d33-9fb8-39c570d9bdc5</Id>
-  <Version>1.0.63.0</Version>
+  <Version>1.0.66.0</Version>
   <ProviderName>Palo</ProviderName>
   <DefaultLocale>fr-FR</DefaultLocale>
   <DisplayName DefaultValue="Palo"/>
@@ -20,7 +20,7 @@
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.63.0"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.66.0"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
@@ -128,7 +128,7 @@
           </ExtensionPoint>
           <ExtensionPoint xsi:type="ContextMenu">
             <OfficeMenu id="ContextMenuCell">
-              <Control xsi:type="Button" id="Palo.ActionContextMenu">
+              <Control xsi:type="Menu" id="Palo.ActionContextMenu">
                 <Label resid="Palo.ActionContextLabel"/>
                 <Supertip>
                   <Title resid="Palo.ActionContextSuperTitle"/>
@@ -139,9 +139,23 @@
                   <bt:Image size="32" resid="Icon.32x32"/>
                   <bt:Image size="80" resid="Icon.80x80"/>
                 </Icon>
-                <Action xsi:type="ExecuteFunction">
-                  <FunctionName>showActionPopup</FunctionName>
-                </Action>
+                <Items>
+                  <Item id="Palo.ActionContextMenuItem">
+                    <Label resid="Palo.ActionContextItemLabel"/>
+                    <Supertip>
+                      <Title resid="Palo.ActionContextItemSuperTitle"/>
+                      <Description resid="Palo.ActionTip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16x16"/>
+                      <bt:Image size="32" resid="Icon.32x32"/>
+                      <bt:Image size="80" resid="Icon.80x80"/>
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>showActionPopup</FunctionName>
+                    </Action>
+                  </Item>
+                </Items>
               </Control>
             </OfficeMenu>
           </ExtensionPoint>
@@ -162,13 +176,13 @@
         <bt:Image id="User.Icon.80x80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/palo_user_80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.63.0"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.63.0"/>
-        <bt:Url id="Taskpane.Explore.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-explore.html?v=1.0.63.0"/>
-        <bt:Url id="Taskpane.Users.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-users.html?v=1.0.63.0"/>
-        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.63.0"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.63.0"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.63.0"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.66.0"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-connection.html?v=1.0.66.0"/>
+        <bt:Url id="Taskpane.Explore.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-explore.html?v=1.0.66.0"/>
+        <bt:Url id="Taskpane.Users.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane-users.html?v=1.0.66.0"/>
+        <bt:Url id="Functions.Script.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.66.0"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.66.0"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.66.0"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
@@ -180,10 +194,12 @@
         <bt:String id="Palo.UsersLabel" DefaultValue="Utilisateurs"/>
         <bt:String id="Palo.ActionLabel" DefaultValue="Action"/>
         <bt:String id="Palo.ActionContextLabel" DefaultValue="Palo Action"/>
-        <bt:String id="Palo.ActionContextSuperTitle" DefaultValue="&#x00a0;"/>
+        <bt:String id="Palo.ActionContextSuperTitle" DefaultValue="ENAME ou DATAC"/>
+        <bt:String id="Palo.ActionContextItemLabel" DefaultValue="Ouvrir…"/>
+        <bt:String id="Palo.ActionContextItemSuperTitle" DefaultValue="Fenêtre Action"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="Palo.ActionContextSuperDesc" DefaultValue=" "/>
+        <bt:String id="Palo.ActionContextSuperDesc" DefaultValue="Selon la formule : choisir un élément (PALO.ENAME) ou LIKE/COPY sur le cube (PALO.DATAC). Littéraux et références vers ce classeur."/>
         <bt:String id="Palo.ConnectTip" DefaultValue="Configurer l’URL du serveur Palo et les identifiants pour ce classeur."/>
         <bt:String id="Palo.ExploreTip" DefaultValue="Lister les bases, puis les dimensions et les cubes de la base sélectionnée."/>
         <bt:String id="Palo.UsersTip" DefaultValue="Gérer les comptes serveur (liste depuis la dimension #_USERS_, création, suppression)."/>
