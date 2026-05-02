@@ -21,6 +21,8 @@ Office met souvent en **cache** le manifeste et les scripts. Pour forcer une nou
 2. **Retirer** le complément puis **le recharger** (nouveau fichier manifest ou même URL Pages après `git push`).
 3. Si rien ne change : fermer Excel, navigation privée, ou vider le cache Office (selon la plateforme).
 
+**Excel sur le web** : l’entrée personnalisée du **menu contextuel** (ex. « Palo Action ») peut s’afficher **sans icône** et sur **deux lignes** malgré un manifeste valide — limitation côté hôte, suivie par Microsoft ([office-js#6381](https://github.com/OfficeDev/office-js/issues/6381)). Sur **Excel bureau**, le rendu est en général plus proche d’une ligne « icône + libellé ».
+
 Ne change `<Id>` **que** si tu veux un **nouveau** complément aux yeux d’Excel (sinon garde le même GUID).
 
 Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) avant de retester.
