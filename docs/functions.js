@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.55.0";
+var ADDIN_VERSION = "1.0.56.0";
 
 /**
  * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
