@@ -229,6 +229,10 @@
       text-align: left;
     }
     ul.list li.cube-row:hover { background: #f3f2f1; }
+    .tech-explore-row {
+      margin: 6px 0 14px 0;
+    }
+    .tech-explore-row button { font-size: 13px; }
     .rules-head {
       display: flex;
       align-items: center;
@@ -296,6 +300,11 @@
 
   <div id="viewDetail">
     <p class="detail-head" id="detailTitle"></p>
+    <p class="tech-explore-row">
+      <button type="button" id="btnToggleTechnicalExplore" class="secondary" aria-pressed="false">
+        Afficher dimensions / cubes techniques (#)
+      </button>
+    </p>
     <h2>Dimensions</h2>
     <p id="dimRightsHint" class="hint" style="display: none;" role="note"></p>
     <div id="dimAddRow" class="dim-add">
@@ -343,7 +352,7 @@
     Utilise les identifiants enregistrés dans <strong>Connexion</strong>. Clique un <strong>cube</strong> pour voir ses dimensions et ses règles. La gestion des utilisateurs : ruban <strong>Utilisateurs</strong>. L’API HTTP Palo (Jedox) doit être joignable (HTTPS + CORS si besoin).
   </p>
 
-  <script src="md5.js?v=1.0.54.0" type="text/javascript"></script>
-  <script src="taskpane-explore.js?v=1.0.54.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.55.0" type="text/javascript"></script>
+  <script src="taskpane-explore.js?v=1.0.55.0" type="text/javascript"></script>
 </body>
 </html>

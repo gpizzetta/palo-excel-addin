@@ -18,8 +18,12 @@
 		dimensionElements: [],
 		/** Id Jedox de la dimension d’attributs (#…) liée à la dimension courante (`/dimension/info`, colonne attributes_dimension). */
 		attributesDimensionId: null,
-		/** Dimensions chargées pour la base affichée (ordre = liste API) — résolution des ids cube/info. */
+		/** Dimensions chargées pour la base affichée (ordre = liste API) — résolution des ids cube/info (liste complète API). */
 		dimensionsForCurrentDb: [],
+		/** Cubes chargés pour la base affichée (liste complète API). */
+		cubesForCurrentDb: [],
+		/** Afficher dimensions / cubes dont le nom contient « # » (objets techniques Jedox). */
+		showTechnicalExploreObjects: false,
 		/** Cube ouvert dans le panneau dimensions + règles. */
 		selectedCube: null,
 	};
@@ -271,6 +275,42 @@
 
 	function permissionAllowsWrite(perm) {
 		return perm === "W" || perm === "D";
+	}
+
+	function isTechnicalExplorerName(name) {
+		return String(name || "").indexOf("#") >= 0;
+	}
+
+	function filterExplorerListForUi(items) {
+		if (state.showTechnicalExploreObjects) {
+			return items;
+		}
+		var out = [];
+		for (var i = 0; i < items.length; i++) {
+			if (!isTechnicalExplorerName(items[i].name)) {
+				out.push(items[i]);
+			}
+		}
+		return out;
+	}
+
+	function updateTechnicalExploreToggleUi() {
+		var btn = document.getElementById("btnToggleTechnicalExplore");
+		if (!btn) {
+			return;
+		}
+		btn.textContent = state.showTechnicalExploreObjects
+			? "Masquer dimensions / cubes techniques (#)"
+			: "Afficher dimensions / cubes techniques (#)";
+		btn.setAttribute("aria-pressed", state.showTechnicalExploreObjects ? "true" : "false");
+	}
+
+	function onToggleTechnicalExplore() {
+		state.showTechnicalExploreObjects = !state.showTechnicalExploreObjects;
+		updateTechnicalExploreToggleUi();
+		if (state.dimensionsForCurrentDb.length || state.cubesForCurrentDb.length) {
+			renderLists(state.dimensionsForCurrentDb, state.cubesForCurrentDb);
+		}
 	}
 
 	/** Dimensions système (non supprimables via l’UI). */
@@ -801,7 +841,7 @@
 			return;
 		}
 		var qs = new URLSearchParams(queryParams);
-		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.54.0&" + qs.toString();
+		var url = getAddinPageBaseUrl() + htmlFile + "?v=1.0.55.0&" + qs.toString();
 		/** Nouvel objet à chaque appel : Excel sur le web peut enrichir l’objet options (ex. callback) ; le réutiliser provoque « le rappel ne peut pas être spécifié à la fois… » au 2ᵉ affichage. */
 		var dialogOpts = {
 			height: dialogSize && dialogSize.height != null ? dialogSize.height : 90,
@@ -1465,6 +1505,9 @@
 
 	function renderLists(dimensions, cubes) {
 		state.dimensionsForCurrentDb = dimensions;
+		state.cubesForCurrentDb = cubes;
+		var dimsUi = filterExplorerListForUi(dimensions);
+		var cubesUi = filterExplorerListForUi(cubes);
 
 		function fillCubes(ulId, emptyId, items, labelField) {
 			var ul = document.getElementById(ulId);
@@ -1499,11 +1542,11 @@
 		while (ulDim.firstChild) {
 			ulDim.removeChild(ulDim.firstChild);
 		}
-		if (!dimensions.length) {
+		if (!dimsUi.length) {
 			emptyDim.style.display = "block";
 		} else {
 			emptyDim.style.display = "none";
-			for (var j = 0; j < dimensions.length; j++) {
+			for (var j = 0; j < dimsUi.length; j++) {
 				(function (dim) {
 					var li = document.createElement("li");
 					li.className = "dim-row";
@@ -1527,10 +1570,11 @@
 						li.appendChild(delBtn);
 					}
 					ulDim.appendChild(li);
-				})(dimensions[j]);
+				})(dimsUi[j]);
 			}
 		}
-		fillCubes("listCubes", "emptyCubes", cubes, "name");
+		fillCubes("listCubes", "emptyCubes", cubesUi, "name");
+		updateTechnicalExploreToggleUi();
 	}
 
 	function showView(which) {
@@ -1562,6 +1606,8 @@
 		state.selectedDimension = null;
 		state.selectedCube = null;
 		state.dimensionsForCurrentDb = [];
+		state.cubesForCurrentDb = [];
+		state.showTechnicalExploreObjects = false;
 		state.databasePermission = null;
 		setStatus("Chargement…", "");
 		document.getElementById("detailTitle").textContent = "Base : " + db.name;
@@ -1639,6 +1685,8 @@
 				state.selectedDimension = null;
 				state.selectedCube = null;
 				state.dimensionsForCurrentDb = [];
+				state.cubesForCurrentDb = [];
+				state.showTechnicalExploreObjects = false;
 				state.databasePermission = null;
 				state.dimensionElements = [];
 				state.attributesDimensionId = null;
@@ -1680,6 +1728,11 @@
 	Office.onReady(function () {
 		document.getElementById("btnRefresh").addEventListener("click", refreshAll);
 		document.getElementById("btnBack").addEventListener("click", onBack);
+		var btnTech = document.getElementById("btnToggleTechnicalExplore");
+		if (btnTech) {
+			btnTech.addEventListener("click", onToggleTechnicalExplore);
+			updateTechnicalExploreToggleUi();
+		}
 		var btnDim = document.getElementById("btnOpenCreateDimension");
 		var btnCube = document.getElementById("btnOpenCreateCube");
 		if (btnDim) {
