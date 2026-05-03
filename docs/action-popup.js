@@ -441,33 +441,523 @@
 		return /^PALO\.DATAC\s*\(/i.test(g);
 	}
 
-	function runDatacLikeCopyPanel(params) {
-		var panel = document.getElementById("datacLikeCopyPanel");
-		var ta = document.getElementById("datacCommandInput");
-		var err = document.getElementById("datacErr");
-		var dh = document.getElementById("defaultHint");
-		if (dh) {
-			dh.style.display = "none";
-		}
-		if (panel) {
-			panel.style.display = "block";
-		}
-		if (err) {
-			err.textContent = "";
-			err.style.color = "";
-		}
-		var btn = document.getElementById("btnDatacSplash");
-		if (btn) {
-			btn.addEventListener("click", function () {
-				if (err) {
-					err.textContent = "";
-					err.style.color = "";
+	/** Jedox : type élément « consolidé » (colonne type /dimension/elements, ex. C++ PaloSpreadsheetFuncs). */
+	var DATAC_ELEMENT_TYPE_CONSOLIDATED = 4;
+
+	var datacGuidedWired = false;
+	var datacRuntimeCtx = null;
+
+	function fetchTextNoStore(url) {
+		return fetch(url, {
+			method: "GET",
+			mode: "cors",
+			cache: "no-store",
+			credentials: "omit",
+		}).then(function (res) {
+			return res.text().then(function (text) {
+				if (!res.ok) {
+					throw new Error("HTTP " + res.status + " — " + excerptCellApiBody(text));
 				}
+				return text;
+			});
+		});
+	}
+
+	function parseIdNameListFromCsv(text) {
+		var lines = stripBom(text)
+			.split(/\r?\n/)
+			.map(function (line) {
+				return line.replace(/\s+$/, "");
+			})
+			.filter(function (line) {
+				return line.length;
+			});
+		var list = [];
+		for (var i = 0; i < lines.length; i++) {
+			if (lines[i].charAt(0) === "<") {
+				continue;
+			}
+			var cells = splitPaloCsvLine(lines[i]);
+			if (!cells || cells.length < 2) {
+				continue;
+			}
+			var id = stripPaloCsvField(cells[0]).trim();
+			var name = stripPaloCsvField(cells[1]).trim();
+			if (!/^[0-9]+$/.test(id) || !name) {
+				continue;
+			}
+			list.push({ id: id, name: name });
+		}
+		return list;
+	}
+
+	function parseCubeInfoDimensionIdsFromCsv(text) {
+		var lines = stripBom(text)
+			.split(/\r?\n/)
+			.map(function (line) {
+				return line.replace(/\s+$/, "");
+			})
+			.filter(function (line) {
+				return line.length;
+			});
+		if (!lines.length) {
+			return [];
+		}
+		var cells = splitPaloCsvLine(lines[0]);
+		if (!cells || cells.length < 4) {
+			cells = lines[0].split(";").map(function (c) {
+				return c.trim();
+			});
+		}
+		if (!cells || cells.length < 4) {
+			return [];
+		}
+		var raw = stripPaloCsvField(cells[3]);
+		if (!raw || !String(raw).trim()) {
+			return [];
+		}
+		return String(raw)
+			.split(",")
+			.map(function (x) {
+				return x.trim();
+			})
+			.filter(function (x) {
+				return /^[0-9]+$/.test(x);
+			});
+	}
+
+	function cubeIdFromName(cubes, cubeName) {
+		var want = String(cubeName || "").trim();
+		for (var i = 0; i < cubes.length; i++) {
+			if (cubes[i].name === want) {
+				return cubes[i].id;
+			}
+		}
+		return null;
+	}
+
+	function dimensionNameById(dimList, dimId) {
+		for (var i = 0; i < dimList.length; i++) {
+			if (dimList[i].id === String(dimId)) {
+				return dimList[i].name;
+			}
+		}
+		return null;
+	}
+
+	function parseDimensionElementRow(line) {
+		var cells = splitPaloCsvLine(line);
+		if (!cells || cells.length < 7) {
+			return null;
+		}
+		var id = stripPaloCsvField(cells[0]).trim();
+		var name = stripPaloCsvField(cells[1]).trim();
+		var typeStr = stripPaloCsvField(cells[6]).trim();
+		var typeNum = parseInt(typeStr, 10);
+		if (!/^[0-9]+$/.test(id) || !name) {
+			return null;
+		}
+		if (isNaN(typeNum)) {
+			typeNum = null;
+		}
+		return { id: id, name: name, type: typeNum };
+	}
+
+	function findElementRowInDimensionCsv(text, elementName) {
+		var want = String(elementName || "").trim();
+		var lines = stripBom(text)
+			.split(/\r?\n/)
+			.map(function (line) {
+				return line.replace(/\s+$/, "");
+			})
+			.filter(function (line) {
+				return line.length;
+			});
+		for (var i = 0; i < lines.length; i++) {
+			if (lines[i].charAt(0) === "<") {
+				continue;
+			}
+			var row = parseDimensionElementRow(lines[i]);
+			if (row && row.name === want) {
+				return row;
+			}
+		}
+		return null;
+	}
+
+	function loadCubesList(apiBase, sid, nameDatabase) {
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: nameDatabase,
+			show_system: "1",
+			show_attribute: "1",
+			show_info: "1",
+		});
+		var url = String(apiBase).replace(/\/$/, "") + "/database/cubes?" + q.toString();
+		return fetchTextNoStore(url).then(parseIdNameListFromCsv);
+	}
+
+	function loadCubeDimensionIds(apiBase, sid, nameDatabase, cubeId) {
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: nameDatabase,
+			cube: String(cubeId),
+		});
+		var url = String(apiBase).replace(/\/$/, "") + "/cube/info?" + q.toString();
+		return fetchTextNoStore(url).then(parseCubeInfoDimensionIdsFromCsv);
+	}
+
+	function loadDatabaseDimensionsList(apiBase, sid, nameDatabase) {
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: nameDatabase,
+			show_system: "1",
+			show_normal: "1",
+			show_attribute: "0",
+			show_virtual_attribute: "0",
+			show_info: "1",
+			show_permission: "0",
+		});
+		var url = String(apiBase).replace(/\/$/, "") + "/database/dimensions?" + q.toString();
+		return fetchTextNoStore(url).then(parseIdNameListFromCsv);
+	}
+
+	function loadDimensionElementsText(apiBase, sid, nameDatabase, nameDimension) {
+		var url = buildDimensionElementsRequestUrl(apiBase, sid, nameDatabase, nameDimension);
+		return fetchTextNoStore(url);
+	}
+
+	function datacAnalyzePathForConsolidation(sess, pathInfo) {
+		var apiBase = sess.apiBase;
+		var sid = sess.sid;
+		var db = pathInfo.database;
+		var cubeName = pathInfo.cube;
+		var path = pathInfo.path || [];
+		return loadCubesList(apiBase, sid, db)
+			.then(function (cubes) {
+				var cid = cubeIdFromName(cubes, cubeName);
+				if (!cid) {
+					throw new Error('Cube « ' + cubeName + ' » introuvable dans la base « ' + db + ' ».');
+				}
+				return loadCubeDimensionIds(apiBase, sid, db, cid).then(function (dimIds) {
+					return loadDatabaseDimensionsList(apiBase, sid, db).then(function (dimRows) {
+						return { dimIds: dimIds, dimRows: dimRows, cubeId: cid };
+					});
+				});
+			})
+			.then(function (pack) {
+				var dimIds = pack.dimIds;
+				if (dimIds.length !== path.length) {
+					throw new Error(
+						"Nombre de dimensions du cube (" +
+							String(dimIds.length) +
+							") ≠ nombre d’arguments chemin dans PALO.DATAC (" +
+							String(path.length) +
+							").",
+					);
+				}
+				var dimOrderNames = [];
+				for (var d = 0; d < dimIds.length; d++) {
+					var dn = dimensionNameById(pack.dimRows, dimIds[d]);
+					if (!dn) {
+						throw new Error("Dimension id " + dimIds[d] + " : nom introuvable.");
+					}
+					dimOrderNames.push(dn);
+				}
+				var chain = Promise.resolve({
+					hasConsolidation: false,
+					labels: [],
+					dimOrderNames: dimOrderNames,
+				});
+				for (var j = 0; j < path.length; j++) {
+					(function (idx, dimNm, elNm) {
+						chain = chain.then(function (acc) {
+							return loadDimensionElementsText(apiBase, sid, db, dimNm).then(function (csv) {
+								var row = findElementRowInDimensionCsv(csv, elNm);
+								if (!row) {
+									throw new Error(
+										'Élément « ' + elNm + ' » introuvable dans la dimension « ' + dimNm + ' ».',
+									);
+								}
+								if (row.type === DATAC_ELEMENT_TYPE_CONSOLIDATED) {
+									acc.hasConsolidation = true;
+									acc.labels.push(dimNm + " : « " + elNm + " » (consolidé)");
+								}
+								return acc;
+							});
+						});
+					})(j, dimOrderNames[j], path[j]);
+				}
+				return chain;
+			});
+	}
+
+	function fillDatacSplashSelect(sel) {
+		if (!sel) {
+			return;
+		}
+		var opts = [
+			{ v: "0", t: "0 — défaut / comportement serveur" },
+			{ v: "1", t: "1 — splash défaut (HTTP)" },
+			{ v: "2", t: "2" },
+			{ v: "3", t: "3" },
+			{ v: "4", t: "4" },
+			{ v: "5", t: "5" },
+		];
+		sel.innerHTML = "";
+		for (var i = 0; i < opts.length; i++) {
+			var o = document.createElement("option");
+			o.value = opts[i].v;
+			o.textContent = opts[i].t;
+			sel.appendChild(o);
+		}
+		sel.value = "1";
+	}
+
+	function fetchCellValueByNames(apiBase, sid, nameDatabase, nameCube, pathArr) {
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: nameDatabase,
+			name_cube: nameCube,
+			name_path: (pathArr || []).join(","),
+		});
+		var url = String(apiBase).replace(/\/$/, "") + "/cell/value?" + q.toString();
+		return fetchTextNoStore(url).then(function (text) {
+			var line = stripBom(text)
+				.split(/\r?\n/)
+				.map(function (l) {
+					return l.replace(/\s+$/, "");
+				})
+				.filter(function (l) {
+					return l.length;
+				})[0];
+			if (!line) {
+				throw new Error("Réponse /cell/value vide.");
+			}
+			var cells = splitPaloCsvLine(line);
+			var cell0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
+			var n = parseFloat(String(cell0).replace(",", "."));
+			if (isNaN(n)) {
+				throw new Error(
+					"Valeur actuelle non numérique (« " + cell0 + " ») : addition impossible.",
+				);
+			}
+			return n;
+		});
+	}
+
+	function parseCellCopyOk(text) {
+		var t = stripBom(String(text || "")).trim();
+		if (t === "1" || t.charAt(0) === "1") {
+			return;
+		}
+		parsePaloStatus(text);
+	}
+
+	function fetchCellCopyByNames(apiBase, sid, nameDatabase, nameCube, namePathFrom, namePathTo, useRules) {
+		var q = new URLSearchParams({
+			sid: sid,
+			name_database: nameDatabase,
+			name_cube: nameCube,
+			function: "0",
+			name_path: namePathFrom,
+			name_path_to: namePathTo,
+		});
+		if (useRules) {
+			q.set("use_rules", "1");
+		}
+		var url = String(apiBase).replace(/\/$/, "") + "/cell/copy?" + q.toString();
+		return fetchTextNoStore(url).then(parseCellCopyOk);
+	}
+
+	function wireDatacGuidedOnce(params, pathInfo) {
+		if (datacGuidedWired) {
+			return;
+		}
+		datacGuidedWired = true;
+		var err = document.getElementById("datacErr");
+		var ta = document.getElementById("datacCommandInput");
+		var btnLegacy = document.getElementById("btnDatacSplash");
+
+		function clearErr() {
+			if (err) {
+				err.textContent = "";
+				err.style.color = "";
+			}
+		}
+
+		document.getElementById("btnDatacApplySet").addEventListener("click", function () {
+			clearErr();
+			var ctx = datacRuntimeCtx;
+			if (!ctx || !ctx.sess) {
+				return;
+			}
+			var v = document.getElementById("datacSetValueInput");
+			var val = v ? String(v.value) : "";
+			var splash = 1;
+			if (ctx.hasConsolidation) {
+				var sEl = document.getElementById("datacSplashSelect");
+				splash = sEl ? parseInt(sEl.value, 10) : 1;
+				if (isNaN(splash) || splash < 0 || splash > 5) {
+					splash = 1;
+				}
+			}
+			var btn = document.getElementById("btnDatacApplySet");
+			btn.disabled = true;
+			fetchCellReplaceSplash(
+				ctx.sess.apiBase,
+				ctx.sess.sid,
+				pathInfo.database,
+				pathInfo.cube,
+				pathInfo.path,
+				val,
+				splash,
+			)
+				.then(function () {
+					if (err) {
+						err.style.color = "#107c10";
+						err.textContent =
+							"Valeur envoyée. Recalculez la feuille si l’affichage ne se met pas à jour. PALO.DATAC inchangé.";
+					}
+					btn.disabled = false;
+				})
+				.catch(function (e) {
+					if (err) {
+						err.style.color = "#a4262c";
+						err.textContent = e && e.message ? e.message : String(e);
+					}
+					btn.disabled = false;
+				});
+		});
+
+		document.getElementById("btnDatacApplyAdd").addEventListener("click", function () {
+			clearErr();
+			var ctx = datacRuntimeCtx;
+			if (!ctx || !ctx.sess) {
+				return;
+			}
+			var inp = document.getElementById("datacAddValueInput");
+			var addPart = inp ? parseFloat(String(inp.value).replace(",", ".")) : NaN;
+			if (isNaN(addPart)) {
+				if (err) {
+					err.style.color = "#a4262c";
+					err.textContent = "Saisissez un nombre à additionner.";
+				}
+				return;
+			}
+			var splash = 1;
+			if (ctx.hasConsolidation) {
+				var sEl2 = document.getElementById("datacSplashSelect");
+				splash = sEl2 ? parseInt(sEl2.value, 10) : 1;
+				if (isNaN(splash) || splash < 0 || splash > 5) {
+					splash = 1;
+				}
+			}
+			var btnA = document.getElementById("btnDatacApplyAdd");
+			btnA.disabled = true;
+			fetchCellValueByNames(
+				ctx.sess.apiBase,
+				ctx.sess.sid,
+				pathInfo.database,
+				pathInfo.cube,
+				pathInfo.path,
+			)
+				.then(function (cur) {
+					return fetchCellReplaceSplash(
+						ctx.sess.apiBase,
+						ctx.sess.sid,
+						pathInfo.database,
+						pathInfo.cube,
+						pathInfo.path,
+						String(cur + addPart),
+						splash,
+					);
+				})
+				.then(function () {
+					if (err) {
+						err.style.color = "#107c10";
+						err.textContent =
+							"Somme écrite. Recalculez la feuille si besoin. PALO.DATAC inchangé.";
+					}
+					btnA.disabled = false;
+				})
+				.catch(function (e) {
+					if (err) {
+						err.style.color = "#a4262c";
+						err.textContent = e && e.message ? e.message : String(e);
+					}
+					btnA.disabled = false;
+				});
+		});
+
+		document.getElementById("btnDatacApplyCopy").addEventListener("click", function () {
+			clearErr();
+			var ctx = datacRuntimeCtx;
+			if (!ctx || !ctx.sess) {
+				return;
+			}
+			var inpC = document.getElementById("datacCopyFromInput");
+			var raw = inpC ? String(inpC.value).trim() : "";
+			if (!raw) {
+				if (err) {
+					err.style.color = "#a4262c";
+					err.textContent = "Saisissez le chemin source (éléments séparés par des virgules).";
+				}
+				return;
+			}
+			var parts = raw.split(",").map(function (x) {
+				return x.trim();
+			});
+			if (parts.length !== pathInfo.path.length) {
+				if (err) {
+					err.style.color = "#a4262c";
+					err.textContent =
+						"Le chemin source doit avoir " +
+						String(pathInfo.path.length) +
+						" éléments (comme le cube), séparés par des virgules.";
+				}
+				return;
+			}
+			var useRules = document.getElementById("datacCopyUseRules");
+			var ur = useRules && useRules.checked;
+			var fromComma = parts.join(",");
+			var toComma = pathInfo.path.join(",");
+			var btnC = document.getElementById("btnDatacApplyCopy");
+			btnC.disabled = true;
+			fetchCellCopyByNames(
+				ctx.sess.apiBase,
+				ctx.sess.sid,
+				pathInfo.database,
+				pathInfo.cube,
+				fromComma,
+				toComma,
+				ur,
+			)
+				.then(function () {
+					if (err) {
+						err.style.color = "#107c10";
+						err.textContent =
+							"Copie /cell/copy exécutée. Recalculez la feuille si besoin. PALO.DATAC inchangé.";
+					}
+					btnC.disabled = false;
+				})
+				.catch(function (e) {
+					if (err) {
+						err.style.color = "#a4262c";
+						err.textContent = e && e.message ? e.message : String(e);
+					}
+					btnC.disabled = false;
+				});
+		});
+
+		if (btnLegacy) {
+			btnLegacy.addEventListener("click", function () {
+				clearErr();
 				var text = ta ? String(ta.value).trim() : "";
 				if (!text) {
 					if (err) {
 						err.style.color = "#a4262c";
-						err.textContent = "Saisissez une commande (ex. 100 LIKE dim:élém;année:2025 ou COPY …).";
+						err.textContent = "Saisissez une commande (ex. 100 LIKE … ou COPY …).";
 					}
 					return;
 				}
@@ -482,7 +972,7 @@
 					}
 					return;
 				}
-				btn.disabled = true;
+				btnLegacy.disabled = true;
 				loadSettingsAsync()
 					.then(function (cfg) {
 						if (!cfg.url || !cfg.username) {
@@ -508,19 +998,108 @@
 						if (err) {
 							err.style.color = "#107c10";
 							err.textContent =
-								"Splash appliqué sur le cube. La formule PALO.DATAC de la cellule n’a pas été modifiée. Recalculez la feuille si la valeur affichée ne se met pas à jour.";
+								"Splash appliqué. La formule PALO.DATAC n’a pas été modifiée. Recalculez la feuille si besoin.";
 						}
-						btn.disabled = false;
+						btnLegacy.disabled = false;
 					})
 					.catch(function (e) {
 						if (err) {
 							err.style.color = "#a4262c";
 							err.textContent = e && e.message ? e.message : String(e);
 						}
-						btn.disabled = false;
+						btnLegacy.disabled = false;
 					});
 			});
 		}
+	}
+
+	function runDatacLikeCopyPanel(params) {
+		var panel = document.getElementById("datacLikeCopyPanel");
+		var err = document.getElementById("datacErr");
+		var dh = document.getElementById("defaultHint");
+		var statusEl = document.getElementById("datacAnalysisStatus");
+		var guided = document.getElementById("datacGuidedActions");
+		var splashRow = document.getElementById("datacSplashRow");
+		var dimHint = document.getElementById("datacDimOrderHint");
+		if (dh) {
+			dh.style.display = "none";
+		}
+		if (panel) {
+			panel.style.display = "block";
+		}
+		if (err) {
+			err.textContent = "";
+			err.style.color = "";
+		}
+		if (statusEl) {
+			statusEl.textContent = "Analyse du chemin (dimensions / consolidations)…";
+		}
+		if (guided) {
+			guided.style.display = "none";
+		}
+
+		var pathInfo = parseDatacResolvedFromQuery();
+		if (!pathInfo) {
+			pathInfo = parseDatacLiteralPathForReplace(params.formula);
+		}
+		if (pathInfo.error) {
+			if (statusEl) {
+				statusEl.textContent = "";
+			}
+			if (err) {
+				err.style.color = "#a4262c";
+				err.textContent = pathInfo.error;
+			}
+			return;
+		}
+
+		fillDatacSplashSelect(document.getElementById("datacSplashSelect"));
+
+		loadSettingsAsync()
+			.then(function (cfg) {
+				if (!cfg.url || !cfg.username) {
+					throw new Error("Configurez l’URL et l’utilisateur dans le volet Connexion (Palo).");
+				}
+				return getCachedSession(cfg);
+			})
+			.then(function (sess) {
+				if (!sess || !sess.apiBase || !sess.sid) {
+					throw new Error("Connexion serveur impossible.");
+				}
+				return datacAnalyzePathForConsolidation(sess, pathInfo).then(function (analysis) {
+					return { sess: sess, analysis: analysis };
+				});
+			})
+			.then(function (pack) {
+				var analysis = pack.analysis;
+				datacRuntimeCtx = { sess: pack.sess, hasConsolidation: analysis.hasConsolidation };
+				if (statusEl) {
+					statusEl.textContent = analysis.hasConsolidation
+						? "Consolidation détectée : " + (analysis.labels.length ? analysis.labels.join(" ; ") : "oui") + " — choisissez un mode splash pour les écritures (§ G.5 B)."
+						: "Aucun élément consolidé sur ce chemin — parcours simple (§ G.5 A). Splash masqué sauf besoin avancé.";
+				}
+				if (splashRow) {
+					splashRow.style.display = analysis.hasConsolidation ? "block" : "none";
+				}
+				if (dimHint && analysis.dimOrderNames) {
+					dimHint.textContent =
+						"Ordre des dimensions du cube : " + analysis.dimOrderNames.join(" → ");
+				}
+				if (guided) {
+					guided.style.display = "block";
+				}
+				wireDatacGuidedOnce(params, pathInfo);
+			})
+			.catch(function (e) {
+				datacRuntimeCtx = null;
+				if (statusEl) {
+					statusEl.textContent =
+						"Analyse impossible : " + (e && e.message ? e.message : String(e)) + " — utilisez le mode avancé LIKE/COPY si le serveur est injoignable.";
+				}
+				if (guided) {
+					guided.style.display = "none";
+				}
+			});
 	}
 
 	function excelFormulaStringLiteral(s) {

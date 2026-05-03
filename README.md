@@ -43,9 +43,17 @@ Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) 
 Validation du manifeste (optionnel) :  
 `npx office-addin-manifest validate docs/manifest.xml`
 
+## Référence — code du plugin Excel 2010 (COM, Jedox 5.1)
+
+Source C++ de l’ancien add-in **PaloSpreadsheetFuncs** (LIKE/COPY, `FPaloSetdata`, `FPaloGetdataC`, etc.) — **URL canonique à conserver** :
+
+[https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs)
+
+Voir aussi [`docs/CAHIER_DES_CHARGES.md`](docs/CAHIER_DES_CHARGES.md) (inventaire des `FPalo*`) et [`docs/palo-like-copy-datac-action.md`](docs/palo-like-copy-datac-action.md) (comportement LIKE/COPY).
+
 ## Cahier des charges (fonctions PALO)
 
-Voir **`docs/CAHIER_DES_CHARGES.md`** : liste des fonctions `palo.*` / `PALO.*` à réimplémenter (référence `palo-server` + extension prévue type *PaloSpreadsheetFuncs*).
+Voir **`docs/CAHIER_DES_CHARGES.md`** : liste des fonctions `palo.*` / `PALO.*` à réimplémenter (référence `palo-server` + client historique **PaloSpreadsheetFuncs**, lien ci‑dessus).
 
 ## Licence
 

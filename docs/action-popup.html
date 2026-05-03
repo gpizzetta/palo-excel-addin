@@ -49,6 +49,19 @@
     #datacLikeCopyPanel .datac-actions { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     #datacLikeCopyPanel button.secondary { padding: 6px 10px; }
     #datacErr { color: #a4262c; font-size: 12px; margin-top: 8px; white-space: pre-wrap; }
+    .datac-status { margin-top: 8px; font-weight: 600; color: #201f1e; }
+    #datacGuidedActions { margin-top: 12px; border-top: 1px solid #e1dfdd; padding-top: 12px; }
+    .datac-grid { display: flex; flex-direction: column; gap: 14px; }
+    .datac-block { border: 1px solid #e1dfdd; border-radius: 4px; padding: 10px; background: #fafafa; }
+    .datac-input {
+      width: 100%; box-sizing: border-box; margin-top: 6px; padding: 6px 8px;
+      font-family: Consolas, "Courier New", monospace; font-size: 12px; border: 1px solid #8a8886; border-radius: 2px;
+    }
+    .datac-splash-row { margin-top: 8px; }
+    .datac-splash-row select { margin-top: 4px; width: 100%; max-width: 420px; padding: 4px; }
+    .datac-dim-hint { margin-top: 4px; font-size: 11px; }
+    .datac-advanced { margin-top: 14px; }
+    .datac-advanced summary { cursor: pointer; font-size: 13px; color: #0078d4; }
   </style>
 </head>
 <body>
@@ -69,24 +82,54 @@
   </div>
 
   <div id="datacLikeCopyPanel">
-    <div class="k">Écriture type Jedox (LIKE / COPY)</div>
-    <p class="hint" id="datacHint">
-      Saisissez une commande du même style que l’ancien plugin (ex. <code>100 LIKE dim:élém;année:2025</code> ou <code>COPY dim:élém;année:2025</code>).
-      L’écriture cube (splash) est envoyée au serveur ; la formule <code>PALO.DATAC</code> de la cellule <strong>n’est pas modifiée</strong>.
-      Base, cube et chaque élément du chemin doivent être des chaînes littérales <code>"…"</code> dans la formule.
-      Voir <code>docs/palo-like-copy-datac-action.md</code>.
-    </p>
-    <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 100 LIKE Réalisé;2025"></textarea>
-    <div class="datac-actions">
-      <button type="button" id="btnDatacSplash">Appliquer le splash (conserver PALO.DATAC)</button>
+    <div class="k">PALO.DATAC — écriture cube</div>
+    <p id="datacAnalysisStatus" class="hint datac-status" aria-live="polite"></p>
+    <div id="datacGuidedActions" style="display: none;">
+      <div class="datac-grid">
+        <div class="datac-block">
+          <label class="k" for="datacSetValueInput">1 — Définir une valeur</label>
+          <input type="text" id="datacSetValueInput" class="datac-input" autocomplete="off" placeholder="Nombre ou texte" />
+          <div id="datacSplashRow" class="datac-splash-row" style="display: none;">
+            <label class="k" for="datacSplashSelect">Mode splash (élément consolidé)</label>
+            <select id="datacSplashSelect"></select>
+          </div>
+          <button type="button" id="btnDatacApplySet" class="secondary">Envoyer (/cell/replace)</button>
+        </div>
+        <div class="datac-block">
+          <label class="k" for="datacAddValueInput">2 — Additionner (valeur numérique)</label>
+          <input type="text" id="datacAddValueInput" class="datac-input" autocomplete="off" placeholder="Ex. 100" />
+          <button type="button" id="btnDatacApplyAdd" class="secondary">Lire la cellule puis /cell/replace</button>
+        </div>
+        <div class="datac-block">
+          <label class="k" for="datacCopyFromInput">3 — Copier depuis un autre chemin (/cell/copy)</label>
+          <p class="hint datac-dim-hint" id="datacDimOrderHint"></p>
+          <input type="text" id="datacCopyFromInput" class="datac-input" autocomplete="off" placeholder="Même nombre d’éléments que le cube, séparés par des virgules" />
+          <label style="display: block; margin-top: 6px; font-size: 12px;">
+            <input type="checkbox" id="datacCopyUseRules" /> use_rules (copier aussi les valeurs pilotées par règles)
+          </label>
+          <button type="button" id="btnDatacApplyCopy" class="secondary">Copier vers la coordonnée courante</button>
+        </div>
+      </div>
     </div>
+    <details id="datacAdvancedDetails" class="datac-advanced">
+      <summary>Mode avancé — LIKE / COPY (texte libre, splash 1)</summary>
+      <p class="hint" id="datacHint">
+        Saisissez une commande du même style que l’ancien plugin (ex. <code>100 LIKE dim:élém;année:2025</code> ou <code>COPY dim:élém;année:2025</code>).
+        L’écriture est envoyée via <code>/cell/replace</code> ; la formule <code>PALO.DATAC</code> de la cellule <strong>n’est pas modifiée</strong>.
+        Voir <code>docs/palo-like-copy-datac-action.md</code> et le cahier des charges § G.5.
+      </p>
+      <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 100 LIKE Réalisé;2025"></textarea>
+      <div class="datac-actions">
+        <button type="button" id="btnDatacSplash">Appliquer le splash (conserver PALO.DATAC)</button>
+      </div>
+    </details>
     <div id="datacErr"></div>
   </div>
 
   <button id="btnClose" type="button">Fermer</button>
 
-  <script src="ename-formula-args.js?v=1.0.63.0" type="text/javascript"></script>
-  <script src="md5.js?v=1.0.63.0" type="text/javascript"></script>
-  <script src="action-popup.js?v=1.0.63.0" type="text/javascript"></script>
+  <script src="ename-formula-args.js?v=1.0.69.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.69.0" type="text/javascript"></script>
+  <script src="action-popup.js?v=1.0.69.0" type="text/javascript"></script>
 </body>
 </html>

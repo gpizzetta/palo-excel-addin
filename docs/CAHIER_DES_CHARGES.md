@@ -3,9 +3,9 @@
 ## Contexte
 
 - **Cible** : réimplémenter, en **JavaScript** (fonctions personnalisées Excel / Office.js), l’équivalent des fonctions exposées historiquement par le **plugin Excel** (bibliothèque client **`PaloSpreadsheetFuncs`**, branche *molap* type Jedox 5.1).
-- **Référence client (code C++)** — miroir public :  
-  [gpizzetta/jedox-mirror — `molap/client_libraries/5.1/PaloSpreadsheetFuncs`](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs)  
-  Fichiers principaux : `include/PaloSpreadsheetFuncs/SpreadsheetFuncs.h` (déclarations des entrées `FPalo*`), `SpreadsheetFuncs.cpp` (implémentations).
+- **Référence client (code C++)** — miroir public (**plugin Excel 2010 / COM**, Jedox ~5.1) — **URL canonique** (à conserver telle quelle dans la doc) :  
+  [https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs)  
+  Dossier équivalent dans le dépôt : `molap/client_libraries/5.1/PaloSpreadsheetFuncs/`. Fichiers principaux : `include/PaloSpreadsheetFuncs/SpreadsheetFuncs.h` (déclarations des entrées `FPalo*`), `SpreadsheetFuncs.cpp` (implémentations).
 - **Référence moteur de règles** (autre dépôt) : **`palo-server`**, `Library/Parser/PaloFunctionNodeFactory.cpp` — enregistrement des fonctions **`palo.*`** en **minuscules** dans le langage de règles OLAP (recouvre partiellement la sémantique « éléments » du client tableur).
 - **Convention Excel** : l’add-in classique expose les capacités sous des noms **`PALO.*`** (majuscules). Le tableau section **B** propose un **`PALO.*` mécanique** dérivé du suffixe CamelCase après `FPalo` (voir ci‑dessous). Les intitulés **réels** de l’add-in Excel 2010 peuvent différer (alias historiques du type `PALO.DATA` vs `PALO.GETDATA`) : à valider contre la couche d’intégration Excel si vous y avez accès.
 
@@ -276,11 +276,44 @@ Implémentations dans `SpreadsheetFuncs.cpp` / `SpreadsheetFuncs.h`, utilisées 
 - [Splashing — troubleshooting](https://knowledgebase.jedox.com/jedox/planning/splashing-troubleshooting.htm) — écriture consolidée / erreurs fréquentes.
 - **Ce dépôt** — comportement historique **`LIKE` / `COPY`** et flux **Action** sur **`PALO.DATAC`** : voir [`docs/palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md).
 
+### G.5 Popup « Action » sur une cellule en formule `PALO.DATAC` (spécification cible)
+
+Objectif : remplacer le popup minimal actuel (saisie texte LIKE/COPY + **`/cell/replace`**) par un parcours guidé selon la **nature du chemin** (présence ou non d’**éléments consolidés** sur les coordonnées de la cellule).
+
+#### G.5.1 Préalable — Identifier une consolidation sur le chemin
+
+- À partir du **chemin résolu** de la cellule (base, cube, liste d’éléments **un par dimension**), déterminer si **au moins une** coordonnée est un **élément consolidé** (agrégat hiérarchique — aligné sur **`palo.etype` / `PALO.ETYPE`**, métadonnées dimension, ou API type liste d’éléments / info dimension).
+- **Branchement** : si **aucune** consolidation → parcours **(A)** ; si **au moins une** → parcours **(B)**.
+
+#### G.5.2 Parcours (A) — Aucune consolidation sur le chemin courant
+
+L’utilisateur doit pouvoir :
+
+1. **Définir une valeur** à la coordonnée courante (écriture cube ; alignement conceptuel avec **`PALO.SETDATA`** / **`/cell/replace`** selon le contrat retenu).
+2. **Additionner la valeur** à la coordonnée courante lorsque la valeur saisie est **numérique** (mode cumul / add).
+3. **Copier une valeur** depuis une **autre coordonnée** du même cube vers la coordonnée courante — référence client/serveur historique **`GET /cell/copy`** (client **`libpalo_ng`** : `Cube::CellCopy` dans le miroir [jedox-mirror](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/libpalo_ng/source/Palo/Cube.cpp) ; doc API `cell_copy.api` côté serveur `molap/server/5.1/Api/`).
+
+**Composant transversal** : un **outil de construction de path** (sélection base / cube + choix d’un élément par dimension) produisant un chemin **réutilisable** dans le complément (copie, autres volets, export texte, etc.) — **obligatoire** pour le point **(A).3** et **réutilisable** pour **(B).3**.
+
+#### G.5.3 Parcours (B) — Au moins un élément consolidé sur le chemin
+
+L’utilisateur doit pouvoir :
+
+1. **Définir une valeur** et choisir un **mode de splash** : par exemple valeur sur **éléments de base** uniquement, valeur sur **consolidé** avec **répartition / division** vers la base, ou répartition pilotée comme un **path** (s’aligner sur la doc Jedox *splashing*, les paramètres **`/cell/replace`** / splash, et les notions **`path` / `path_to` / `locked_paths`** de **`/cell/copy`** lorsque le comportement est proche d’une copie ou d’un verrou de chemins).
+2. **Idem avec addition** : valeur **numérique** + mode de splash + cumul (même grille de choix qu’en **(B).1**).
+3. **Copier une valeur depuis un path** : comme **(A).3**, avec **`/cell/copy`** (chemins source et cible) ; gérer explicitement les **consolidés** sur la source ou la cible (ex. **`use_rules`**, **`locked_paths`** — voir `cell_copy.api` dans jedox-mirror).
+
+#### G.5.4 Rappels d’implémentation (hors périmètre immédiat)
+
+- L’implémentation **actuelle** du popup Action sur **`PALO.DATAC`** reste décrite dans [`palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md) ; la présente **G.5** fixe la **cible produit**.
+- Le comportement détaillé LIKE/tokenizer côté **`PaloSpreadsheetFuncs`** (`FPaloSetdata`, `parseCopyParams`, `CellCopyWrapper`) reste la **référence fonctionnelle** pour affiner les libellés et les appels HTTP.
+
 ---
 
 ## F. Suivi
 
 - [x] Référencer le code **`PaloSpreadsheetFuncs`** (5.1) — miroir [jedox-mirror](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs) ; inventaire **150** entrées + helpers section **B.3**.
+- [ ] **Popup Action `PALO.DATAC`** : spécification **G.5** (détection consolidation, parcours (A) / (B), outil path réutilisable, `/cell/replace` vs `/cell/copy`, modes splash).
 - [ ] Valider le mapping **`PALO.*`** proposé vs noms réels de l’add-in Excel historique (si documentation ou binaire disponible) et vs routes HTTP du serveur (`PaloHttpServer`, jobs, etc.).
 - [ ] Tracer une colonne « implémenté / partiel / reporté » dans une table de suivi (feuille projet ou issues GitHub).
 

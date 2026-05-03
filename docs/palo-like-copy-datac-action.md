@@ -4,7 +4,11 @@ Ce document décrit le **comportement historique** du client tableur (bibliothè
 
 ## 1. Où est le code d’origine (C++) ?
 
-Référence publique : dépôt [jedox-mirror — `PaloSpreadsheetFuncs`](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs).
+**Référence canonique** (code de l’ancien plugin Excel 2010, COM / Jedox ~5.1) — URL à conserver dans la documentation du projet :
+
+[https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs)
+
+(Dépôt **jedox-mirror**, dossier **`PaloSpreadsheetFuncs`**.)
 
 - **`SpreadsheetFuncsBase::FPaloSetdata`** — lorsque la **valeur** écrite est une **chaîne** (et non un nombre seul), le client parse des **jetons** (séparés par des espaces) et applique des modes spéciaux dont **`LIKE`** et **`COPY`** (voir `parseCopyParams`, `parsePath`, `CellCopyWrapper` dans `SpreadsheetFuncsBase.cpp`).
 - **`PALO.DATAC`** côté historique correspond surtout à **`FPaloGetdataC`** (lecture par noms d’éléments) ; la sémantique **`LIKE` / `COPY`** n’est **pas** dans `FPaloGetdataC`, mais dans la **voie d’écriture** `FPaloSetdata` / `FPaloSetdataA`.
