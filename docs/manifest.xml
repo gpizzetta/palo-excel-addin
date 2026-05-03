@@ -111,7 +111,7 @@
               <Label resid="Palo.TabLabel"/>
             </CustomTab>
           </ExtensionPoint>
-          <!-- PALO Action sur Accueil uniquement : sur Excel pour le web, le menu contextuel complément affiche souvent « Ouvrir » (lancement volet) au lieu d’exécuter la commande ExecuteFunction avec le libellé du manifeste — UX trompeuse ; le bouton ruban reste fiable. -->
+          <!-- PALO Action (ruban Accueil) : sur Excel pour le web, le clic droit peut afficher quand même « Palo… » / « PALO… » puis « Ouvrir… » — c’est l’entrée hôte pour ouvrir le VOLET (DefaultSettings), pas l’ExtensionPoint ContextMenu (retiré ici). Ce regroupement n’est pas supprimé en enlevant ContextMenu du manifeste ; il n’est en général pas désactivable côté Office.js. -->
           <ExtensionPoint xsi:type="PrimaryCommandSurface">
             <OfficeTab id="TabHome">
               <Group id="Palo.HomePaloActionGroup">
