@@ -31,6 +31,24 @@
 		return line.indexOf(";") >= 0 ? line.split(";") : line.split(",");
 	}
 
+	/**
+	 * Première ligne de GET /cell/value (même format que parseCellValueFirstLine dans functions.js) :
+	 * type ; exists ; valeur [, …] — la valeur utile est cells[2], pas cells[0] (sinon 1+10=11 si type=1).
+	 */
+	function parsePaloCellValueFirstLine(line) {
+		var cells = splitPaloCsvLine(line);
+		if (cells.length < 3) {
+			throw new Error(
+				"Réponse /cell/value inattendue (moins de 3 champs) : " + line.slice(0, 200),
+			);
+		}
+		var type = parseInt(String(stripPaloCsvField(cells[0])).trim(), 10);
+		var existsRaw = stripPaloCsvField(cells[1]);
+		var exists = existsRaw === "1" || String(existsRaw).toLowerCase() === "true";
+		var rawVal = cells.length > 2 ? stripPaloCsvField(cells[2]) : "";
+		return { type: type, exists: exists, rawVal: rawVal };
+	}
+
 	function looksLikePaloErrorDetail(s) {
 		var t = String(s || "")
 			.toLowerCase()
@@ -696,13 +714,32 @@
 		if (!sel) {
 			return;
 		}
+		/** Aligné sur normalizeSplashMode (functions.js) et doc Jedox Splashing / # ! !! !# !!#. */
 		var opts = [
-			{ v: "0", t: "0 — défaut / comportement serveur" },
-			{ v: "1", t: "1 — splash défaut (HTTP)" },
-			{ v: "2", t: "2" },
-			{ v: "3", t: "3" },
-			{ v: "4", t: "4" },
-			{ v: "5", t: "5" },
+			{
+				v: "0",
+				t: "0 — Aucun splash (pas de décomposition ; souvent impossible sur consolidé pur)",
+			},
+			{
+				v: "1",
+				t: "1 — Default : splash serveur par défaut (répartition sur les bases ; poids / logique Jedox — pas « parts égales » # seules)",
+			},
+			{
+				v: "2",
+				t: "2 — Add base (!!) : la même valeur est ajoutée à chaque base (pas une répartition du total ; cf. # / mode 1)",
+			},
+			{
+				v: "3",
+				t: "3 — Set base (!) : la même valeur sur chaque base — écrase toutes les bases liées avec cette valeur",
+			},
+			{
+				v: "4",
+				t: "4 — Set populated (!#) : uniquement bases déjà peuplées — erreur si toutes vides (pas de path référence LIKE)",
+			},
+			{
+				v: "5",
+				t: "5 — Add populated (!!#) : idem — addition seulement où une base a déjà une valeur",
+			},
 		];
 		sel.innerHTML = "";
 		for (var i = 0; i < opts.length; i++) {
@@ -734,15 +771,27 @@
 			if (!line) {
 				throw new Error("Réponse /cell/value vide.");
 			}
-			var cells = splitPaloCsvLine(line);
-			var cell0 = cells.length ? stripPaloCsvField(cells[0]).trim() : "";
-			var n = parseFloat(String(cell0).replace(",", "."));
-			if (isNaN(n)) {
+			var o = parsePaloCellValueFirstLine(line);
+			if (o.type === 99 || isNaN(o.type)) {
 				throw new Error(
-					"Valeur actuelle non numérique (« " + cell0 + " ») : addition impossible.",
+					"Cellule non numérique (type " + o.type + ") : addition impossible.",
 				);
 			}
-			return n;
+			if (!o.exists) {
+				return 0;
+			}
+			if (o.type === 1) {
+				var n = parseFloat(String(o.rawVal).replace(",", "."));
+				if (isNaN(n)) {
+					throw new Error(
+						"Valeur actuelle non numérique (« " + o.rawVal + " ») : addition impossible.",
+					);
+				}
+				return n;
+			}
+			throw new Error(
+				"Addition réservée aux cellules numériques (type 1) ; type actuel : " + o.type + ".",
+			);
 		});
 	}
 
@@ -754,7 +803,151 @@
 		parsePaloStatus(text);
 	}
 
-	function fetchCellCopyByNames(apiBase, sid, nameDatabase, nameCube, namePathFrom, namePathTo, useRules) {
+	/**
+	 * Mode avancé : « 300 like 2025 » ou « COPY année:2025 » (doc Jedox LIKE — chemins partiels).
+	 * LIKE avec valeur → GET /cell/copy + paramètre value (cell_copy.api), pas /cell/replace.
+	 */
+	function tryParseDatacLikeOrCopy(text) {
+		var raw = String(text || "").trim();
+		if (!raw) {
+			return null;
+		}
+		var mCopy = raw.match(/^\s*copy\s+(.+)$/i);
+		if (mCopy) {
+			var ps = String(mCopy[1] || "").trim();
+			if (!ps) {
+				return null;
+			}
+			return { kind: "copy", pathSpec: ps };
+		}
+		var mLikeApos = raw.match(/^\s*'(-?[0-9]+(?:[.,][0-9]+)?)\s+like\s+(.+)$/i);
+		if (mLikeApos) {
+			var n1 = parseFloat(String(mLikeApos[1]).replace(",", "."));
+			if (!isNaN(n1)) {
+				return { kind: "like", value: n1, pathSpec: String(mLikeApos[2] || "").trim() };
+			}
+		}
+		var mLike = raw.match(/^\s*([-+]?[0-9]+(?:[.,][0-9]+)?)\s+like\s+(.+)$/i);
+		if (mLike) {
+			var n2 = parseFloat(String(mLike[1]).replace(",", "."));
+			if (!isNaN(n2)) {
+				return { kind: "like", value: n2, pathSpec: String(mLike[2] || "").trim() };
+			}
+		}
+		return null;
+	}
+
+	function parseLikeCopyPathSpec(spec) {
+		var out = [];
+		var parts = String(spec || "").split(";");
+		for (var i = 0; i < parts.length; i++) {
+			var seg = String(parts[i] || "").trim();
+			if (!seg) {
+				continue;
+			}
+			var ci = seg.indexOf(":");
+			if (ci < 0) {
+				out.push({ bare: stripPaloCsvField(seg) });
+			} else {
+				out.push({
+					dim: seg.slice(0, ci).trim(),
+					element: stripPaloCsvField(seg.slice(ci + 1).trim()),
+				});
+			}
+		}
+		return out;
+	}
+
+	function locateBareElementDimensionIndex(sess, nameDatabase, dimOrderNames, elName) {
+		var want = String(elName || "").trim();
+		if (!want) {
+			return Promise.reject(new Error("Segment de chemin LIKE/COPY vide."));
+		}
+		return Promise.all(
+			dimOrderNames.map(function (dimNm) {
+				return loadDimensionElementsText(sess.apiBase, sess.sid, nameDatabase, dimNm).then(function (csv) {
+					return findElementRowInDimensionCsv(csv, want) ? dimNm : null;
+				});
+			}),
+		).then(function (hits) {
+			var diList = [];
+			for (var i = 0; i < hits.length; i++) {
+				if (hits[i]) {
+					diList.push(i);
+				}
+			}
+			if (!diList.length) {
+				throw new Error('Élément « ' + want + ' » introuvable dans aucune dimension du cube.');
+			}
+			if (diList.length > 1) {
+				throw new Error(
+					'Élément « ' +
+						want +
+						' » ambigu (plusieurs dimensions). Utilisez NomDimension:élément (doc Jedox LIKE).',
+				);
+			}
+			return diList[0];
+		});
+	}
+
+	function buildSourcePathForLikeCopy(sess, nameDatabase, targetPath, dimOrderNames, segments) {
+		var source = targetPath.slice();
+		var chain = Promise.resolve();
+		for (var s = 0; s < segments.length; s++) {
+			(function (seg) {
+				chain = chain.then(function () {
+					if (seg.dim) {
+						var di = -1;
+						for (var j = 0; j < dimOrderNames.length; j++) {
+							if (String(dimOrderNames[j]).toLowerCase() === String(seg.dim).toLowerCase()) {
+								di = j;
+								break;
+							}
+						}
+						if (di < 0) {
+							throw new Error(
+								'Dimension « ' +
+									seg.dim +
+									' » introuvable. Ordre du cube : ' +
+									dimOrderNames.join(" → ") +
+									".",
+							);
+						}
+						return loadDimensionElementsText(
+							sess.apiBase,
+							sess.sid,
+							nameDatabase,
+							dimOrderNames[di],
+						).then(function (csv) {
+							if (!findElementRowInDimensionCsv(csv, seg.element)) {
+								throw new Error(
+									'Élément « ' +
+										seg.element +
+										' » introuvable dans « ' +
+										dimOrderNames[di] +
+										' ».',
+								);
+							}
+							source[di] = seg.element;
+						});
+					}
+					return locateBareElementDimensionIndex(
+						sess,
+						nameDatabase,
+						dimOrderNames,
+						seg.bare,
+					).then(function (diBare) {
+						source[diBare] = seg.bare;
+					});
+				});
+			})(segments[s]);
+		}
+		return chain.then(function () {
+			return source;
+		});
+	}
+
+	function fetchCellCopyByNames(apiBase, sid, nameDatabase, nameCube, namePathFrom, namePathTo, useRules, copyValue) {
 		var q = new URLSearchParams({
 			sid: sid,
 			name_database: nameDatabase,
@@ -765,6 +958,12 @@
 		});
 		if (useRules) {
 			q.set("use_rules", "1");
+		}
+		if (copyValue !== undefined && copyValue !== null && copyValue !== "") {
+			var vnum = Number(copyValue);
+			if (!isNaN(vnum) && isFinite(vnum)) {
+				q.set("value", String(vnum));
+			}
 		}
 		var url = String(apiBase).replace(/\/$/, "") + "/cell/copy?" + q.toString();
 		return fetchTextNoStore(url).then(parseCellCopyOk);
@@ -957,7 +1156,7 @@
 				if (!text) {
 					if (err) {
 						err.style.color = "#a4262c";
-						err.textContent = "Saisissez une commande (ex. 100 LIKE … ou COPY …).";
+						err.textContent = "Saisissez une commande (ex. 300 like 2025 ou COPY Année:2025).";
 					}
 					return;
 				}
@@ -972,7 +1171,29 @@
 					}
 					return;
 				}
+				var parsedCmd = tryParseDatacLikeOrCopy(text);
+				if (!parsedCmd) {
+					if (err) {
+						err.style.color = "#a4262c";
+						err.textContent =
+							"Commande non reconnue. Exemples : « 300 like 2025 » (répartition type LIKE : " +
+							"seules les dimensions listées changent entre source et cible), « COPY Année:2025 ». " +
+							"Ambiguïté : « NomDimension:élément ». Voir docs/palo-like-copy-datac-action.md § 5.2.";
+					}
+					return;
+				}
+				var segs = parseLikeCopyPathSpec(parsedCmd.pathSpec);
+				if (!segs.length) {
+					if (err) {
+						err.style.color = "#a4262c";
+						err.textContent = "Chemin après LIKE/COPY vide (séparez par des ;).";
+					}
+					return;
+				}
 				btnLegacy.disabled = true;
+				var useRulesAdv =
+					document.getElementById("datacCopyUseRules") &&
+					document.getElementById("datacCopyUseRules").checked;
 				loadSettingsAsync()
 					.then(function (cfg) {
 						if (!cfg.url || !cfg.username) {
@@ -984,21 +1205,38 @@
 						if (!sess || !sess.apiBase || !sess.sid) {
 							throw new Error("Connexion serveur impossible.");
 						}
-						return fetchCellReplaceSplash(
-							sess.apiBase,
-							sess.sid,
-							parsedPath.database,
-							parsedPath.cube,
-							parsedPath.path,
-							text,
-							1,
-						);
+						return datacAnalyzePathForConsolidation(sess, parsedPath).then(function (analysis) {
+							return buildSourcePathForLikeCopy(
+								sess,
+								parsedPath.database,
+								parsedPath.path,
+								analysis.dimOrderNames,
+								segs,
+							).then(function (sourceArr) {
+								var fromC = sourceArr.join(",");
+								var toC = parsedPath.path.join(",");
+								var valOpt =
+									parsedCmd.kind === "like" ? parsedCmd.value : undefined;
+								return fetchCellCopyByNames(
+									sess.apiBase,
+									sess.sid,
+									parsedPath.database,
+									parsedPath.cube,
+									fromC,
+									toC,
+									useRulesAdv,
+									valOpt,
+								);
+							});
+						});
 					})
 					.then(function () {
 						if (err) {
 							err.style.color = "#107c10";
 							err.textContent =
-								"Splash appliqué. La formule PALO.DATAC n’a pas été modifiée. Recalculez la feuille si besoin.";
+								parsedCmd.kind === "like"
+									? "LIKE exécuté via /cell/copy (valeur cible). PALO.DATAC inchangé. Recalculez la feuille si besoin."
+									: "COPY exécuté via /cell/copy. PALO.DATAC inchangé. Recalculez la feuille si besoin.";
 						}
 						btnLegacy.disabled = false;
 					})

@@ -278,7 +278,9 @@ Implémentations dans `SpreadsheetFuncs.cpp` / `SpreadsheetFuncs.h`, utilisées 
 
 ### G.5 Popup « Action » sur une cellule en formule `PALO.DATAC` (spécification cible)
 
-Objectif : remplacer le popup minimal actuel (saisie texte LIKE/COPY + **`/cell/replace`**) par un parcours guidé selon la **nature du chemin** (présence ou non d’**éléments consolidés** sur les coordonnées de la cellule).
+Objectif : parcours guidé selon la **nature du chemin** (présence ou non d’**éléments consolidés** sur les coordonnées de la cellule) et **mode avancé** pour **`LIKE` / `COPY`** aligné sur l’add-in 2010.
+
+**Sémantique LIKE (chemins partiels)** : comme sous Jedox / `parsePath` dans **`PaloSpreadsheetFuncs`**, l’utilisateur ne saisit que les **éléments qui diffèrent** entre la cellule **cible** (chemin complet issu de **`PALO.DATAC`**) et la cellule **source** de référence ; les **autres dimensions** reprennent les **mêmes noms d’éléments** que sur la cible. Exemple : cible `2024, Démographie, titi` et saisie **`300 like 2025`** → source **`2025, Démographie, titi`** ; l’écriture applique la **répartition type LIKE** de cette source vers la cible avec la **valeur agrégée** demandée (**300**). **Ne pas** envoyer la chaîne brute à **`/cell/replace`** (erreur de conversion) : le client doit appeler **`GET /cell/copy`** avec **`name_path`**, **`name_path_to`** et le paramètre optionnel **`value`** (voir `cell_copy.api` dans jedox-mirror). Détail : [`docs/palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md) § **5.2**.
 
 #### G.5.1 Préalable — Identifier une consolidation sur le chemin
 
@@ -303,10 +305,12 @@ L’utilisateur doit pouvoir :
 2. **Idem avec addition** : valeur **numérique** + mode de splash + cumul (même grille de choix qu’en **(B).1**).
 3. **Copier une valeur depuis un path** : comme **(A).3**, avec **`/cell/copy`** (chemins source et cible) ; gérer explicitement les **consolidés** sur la source ou la cible (ex. **`use_rules`**, **`locked_paths`** — voir `cell_copy.api` dans jedox-mirror).
 
+**Modes splash HTTP (`?splash=0…5`)** pour **`/cell/replace`** : tableau et libellés UI dans [`palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md) § **5.1** (aligné sur `normalizeSplashMode` dans `functions.js`). En particulier **`splash=1` (default)** = splash **par défaut serveur** sur le consolidé (répartition sur les bases selon la logique Jedox — **pas** une simple division égale type `#` seul ; le comportement exact dépend de la version).
+
 #### G.5.4 Rappels d’implémentation (hors périmètre immédiat)
 
-- L’implémentation **actuelle** du popup Action sur **`PALO.DATAC`** reste décrite dans [`palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md) ; la présente **G.5** fixe la **cible produit**.
-- Le comportement détaillé LIKE/tokenizer côté **`PaloSpreadsheetFuncs`** (`FPaloSetdata`, `parseCopyParams`, `CellCopyWrapper`) reste la **référence fonctionnelle** pour affiner les libellés et les appels HTTP.
+- L’implémentation du popup Action sur **`PALO.DATAC`** est décrite dans [`palo-like-copy-datac-action.md`](./palo-like-copy-datac-action.md) (parcours guidé **`/cell/replace`**, mode avancé **`LIKE`/`COPY`** → **`/cell/copy`** + **`value`** pour LIKE).
+- Le comportement détaillé LIKE / tokenizer côté **`PaloSpreadsheetFuncs`** (`FPaloSetdata`, `parseCopyParams`, `CellCopyWrapper`) reste la **référence** pour étendre d’autres variantes (`! like`, ordre des jetons, `WITHRULES`, etc.).
 
 ---
 

@@ -1,5 +1,5 @@
 /** Doit rester aligné avec <Version> dans docs/manifest.xml */
-var ADDIN_VERSION = "1.0.69.0";
+var ADDIN_VERSION = "1.0.71.0";
 
 /**
  * Débogage (console.log) : PALO.DATAC / SETDATA tournent dans le runtime « Custom Functions »
@@ -427,6 +427,19 @@ function parsePaloBooleanLike(value) {
  * Sur le fil HTTP, « set base / add base » sont 3 et 2 (ordre inverse des libellés C++).
  * Ici les littéraux numériques suivent la doc HTTP ; pour les libellés texte, utiliser
  * add_base / set_base (voir chaînes ci-dessous).
+ *
+ * Résumé pratique (écriture sur consolidé — détail : doc Jedox *Splashing*) :
+ * - 0 : pas de splash (pas de décomposition automatique ; souvent refus sur consolidé).
+ * - 1 : « default » — comportement splash **par défaut du serveur** (répartition sur les
+ *   cellules de base sous le consolidé ; en pratique **liée aux poids / à la logique
+ *   interne Jedox**, pas une simple division égale # seule — vérifier selon version).
+ * - 2 : add / add_base — comme **`!!`** : **la même valeur est ajoutée à chaque** cellule de
+ *   base liée (pas une répartition du total entre enfants — voir **#** / mode **1**).
+ * - 3 : set / set_base — comme **`!`** : **la même valeur remplace** chaque cellule de base
+ *   liée (toutes les bases reçoivent la valeur saisie).
+ * - 4 : set_populated — **!#** : uniquement bases **déjà peuplées** (sinon souvent erreur ;
+ *   pas de path « référence » type LIKE — besoin de données existantes sous le consolidé).
+ * - 5 : add_populated — **!!#** : addition seulement sur bases **déjà peuplées** (même limite).
  */
 function normalizeSplashMode(splash) {
 	if (splash === undefined || splash === null || splash === "") {

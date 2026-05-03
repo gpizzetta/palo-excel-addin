@@ -91,7 +91,10 @@
           <input type="text" id="datacSetValueInput" class="datac-input" autocomplete="off" placeholder="Nombre ou texte" />
           <div id="datacSplashRow" class="datac-splash-row" style="display: none;">
             <label class="k" for="datacSplashSelect">Mode splash (élément consolidé)</label>
-            <select id="datacSplashSelect"></select>
+            <select id="datacSplashSelect" title="Paramètre HTTP splash 0–5 pour /cell/replace — voir doc Jedox Splashing"></select>
+            <p class="hint" style="font-size: 11px; margin-top: 6px; color: #555;">
+              Le mode <strong>1 (default)</strong> est le splash <strong>par défaut du serveur</strong> : la valeur est <strong>répartie</strong> sur les bases sous le consolidé (logique Jedox / <code>#</code> en saisie manuelle — pas forcément parts égales). Les modes <strong>2</strong> et <strong>3</strong> correspondent à <strong><code>!!</code></strong> et <strong><code>!</code></strong> : la valeur saisie est <strong>ajoutée (2)</strong> ou <strong>écrite telle quelle (3) sur chaque</strong> cellule de base — ce n’est <strong>pas</strong> une division du total entre enfants. Les modes <strong>4 / 5</strong> (<strong>!#</strong> / <strong>!!#</strong>) n’ont <strong>pas</strong> besoin d’un path de référence : ils ne touchent que les bases <strong>déjà peuplées</strong> ; si <strong>toutes</strong> les bases sont vides sur cette tranche, le serveur peut <strong>refuser</strong> (normal). Détail : <a href="https://knowledgebase.jedox.com/jedox/planning/splashing-overview.htm" target="_blank" rel="noopener">Splashing overview</a>, <a href="https://knowledgebase.jedox.com/jedox/planning/splash-parameter-hashtag.htm" target="_blank" rel="noopener">Variations # (!# !!#)</a>, <code>docs/palo-like-copy-datac-action.md</code> § 5.1.
+            </p>
           </div>
           <button type="button" id="btnDatacApplySet" class="secondary">Envoyer (/cell/replace)</button>
         </div>
@@ -112,15 +115,14 @@
       </div>
     </div>
     <details id="datacAdvancedDetails" class="datac-advanced">
-      <summary>Mode avancé — LIKE / COPY (texte libre, splash 1)</summary>
+      <summary>Mode avancé — LIKE / COPY (chemins partiels → /cell/copy)</summary>
       <p class="hint" id="datacHint">
-        Saisissez une commande du même style que l’ancien plugin (ex. <code>100 LIKE dim:élém;année:2025</code> ou <code>COPY dim:élém;année:2025</code>).
-        L’écriture est envoyée via <code>/cell/replace</code> ; la formule <code>PALO.DATAC</code> de la cellule <strong>n’est pas modifiée</strong>.
-        Voir <code>docs/palo-like-copy-datac-action.md</code> et le cahier des charges § G.5.
+        Formes reconnues : <code>300 like 2025</code> (seules les dimensions listées après <code>like</code> changent ; les autres reprennent le chemin de la cellule courante, comme l’add-in 2010) ou <code>COPY Année:2025</code>. Séparateur entre segments : <code>;</code>. Ambiguïté : <code>Dimension:élément</code>.
+        LIKE envoie <code>GET /cell/copy</code> avec <code>value</code> = le nombre (pas <code>/cell/replace</code>). La case <strong>use_rules</strong> du bloc « Copier depuis… » s’applique aussi ici. La formule <code>PALO.DATAC</code> <strong>n’est pas modifiée</strong>. Voir <code>docs/palo-like-copy-datac-action.md</code> § 5.2 et le cahier § G.5.
       </p>
-      <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 100 LIKE Réalisé;2025"></textarea>
+      <textarea id="datacCommandInput" rows="4" spellcheck="false" placeholder="Ex. 300 like 2025"></textarea>
       <div class="datac-actions">
-        <button type="button" id="btnDatacSplash">Appliquer le splash (conserver PALO.DATAC)</button>
+        <button type="button" id="btnDatacSplash">Exécuter LIKE ou COPY</button>
       </div>
     </details>
     <div id="datacErr"></div>
@@ -128,8 +130,8 @@
 
   <button id="btnClose" type="button">Fermer</button>
 
-  <script src="ename-formula-args.js?v=1.0.69.0" type="text/javascript"></script>
-  <script src="md5.js?v=1.0.69.0" type="text/javascript"></script>
-  <script src="action-popup.js?v=1.0.69.0" type="text/javascript"></script>
+  <script src="ename-formula-args.js?v=1.0.71.0" type="text/javascript"></script>
+  <script src="md5.js?v=1.0.71.0" type="text/javascript"></script>
+  <script src="action-popup.js?v=1.0.71.0" type="text/javascript"></script>
 </body>
 </html>

@@ -77,7 +77,7 @@
         },
         {
           "name": "splash",
-          "description": "Mode de splash: FALSE/0 (aucun), TRUE/1 (défaut), ou 0..5.",
+          "description": "Mode splash HTTP 0..5 (ou FALSE/0, TRUE/1) : 1 = défaut / répartition sur bases ; 2 = add_base (!!, même + sur chaque base) ; 3 = set_base (!, même valeur sur chaque base) ; 4–5 = bases déjà renseignées (!# / !!#).",
           "type": "any"
         },
         {
