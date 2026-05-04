@@ -54,7 +54,7 @@
 		if (payload.datacResolvedJson) {
 			q.set("datac_r", payload.datacResolvedJson);
 		}
-		return base + "action-popup.html?v=1.0.76.0&" + q.toString();
+		return base + "action-popup.html?v=1.0.77.0&" + q.toString();
 	}
 
 	function isLocalA1Notation(loc) {
