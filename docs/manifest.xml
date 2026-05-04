@@ -130,15 +130,7 @@
             <OfficeMenu id="ContextMenuCell">
               <Control xsi:type="Button" id="Palo.ActionContextMenu">
                 <Label resid="Palo.ActionLabel"/>
-                <Supertip>
-                  <Title resid="Palo.ActionSupertipTitle"/>
-                  <Description resid="Palo.ActionTip"/>
-                </Supertip>
-                <Icon>
-                  <bt:Image size="16" resid="Action.Icon.16x16"/>
-                  <bt:Image size="32" resid="Action.Icon.32x32"/>
-                  <bt:Image size="80" resid="Action.Icon.80x80"/>
-                </Icon>
+                
                 <Action xsi:type="ExecuteFunction">
                   <FunctionName>showActionPopup</FunctionName>
                 </Action>
