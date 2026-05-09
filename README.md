@@ -1,6 +1,6 @@
 # Palo OLAP Add-in (Excel Office 365)
 
-Add-in Excel Microsoft 365 servi par PHP, aligne sur le cahier des charges `Exemple_addin_palo`.
+Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur le cahier des charges `Exemple_addin_palo`. Peut etre publie sur GitHub Pages (`public/` comme racine du site).
 
 ## Structure
 
@@ -24,15 +24,16 @@ Add-in Excel Microsoft 365 servi par PHP, aligne sur le cahier des charges `Exem
 
 ## Prerequis
 
-- Un serveur HTTPS deja en place (certificat gere par ton infra)
-- PHP 7.4+
+- Un site HTTPS pour les assets de l’add-in (GitHub Pages, CDN, ou serveur web classique).
+- Le serveur Palo doit accepter les requetes `fetch()` depuis l’origine Office (CORS cote Palo), independamment de l’hebergement des fichiers de l’add-in.
 
-## 1) Deployer sur ton serveur PHP
+## 1) Deployer (statique)
 
-- Copier le dossier `paloaddin/` sur le serveur.
-- Exposer `paloaddin/public` en HTTPS, par exemple:
-  - `https://ton-domaine/paloaddin/public/taskpane.php`
-  - `https://ton-domaine/paloaddin/public/functions.js`
+- Copier le dossier `paloaddin/` (ou au minimum `paloaddin/public/`) sur ton hebergeur.
+- Exemple d’URL apres publication :
+  - `https://ton-domaine/.../public/taskpane.html`
+  - `https://ton-domaine/.../public/functions.js`
+  - Metadonnees des fonctions : `public/functions.json`.
 
 ## 2) Mettre a jour le manifeste
 

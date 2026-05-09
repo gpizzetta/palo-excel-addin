@@ -287,7 +287,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.1.110");
+      dialogUrl.searchParams.set("v", "1.0.1.111");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,

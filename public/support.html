@@ -13,7 +13,7 @@
 <body>
   <h1>Palo OLAP Add-in</h1>
   <p>Ce prototype implemente la V1 du cahier des charges: connexions Palo, test de connexion et fonctions Excel <code>PALO_*</code>.</p>
-  <p>Point d'entree UI: <code>taskpane.php</code>.</p>
+  <p>Point d'entree UI: <code>taskpane.html</code>.</p>
   <h2>Menu contextuel « Palo action »</h2>
   <p>La commande est declaree dans le manifeste (<code>ExtensionPoint ContextMenu</code> + <code>OfficeMenu id="ContextMenuCell"</code>) et executee par <code>commands.js</code> (<code>Office.actions.associate("paloRibbonAction", …)</code>), comme le bouton du ruban.</p>
   <p><strong>Excel bureau (Windows / Mac)</strong> : Microsoft utilise un menu contextuel different pour les cellules situees <strong>dans un Tableau Excel</strong> (insertion &gt; Tableau). Dans ce cas, les entrees des complements peuvent <strong>ne pas apparaitre</strong> — limitation plateforme (<a href="https://github.com/OfficeDev/office-js/issues/6612">office-js#6612</a>). Essayez un clic droit sur une cellule <strong>hors</strong> tableau, ou utilisez le bouton <strong>Palo action</strong> dans l’onglet Accueil.</p>

@@ -1,4 +1,9 @@
 (function paloApiBootstrap() {
+  /**
+   * Hébergement statique (ex. GitHub Pages) : les en-têtes CORS des assets add-in
+   * viennent du serveur Pages, pas du PHP. Les appels fetch() vers le serveur Palo
+   * exigent que Palo réponde avec les bons Access-Control-* pour l’origine Office.
+   */
   var PALO_TRACE_STORAGE_KEY = "palo.office365.trace.v1";
   var PALO_TRACE_MAX_ENTRIES = 300;
 

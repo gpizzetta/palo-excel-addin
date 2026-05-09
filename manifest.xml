@@ -5,13 +5,13 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.110</Version>
+  <Version>1.0.1.111</Version>
   <ProviderName>PaloAddin Local</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
   <Description DefaultValue="Fonctions Palo pour Excel Microsoft 365."/>
-  <IconUrl DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/icon.php?size=32"/>
-  <HighResolutionIconUrl DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/icon.php?size=80"/>
+  <IconUrl DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/assets/icons/connection-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/assets/icons/connection-80.png"/>
   <SupportUrl DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/support.html"/>
   <AppDomains>
     <AppDomain>https://portal-129032.berdoz.local</AppDomain>
@@ -20,7 +20,7 @@
     <Host Name="Workbook"/>
   </Hosts>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.php"/>
+    <SourceLocation DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.html"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
   <Requirements>
@@ -131,12 +131,12 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/support.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.php?v=1.0.1.110"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.php?v=1.0.1.110"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/commands.html?v=1.0.1.110"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions.js?v=1.0.1.110"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions.html?v=1.0.1.110"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions-metadata.php?v=1.0.1.110"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.html?v=1.0.1.111"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/taskpane.html?v=1.0.1.111"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/commands.html?v=1.0.1.111"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions.js?v=1.0.1.111"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions.html?v=1.0.1.111"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://portal-129032.berdoz.local/portal_gip/paloaddin/public/functions.json?v=1.0.1.111"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>

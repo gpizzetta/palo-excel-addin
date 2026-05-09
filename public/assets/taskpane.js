@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.1.110";
+  var PLUGIN_VERSION = "1.0.1.111";
   var manager = null;
 
   function setText(id, message) {
