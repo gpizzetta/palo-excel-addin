@@ -445,7 +445,7 @@
     return input;
   }
 
-  var PALO_DEFAULT_DIRECT_BASE = "https://palo.berdoz.local";
+  var PALO_DEFAULT_DIRECT_BASE = "https://palo.example.com";
 
   function resolvePaloDirectBaseUrl(profile) {
     if (window.PALO_DIRECT_BASE_URL) {
@@ -549,7 +549,7 @@
   }
 
   /**
-   * Appels Palo depuis le navigateur vers profile.baseUrl (defaut https://palo.berdoz.local). CORS a regler cote serveur Palo.
+   * Appels Palo depuis le navigateur vers profile.baseUrl (defaut https://palo.example.com). CORS a regler cote serveur Palo.
    */
   function PaloApiClient(profile) {
     this.profile = profile;

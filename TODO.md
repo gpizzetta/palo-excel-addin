@@ -14,7 +14,7 @@
 - [ ] Dans `PALO.DATAC_TEST`, si l'appel reussit sans erreur, retourner l'URL appelee et la valeur lue.
 - [ ] Corriger le flux de resolution pour que les appels Palo utilisent les IDs (base/cube/elements) et non les chaines de noms.
 - [ ] Corriger l'erreur observee:
-  - `#PALO! HTTP 400 sur https://palo.berdoz.local/element/info?sid=...&name_database=DWH&name_dimension=D_COMPTE&name_element=Chiffre+d%27affaire`
+  - `#PALO! HTTP 400 sur https://palo.example.com/element/info?sid=...&name_database=...&name_dimension=...&name_element=...`
 - [ ] Verifier apres correction que l'URL finale de lecture cellule est construite avec `databaseId`, `cubeId` et `name_path` en IDs.
 - [ ] Ajouter un log explicite de controle qui affiche la conversion nom -> ID pour chaque segment.
 

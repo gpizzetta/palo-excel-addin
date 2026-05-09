@@ -120,7 +120,7 @@
     all.forEach(function (conn) {
       var opt = document.createElement("option");
       opt.value = conn.name;
-      opt.textContent = conn.name + " (" + (conn.baseUrl || "https://palo.berdoz.local") + ")";
+      opt.textContent = conn.name + " (" + (conn.baseUrl || "https://palo.example.com") + ")";
       if (active && active === conn.name) {
         opt.selected = true;
       }
