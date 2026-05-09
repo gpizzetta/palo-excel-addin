@@ -1,11 +1,12 @@
 # Palo OLAP Add-in (Excel Office 365)
 
-Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur le cahier des charges `Exemple_addin_palo`. Peut etre publie sur GitHub Pages (`public/` comme racine du site).
+Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur le cahier des charges `Exemple_addin_palo`. Publication GitHub Pages : [https://gpizzetta.github.io/palo-excel-addin/](https://gpizzetta.github.io/palo-excel-addin/).
 
 ## Structure
 
-- `manifest.xml` : manifeste Office a sideloader dans Excel.
-- `public/` : taskpane, runtime commandes/fonctions, assets JS.
+- `manifest.xml` (racine du depot) : manifeste Office ; memes URLs que la copie `docs/manifest.xml` pour le sideload depuis Pages.
+- `public/` : source des assets (taskpane, commandes, fonctions, JSON).
+- `docs/` : copie synchronisee de `public/` + `manifest.xml` pour GitHub Pages lorsque la source du site est le dossier **`/docs`** (branche `main`). Apres chaque changement dans `public/`, relancer : `rsync -a --delete public/ docs/` puis `cp manifest.xml docs/manifest.xml`.
 
 ## MVP implemente (V1)
 
@@ -29,22 +30,18 @@ Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur 
 
 ## 1) Deployer (statique)
 
-- Copier le dossier `paloaddin/` (ou au minimum `paloaddin/public/`) sur ton hebergeur.
-- Exemple d’URL apres publication :
-  - `https://ton-domaine/.../public/taskpane.html`
-  - `https://ton-domaine/.../public/functions.js`
-  - Metadonnees des fonctions : `public/functions.json`.
+- **GitHub Pages** : reglage courant — branche `main`, dossier **`/docs`** (contenu = copie de `public/`). Alternative : dossier **`/public`** comme racine du site ; les URLs du manifeste restent `https://gpizzetta.github.io/palo-excel-addin/...` (sans segment `/public/` dans l’URL).
+- Autre hebergeur : copier les fichiers de `public/` a la racine HTTPS du chemin prevu dans `manifest.xml`.
 
-## 2) Mettre a jour le manifeste
+## 2) Manifeste et URLs
 
-Dans `paloaddin/manifest.xml`, remplacer `https://portal-129032.berdoz.local/portal_gip/paloaddin/public`
-par l'URL reelle de ton serveur.
+Le manifeste a la racine pointe vers `https://gpizzetta.github.io/palo-excel-addin/` (taskpane, `functions.json`, assets). Pour un autre domaine ou compte GitHub, adapter toutes les `DefaultValue` dans `manifest.xml` et la section `AppDomains`, puis resynchroniser `docs/manifest.xml` si besoin.
 
 ## 3) Sideload dans Excel
 
 1. Ouvre Excel (Office 365 desktop ou web).
 2. Va dans **Insert > My Add-ins > Upload My Add-in**.
-3. Charge le fichier `paloaddin/manifest.xml`.
+3. Charge `manifest.xml` (racine du depot) ou, depuis le site Pages, `https://gpizzetta.github.io/palo-excel-addin/manifest.xml` une fois le deploiement a jour.
 
 ## Notes
 

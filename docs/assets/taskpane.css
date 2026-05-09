@@ -1,0 +1,335 @@
+/**
+ * Taskpane connexion Palo — style proche du volet Office / champs TCD (Excel).
+ * Tons neutres, bords fins, peu d’ombre, contrôles compacts type ruban.
+ */
+
+:root {
+  --excel-bg: #f3f2f1;
+  --excel-surface: #ffffff;
+  --excel-surface-alt: #faf9f8;
+  --excel-border: #e1dfdd;
+  --excel-border-strong: #c8c6c4;
+  --excel-text: #323130;
+  --excel-text-secondary: #605e5c;
+  --excel-accent: #0078d4;
+  --excel-accent-hover: #106ebe;
+  --excel-accent-pressed: #005a9e;
+  --excel-danger: #a4262c;
+  --excel-danger-hover: #8b1a1a;
+  --excel-header: #faf9f8;
+  --excel-focus-ring: #0078d4;
+  --radius: 2px;
+  --font: "Segoe UI", "Segoe UI Web (West European)", system-ui, -apple-system, sans-serif;
+  --mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.4;
+  background: var(--excel-bg);
+  color: var(--excel-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  border-left: 3px solid var(--excel-accent);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.version-line {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: var(--excel-text-secondary);
+  background: var(--excel-surface-alt);
+  border-bottom: 1px solid var(--excel-border);
+}
+
+.version-line--footer {
+  margin-top: auto;
+  border-bottom: none;
+  border-top: 1px solid var(--excel-border);
+  background: var(--excel-surface);
+}
+
+.version-line strong {
+  color: var(--excel-text);
+  font-weight: 600;
+}
+
+.muted {
+  margin: 0;
+  padding: 8px 12px 10px;
+  color: var(--excel-text-secondary);
+  font-size: 11px;
+  background: var(--excel-surface);
+  border-bottom: 1px solid var(--excel-border);
+}
+
+.muted code {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  background: var(--excel-surface-alt);
+  border: 1px solid var(--excel-border);
+  color: var(--excel-text);
+}
+
+.small {
+  font-size: 11px;
+  margin-top: 2px;
+  margin-bottom: 0;
+  padding: 0 0 8px;
+  border-bottom: none;
+}
+
+/* Texte d'aide sous un champ : pas de bandeau comme le .muted du haut de page */
+.card .muted,
+.card .muted.small {
+  padding: 0 0 8px;
+  margin: 0;
+  background: transparent;
+  border: none;
+  color: var(--excel-text-secondary);
+}
+
+/* Bloc type « zone de champs » TCD : surface blanche, grille fine */
+.card {
+  margin: 0;
+  padding: 0 12px 12px;
+  background: var(--excel-surface);
+  border: none;
+  border-bottom: 1px solid var(--excel-border);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+section.card:last-of-type {
+  border-bottom: none;
+}
+
+.card h2 {
+  margin: 0 -12px 0;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--excel-text-secondary);
+  background: var(--excel-header);
+  border-bottom: 1px solid var(--excel-border);
+}
+
+.card > label:first-of-type {
+  margin-top: 10px;
+}
+
+label {
+  display: block;
+  margin-top: 8px;
+  margin-bottom: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--excel-text);
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+  font-weight: 400;
+  font-size: 11px;
+  color: var(--excel-text-secondary);
+  cursor: pointer;
+}
+
+.checkbox-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 1px 0 0;
+  flex-shrink: 0;
+  accent-color: var(--excel-accent);
+}
+
+input[type="text"],
+input[type="password"],
+select {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 4px 8px;
+  margin-bottom: 0;
+  margin-top: 0;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--excel-text);
+  background: var(--excel-surface);
+  border: 1px solid var(--excel-border-strong);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color 0.1s ease, box-shadow 0.1s ease;
+}
+
+input[type="text"]:hover,
+input[type="password"]:hover,
+select:hover {
+  border-color: var(--excel-text-secondary);
+}
+
+input[type="text"]:focus,
+input[type="password"]:focus,
+select:focus {
+  border-color: var(--excel-focus-ring);
+  box-shadow: inset 0 0 0 1px var(--excel-focus-ring);
+}
+
+select {
+  cursor: pointer;
+  margin-bottom: 10px;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px 0 0;
+  margin: 10px -12px 0;
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: 2px;
+  background: var(--excel-surface-alt);
+  border-top: 1px solid var(--excel-border);
+}
+
+.row button {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Boutons type ruban : primaire plein, danger secondaire */
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--excel-accent);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease;
+}
+
+button:hover {
+  background: var(--excel-accent-hover);
+}
+
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px var(--excel-surface), 0 0 0 3px var(--excel-focus-ring);
+}
+
+button:active {
+  background: var(--excel-accent-pressed);
+}
+
+#save-connection {
+  width: 100%;
+  margin: 12px 0 0;
+}
+
+.danger {
+  color: #fff;
+  background: var(--excel-danger);
+  border-color: var(--excel-danger);
+}
+
+.danger:hover {
+  background: var(--excel-danger-hover);
+}
+
+/* Statut : indicateur visuel + message */
+.status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: var(--excel-surface-alt);
+  border: 1px solid var(--excel-border);
+  border-radius: var(--radius);
+}
+
+.status-banner--ok {
+  border-color: #c7e0c7;
+  background: #f8fdf8;
+}
+
+.status-banner--error {
+  border-color: #e0bcbc;
+  background: #fdf6f6;
+}
+
+.status-icon {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin-top: 1px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.status-icon--ok {
+  color: #107c10;
+}
+
+.status-icon--fail {
+  color: var(--excel-danger);
+}
+
+pre#status-log {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  min-height: 3.5em;
+  max-height: 140px;
+  overflow-y: auto;
+  padding: 0;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--excel-text);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
