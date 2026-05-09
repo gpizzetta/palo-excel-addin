@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Palo</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    body { font-family: "Segoe UI", system-ui, sans-serif; margin: 14px; font-size: 13px; }
+    h1 { font-size: 15px; margin: 0 0 10px; font-weight: 600; }
+    pre { white-space: pre-wrap; margin: 0; line-height: 1.35; }
+    .actions { margin-top: 14px; }
+    button { padding: 6px 14px; font-size: 13px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1 id="title">Palo action</h1>
+  <pre id="msg"></pre>
+  <div class="actions">
+    <button id="ok" type="button">OK</button>
+  </div>
+  <script>
+    Office.onReady(function () {
+      var q = new URLSearchParams(window.location.search);
+      var title = q.get("t");
+      var body = q.get("m");
+      if (title) {
+        document.getElementById("title").textContent = title;
+      }
+      document.getElementById("msg").textContent = body || "";
+      document.getElementById("ok").onclick = function () {
+        if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
+          Office.context.ui.messageParent("close", { targetOrigin: "*" });
+          return;
+        }
+        window.close();
+      };
+    });
+  </script>
+</body>
+</html>

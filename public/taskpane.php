@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Palo OLAP Add-in</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="./assets/taskpane.css?v=1.0.1.110">
+</head>
+<body>
+  <main class="app">
+    <section class="card" id="connection-section">
+      <h2>Connexion Palo</h2>
+      <label for="conn-name">Nom connexion</label>
+      <input id="conn-name" type="text" placeholder="DEV_LOCAL">
+      <label for="conn-url">URL Palo (navigateur / login)</label>
+      <input id="conn-url" type="text" value="https://palo.berdoz.local" placeholder="https://palo.berdoz.local">
+      <p class="muted small">Les formules appellent cette URL depuis Excel.</p>
+      <label for="conn-user">Utilisateur</label>
+      <input id="conn-user" type="text" value="admin">
+      <label for="conn-password">Mot de passe (texte ou md5)</label>
+      <input id="conn-password" type="password">
+      <label for="conn-debug" class="checkbox-row">
+        <input id="conn-debug" type="checkbox">
+        Debug (afficher les erreurs #PALO! dans les cellules)
+      </label>
+      <label for="connection-list">Connexion active</label>
+      <select id="connection-list">
+        <option value="">-- Selectionner --</option>
+      </select>
+      <button id="save-connection" type="button">Ajouter / Mettre a jour</button>
+    </section>
+
+    <section class="card" id="saved-connections-section">
+      <h2>Connexions enregistrees</h2>
+      <div class="row">
+        <button id="test-connection" type="button">Tester</button>
+        <button id="delete-connection" type="button" class="danger">Supprimer</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Statut</h2>
+      <div class="status-banner" id="status-banner">
+        <span class="status-icon" id="status-icon" aria-hidden="true"></span>
+        <pre id="status-log">Pret.</pre>
+      </div>
+    </section>
+
+    <p class="version-line version-line--footer">Version plugin: <strong id="plugin-version">1.0.1.110</strong></p>
+  </main>
+
+  <script src="./assets/palo-api.js?v=1.0.1.110"></script>
+  <script src="./assets/taskpane.js?v=1.0.1.110"></script>
+</body>
+</html>

@@ -1,60 +1,54 @@
-# palo-excel-addin
+# Palo OLAP Add-in (Excel Office 365)
 
-Complément Excel minimal, **100 % statique** (HTML + JS dans `docs/`), sans Node ni build.
+Add-in Excel Microsoft 365 servi par PHP, aligne sur le cahier des charges `Exemple_addin_palo`.
 
-- **`=PALO.HELLO()`** → `hello world` (test minimal).
-- **Ruban → onglet « Palo » → groupe « Serveur » → « Connexion »** : volet **URL**, **utilisateur**, **mot de passe**, **Enregistrer** (paramètres du classeur). Sur **Excel pour Microsoft 365 (Windows / Mac)**, l’onglet **Palo** apparaît à côté des onglets du ruban. **Excel dans le navigateur** : les commandes ruban des compléments **téléversés** sont souvent **invisibles ou incomplètes** — ouvrir le complément via **Insertion → Compléments → Palo** (volet Connexion), ou utiliser **Excel bureau**.
-- **`=PALO.VERSION()`** → numéro de version du **bundle JS** chargé (à comparer à `<Version>` du manifeste). Utile si **`#NOM?`** sur d’autres fonctions : cache Excel / ancien script — retirer le complément, repousser, retélécharger le manifeste.
-- **`=PALO.INFO("https://hôte:port/chemin")`** → `GET` en **CORS** vers l’URL ; statut HTTP ou erreur (CORS, réseau, TLS). Palo en **HTTP** seul peut échouer depuis Excel Online ; **HTTPS** + CORS côté serveur souvent nécessaires.
-- **`=PALO.DATAC(base,cube,élément1,[élément2],…)`** → lecture d’une cellule via **`/cell/value`** (`name_path`), en s’appuyant sur **Connexion** (URL + identifiants du classeur). Les noms d’éléments sont **un par dimension** (arguments répétables). Session serveur **réutilisée ~4 min** pour limiter les `/server/login`.
-- **Action (ruban ou menu contextuel)** sur une cellule en **`PALO.DATAC`** : popup avec champ **LIKE/COPY** ; un clic applique le **splash** sur le cube (`/cell/replace`) **sans modifier** la formule `PALO.DATAC`. Doc : [`docs/palo-like-copy-datac-action.md`](docs/palo-like-copy-datac-action.md).
+## Structure
 
-À chaque release, aligner **`ADDIN_VERSION`** dans `docs/functions.js`, **`?v=…`** dans `docs/manifest.xml`, `docs/functions.html`, `docs/taskpane-connection.html`, et `<Version>` du manifeste (même numéro, ex. `1.0.6.0`).
-- Manifeste : **`https://gpizzetta.github.io/palo-excel-addin/manifest.xml`** (GitHub Pages : branche `main`, dossier `/docs`).
-- Contrôle du déploiement : **`https://gpizzetta.github.io/palo-excel-addin/`** — page `index.html` qui affiche la `<Version>` lue dans le manifeste publié (après `git push`, attendre ~1–2 min puis actualiser).
+- `manifest.xml` : manifeste Office a sideloader dans Excel.
+- `public/` : taskpane, runtime commandes/fonctions, assets JS.
 
-## Mises à jour et cache Excel
+## MVP implemente (V1)
 
-Office met souvent en **cache** le manifeste et les scripts. Pour forcer une nouvelle version :
+- Gestion des connexions Palo (ajout, suppression, selection, stockage local).
+- Test de connexion via `server/login` + `server/databases`.
+- Exploration de base (databases, cubes, dimensions sur la base `Demo`).
+- Fonctions Excel custom:
+  - `PALO.DATAC`, `PALO_SETDATA`
+  - `ENAME`, `PALO_ECOUNT`, `PALO_ECHILDCOUNT`, `PALO_ECHILD`
+  - `PALO_EPARENTCOUNT`, `PALO_EPARENT`, `PALO_ELEVEL`, `PALO_EINDENT`, `PALO_ETYPE`, `PALO_EWEIGHT`
+  - `PALO_DATABASE_LIST_DIMENSIONS`, `PALO_CUBE_LIST_DIMENSIONS`, `PALO_DIMENSION_LIST_CUBES`, `PALO_DIMENSION_LIST_ELEMENTS`
+- Ruban Excel:
+  - Ouvrir taskpane
+  - Tester connexion
+  - Inserer formules `PALO.DATAC` / `PALO_SETDATA` / `PALO.ENAME`
 
-1. **Incrémenter** `<Version>` dans `docs/manifest.xml` à chaque publication (ex. `1.0.1.0` → `1.0.2.0`). C’est la méthode recommandée par Microsoft pour signaler une mise à jour.
-2. **Retirer** le complément puis **le recharger** (nouveau fichier manifest ou même URL Pages après `git push`).
-3. Si rien ne change : fermer Excel, navigation privée, ou vider le cache Office (selon la plateforme).
+## Prerequis
 
-**Excel sur le web** : l’entrée personnalisée du **menu contextuel** (ex. « Palo Action ») peut s’afficher **sans icône** et sur **deux lignes** malgré un manifeste valide — limitation côté hôte, suivie par Microsoft ([office-js#6381](https://github.com/OfficeDev/office-js/issues/6381)). Sur **Excel bureau**, le rendu est en général plus proche d’une ligne « icône + libellé ».
+- Un serveur HTTPS deja en place (certificat gere par ton infra)
+- PHP 7.4+
 
-Ne change `<Id>` **que** si tu veux un **nouveau** complément aux yeux d’Excel (sinon garde le même GUID).
+## 1) Deployer sur ton serveur PHP
 
-Optionnel : après un déploiement, attendre 1–2 minutes (CDN GitHub Pages) avant de retester.
+- Copier le dossier `paloaddin/` sur le serveur.
+- Exposer `paloaddin/public` en HTTPS, par exemple:
+  - `https://ton-domaine/paloaddin/public/taskpane.php`
+  - `https://ton-domaine/paloaddin/public/functions.js`
 
-## Fichiers
+## 2) Mettre a jour le manifeste
 
-| Fichier | Rôle |
-|---------|------|
-| `docs/manifest.xml` | Manifeste Office (`<Version>` à bump à chaque release) |
-| `docs/functions.html` | Page hôte Office.js |
-| `docs/functions.js` | `PALO.HELLO`, `PALO.VERSION`, `PALO.INFO`, `PALO.DATAC` |
-| `docs/functions.json` | Métadonnées des fonctions |
-| `docs/commands.html` | Commandes du ruban |
-| `docs/taskpane-connection.html` + `taskpane-connection.js` | Volet Connexion (URL / user / mot de passe) |
-| `docs/assets/` | Icônes **PNG** (`icon-16` … `icon-80`) |
-| `design/*.svg` | Sources vectorielles (**non** référencées par le manifeste ; voir `design/README.md`) |
+Dans `paloaddin/manifest.xml`, remplacer `https://portal-129032.berdoz.local/portal_gip/paloaddin/public`
+par l'URL reelle de ton serveur.
 
-Validation du manifeste (optionnel) :  
-`npx office-addin-manifest validate docs/manifest.xml`
+## 3) Sideload dans Excel
 
-## Référence — code du plugin Excel 2010 (COM, Jedox 5.1)
+1. Ouvre Excel (Office 365 desktop ou web).
+2. Va dans **Insert > My Add-ins > Upload My Add-in**.
+3. Charge le fichier `paloaddin/manifest.xml`.
 
-Source C++ de l’ancien add-in **PaloSpreadsheetFuncs** (LIKE/COPY, `FPaloSetdata`, `FPaloGetdataC`, etc.) — **URL canonique à conserver** :
+## Notes
 
-[https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs](https://github.com/gpizzetta/jedox-mirror/tree/master/molap/client_libraries/5.1/PaloSpreadsheetFuncs)
+- `PALO.ENAME` attend **3 arguments** : `servdb`, `dimension`, **`elementId`** (identifiant numerique Palo, pas le libelle). Les arguments en trop sont ignores. Exemple : `=PALO.ENAME("NEW/DWH";"D_ANNEE";2025)` (pas besoin de `;1;""` a la fin).
+- Le serveur Palo est appele directement depuis l'addin (Office.js).
+- En Excel Web, l'URL Palo doit etre accessible depuis le cloud Microsoft.
+- Le HTTPS est requis par Office add-ins.
 
-Voir aussi [`docs/CAHIER_DES_CHARGES.md`](docs/CAHIER_DES_CHARGES.md) (inventaire des `FPalo*`) et [`docs/palo-like-copy-datac-action.md`](docs/palo-like-copy-datac-action.md) (comportement LIKE/COPY).
-
-## Cahier des charges (fonctions PALO)
-
-Voir **`docs/CAHIER_DES_CHARGES.md`** : liste des fonctions `palo.*` / `PALO.*` à réimplémenter (référence `palo-server` + client historique **PaloSpreadsheetFuncs**, lien ci‑dessus).
-
-## Licence
-
-MIT — voir `LICENSE`.
