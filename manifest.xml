@@ -6,12 +6,12 @@
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
   <Version>1.0.1.112</Version>
-  <ProviderName>Palo OLAP Add-in (GitHub Pages)</ProviderName>
+  <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
   <Description DefaultValue="Fonctions Palo pour Excel Microsoft 365."/>
   <IconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/connection-32.png"/>
-  <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/connection-80.png"/>
+  <HighResolutionIconUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/connection-64.png"/>
   <SupportUrl DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
   <AppDomains>
     <AppDomain>https://gpizzetta.github.io</AppDomain>
