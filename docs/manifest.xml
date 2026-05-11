@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.113</Version>
+  <Version>1.0.1.114</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -19,30 +19,25 @@
   <Hosts>
     <Host Name="Workbook"/>
   </Hosts>
-  <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html"/>
-  </DefaultSettings>
-  <Permissions>ReadWriteDocument</Permissions>
   <Requirements>
     <Sets DefaultMinVersion="1.1">
       <Set Name="AddinCommands" MinVersion="1.1"/>
       <Set Name="DialogApi" MinVersion="1.2"/>
     </Sets>
   </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
 
   <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
     <Hosts>
       <Host xsi:type="Workbook">
         <AllFormFactors>
           <ExtensionPoint xsi:type="CustomFunctions">
-            <!--
-              Pas de <Script> ici : sur Excel Desktop, sa présence force le
-              JavaScript-only runtime qui charge UNIQUEMENT functions.js et
-              ignore functions.html. palo-api.js (qui définit window.PaloOffice)
-              ne serait alors jamais chargé. En ne déclarant que <Page>, toutes
-              les plateformes utilisent functions.html qui charge palo-api.js
-              puis functions.js dans le bon ordre.
-            -->
+            <Script>
+              <SourceLocation resid="Functions.Url"/>
+            </Script>
             <Page>
               <SourceLocation resid="Functions.Page.Url"/>
             </Page>
@@ -136,12 +131,12 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.112"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.112"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.112"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.112"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.1.112"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.112"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.114"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.114"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.114"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.114"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.1.114"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.114"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
