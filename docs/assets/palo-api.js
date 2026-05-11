@@ -255,15 +255,32 @@
     return value.split(",").map(function (v) { return Number(v); }).filter(function (v) { return !Number.isNaN(v); });
   }
 
-  function parseServDb(servdb) {
-    var idx = String(servdb).indexOf("/");
-    if (idx <= 0 || idx >= String(servdb).length - 1) {
-      throw new Error("servdb invalide (" + servdb + "), format attendu: Connection/Database");
+  /**
+   * Decompose servdb sans resoudre la connexion active.
+   * Formats: "MaConnexion/MaBase" ou "/MaBase" (nom de connexion vide = utiliser la connexion active, voir parseServDb sur ConnectionManager).
+   */
+  function parseServDbRaw(servdb) {
+    var s = String(servdb);
+    var idx = s.indexOf("/");
+    if (idx < 0) {
+      throw new Error("servdb invalide (" + servdb + "), format attendu: Connection/Database ou /Database");
     }
-    return {
-      connectionName: String(servdb).slice(0, idx),
-      database: String(servdb).slice(idx + 1)
-    };
+    if (idx === 0) {
+      var databaseFromSlash = s.slice(1);
+      if (!databaseFromSlash) {
+        throw new Error("servdb invalide (" + servdb + "), base de donnees manquante apres le slash.");
+      }
+      return { connectionName: "", database: databaseFromSlash };
+    }
+    if (idx >= s.length - 1) {
+      throw new Error("servdb invalide (" + servdb + "), format attendu: Connection/Database ou /Database");
+    }
+    var connectionName = s.slice(0, idx);
+    var database = s.slice(idx + 1);
+    if (!connectionName || !database) {
+      throw new Error("servdb invalide (" + servdb + "), format attendu: Connection/Database ou /Database");
+    }
+    return { connectionName: connectionName, database: database };
   }
 
   /**
@@ -1758,11 +1775,21 @@
   };
 
   PaloConnectionManager.prototype.parseServDb = function parseServDbPublic(servdb) {
-    return parseServDb(servdb);
+    var parsed = parseServDbRaw(servdb);
+    if (!parsed.connectionName) {
+      var active = this.getActiveConnectionName();
+      if (!active) {
+        throw new Error(
+          "servdb \"" + servdb + "\" requiert une connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste."
+        );
+      }
+      return { connectionName: active, database: parsed.database };
+    }
+    return parsed;
   };
 
   PaloConnectionManager.prototype.getClientAndContext = async function getClientAndContext(servdb) {
-    var parsed = parseServDb(servdb);
+    var parsed = this.parseServDb(servdb);
     var profile = this.getConnection(parsed.connectionName);
     var client = new PaloApiClient(profile);
     var sid = await this.getValidSid(profile.name, client);

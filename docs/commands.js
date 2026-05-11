@@ -41,12 +41,30 @@
     complete(event);
   }
 
+  function escapeDoubleQuotesForFormula(s) {
+    return String(s).replace(/"/g, '""');
+  }
+
   async function insertPaloDataFormula(event) {
     try {
+      if (!window.PaloOffice || typeof window.PaloOffice.createConnectionManager !== "function") {
+        complete(event);
+        return;
+      }
+      var manager = window.PaloOffice.createConnectionManager();
+      var active = manager.getActiveConnectionName();
+      if (!active) {
+        window.alert("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.");
+        complete(event);
+        return;
+      }
+      var servdb = active + "/DWH";
+      var safe = escapeDoubleQuotesForFormula(servdb);
+      var formula = '=PALO.DATAC("' + safe + '";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")';
       await Excel.run(async function (context) {
         var sheet = context.workbook.worksheets.getActiveWorksheet();
         var range = sheet.getActiveCell();
-        range.formulasLocal = [['=PALO.DATAC("DEV_LOCAL/DWH";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")']];
+        range.formulasLocal = [[formula]];
         await context.sync();
       });
     } catch (_error) {
@@ -57,10 +75,24 @@
 
   async function insertPaloSetDataFormula(event) {
     try {
+      if (!window.PaloOffice || typeof window.PaloOffice.createConnectionManager !== "function") {
+        complete(event);
+        return;
+      }
+      var manager = window.PaloOffice.createConnectionManager();
+      var active = manager.getActiveConnectionName();
+      if (!active) {
+        window.alert("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.");
+        complete(event);
+        return;
+      }
+      var servdb = active + "/DWH";
+      var safe = escapeDoubleQuotesForFormula(servdb);
+      var formula = '=PALO_SETDATA(100;0;"' + safe + '";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")';
       await Excel.run(async function (context) {
         var sheet = context.workbook.worksheets.getActiveWorksheet();
         var range = sheet.getActiveCell();
-        range.formulasLocal = [['=PALO_SETDATA(100;0;"DEV_LOCAL/DWH";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")']];
+        range.formulasLocal = [[formula]];
         await context.sync();
       });
     } catch (_error) {
@@ -287,7 +319,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.1.112");
+      dialogUrl.searchParams.set("v", "1.0.1.115");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
