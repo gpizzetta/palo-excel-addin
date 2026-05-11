@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.115</Version>
+  <Version>1.0.1.116</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -26,7 +26,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.115"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.116"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
@@ -131,12 +131,12 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.115"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.115"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.115"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.115"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.1.115"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.115"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.116"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.116"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.116"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.116"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.1.116"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.116"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -151,5 +151,110 @@
         <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element) dans la dimension."/>
       </bt:LongStrings>
     </Resources>
+
+    <!--
+      Bloc imbrique V1.1 : declare un shared runtime (lifetime=long) qui execute
+      taskpane.html, et y rattache custom functions + ribbon + context menu.
+      Consequence : sur Excel Desktop, plus de JS-only runtime separe pour
+      functions.js ; tout tourne dans la meme page taskpane (iframe avec DOM
+      + localStorage), donc window.PaloOffice est toujours defini.
+      Les hosts qui ne supportent pas V1.1 retombent sur le V1.0 ci-dessus.
+    -->
+    <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
+      <Requirements>
+        <bt:Sets DefaultMinVersion="1.1">
+          <bt:Set Name="SharedRuntime" MinVersion="1.0"/>
+        </bt:Sets>
+      </Requirements>
+      <Hosts>
+        <Host xsi:type="Workbook">
+          <Runtimes>
+            <Runtime resid="Taskpane.Url" lifetime="long"/>
+          </Runtimes>
+          <AllFormFactors>
+            <ExtensionPoint xsi:type="CustomFunctions">
+              <Runtime resid="Taskpane.Url"/>
+              <Page>
+                <SourceLocation resid="Taskpane.Url"/>
+              </Page>
+              <Metadata>
+                <SourceLocation resid="Functions.Metadata.Url"/>
+              </Metadata>
+              <Namespace resid="Functions.Namespace"/>
+            </ExtensionPoint>
+          </AllFormFactors>
+          <DesktopFormFactor>
+            <GetStarted>
+              <Title resid="GetStarted.Title"/>
+              <Description resid="GetStarted.Description"/>
+              <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+            </GetStarted>
+            <FunctionFile resid="Taskpane.Url"/>
+            <ExtensionPoint xsi:type="PrimaryCommandSurface">
+              <OfficeTab id="TabHome">
+                <Group id="Palo.Group.Actions">
+                  <Label resid="Palo.Group.Actions.Label"/>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Control xsi:type="Button" id="Palo.Button.OpenTaskpane">
+                    <Label resid="Palo.Button.OpenTaskpane.Label"/>
+                    <Supertip>
+                      <Title resid="Palo.Button.OpenTaskpane.Label"/>
+                      <Description resid="Palo.Button.OpenTaskpane.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Icon.16"/>
+                      <bt:Image size="32" resid="Icon.32"/>
+                      <bt:Image size="80" resid="Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ShowTaskpane">
+                      <TaskpaneId>ButtonId1</TaskpaneId>
+                      <SourceLocation resid="Taskpane.Connection.Url"/>
+                    </Action>
+                  </Control>
+                  <Control xsi:type="Button" id="Palo.Button.Action">
+                    <Label resid="Palo.Button.Action.Label"/>
+                    <Supertip>
+                      <Title resid="Palo.Button.Action.Label"/>
+                      <Description resid="Palo.Button.Action.Tooltip"/>
+                    </Supertip>
+                    <Icon>
+                      <bt:Image size="16" resid="Action.Icon.16"/>
+                      <bt:Image size="32" resid="Action.Icon.32"/>
+                      <bt:Image size="80" resid="Action.Icon.80"/>
+                    </Icon>
+                    <Action xsi:type="ExecuteFunction">
+                      <FunctionName>paloRibbonAction</FunctionName>
+                    </Action>
+                  </Control>
+                </Group>
+              </OfficeTab>
+            </ExtensionPoint>
+            <ExtensionPoint xsi:type="ContextMenu">
+              <OfficeMenu id="ContextMenuCell">
+                <Control xsi:type="Button" id="Palo.ContextMenu.Action">
+                  <Label resid="Palo.Button.Action.Label"/>
+                  <Supertip>
+                    <Title resid="Palo.Button.Action.Label"/>
+                    <Description resid="Palo.Button.Action.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Action.Icon.16"/>
+                    <bt:Image size="32" resid="Action.Icon.32"/>
+                    <bt:Image size="80" resid="Action.Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ExecuteFunction">
+                    <FunctionName>paloRibbonAction</FunctionName>
+                  </Action>
+                </Control>
+              </OfficeMenu>
+            </ExtensionPoint>
+          </DesktopFormFactor>
+        </Host>
+      </Hosts>
+    </VersionOverrides>
   </VersionOverrides>
 </OfficeApp>
