@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.112</Version>
+  <Version>1.0.1.113</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -35,9 +35,14 @@
       <Host xsi:type="Workbook">
         <AllFormFactors>
           <ExtensionPoint xsi:type="CustomFunctions">
-            <Script>
-              <SourceLocation resid="Functions.Url"/>
-            </Script>
+            <!--
+              Pas de <Script> ici : sur Excel Desktop, sa présence force le
+              JavaScript-only runtime qui charge UNIQUEMENT functions.js et
+              ignore functions.html. palo-api.js (qui définit window.PaloOffice)
+              ne serait alors jamais chargé. En ne déclarant que <Page>, toutes
+              les plateformes utilisent functions.html qui charge palo-api.js
+              puis functions.js dans le bon ordre.
+            -->
             <Page>
               <SourceLocation resid="Functions.Page.Url"/>
             </Page>

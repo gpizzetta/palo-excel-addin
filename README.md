@@ -5,7 +5,7 @@ Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur 
 ## Structure
 
 - **`docs/`** : seul dossier des assets du complément (taskpane, commandes, fonctions, `functions.json`, `manifest.xml`). C’est ce dossier que **GitHub Pages** sert lorsque la source du site est **`/docs`** (branche `main`).
-- **`manifest.xml` à la racine** : copie du fichier `docs/manifest.xml` pour pouvoir sideloader depuis la racine du clone. Après toute modification du manifeste dans `docs/`, aligner la racine : `cp docs/manifest.xml manifest.xml`.
+- Le manifeste est unique : **`docs/manifest.xml`**. C'est ce fichier qu'on sideload localement et qui est publié sur GitHub Pages à `https://gpizzetta.github.io/palo-excel-addin/manifest.xml`.
 
 ## MVP implemente (V1)
 
@@ -34,13 +34,23 @@ Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur 
 
 ## 2) Manifeste et URLs
 
-Les deux fichiers `docs/manifest.xml` et `manifest.xml` (racine) doivent rester identiques. Ils pointent vers `https://gpizzetta.github.io/palo-excel-addin/` (taskpane, `functions.json`, assets). Pour un autre domaine ou compte GitHub, editer `docs/manifest.xml`, puis `cp docs/manifest.xml manifest.xml`.
+`docs/manifest.xml` pointe vers `https://gpizzetta.github.io/palo-excel-addin/` (taskpane, `functions.json`, assets). Pour un autre domaine ou compte GitHub, editer `docs/manifest.xml` (c'est le seul fichier a modifier).
 
 ## 3) Sideload dans Excel
 
 1. Ouvre Excel (Office 365 desktop ou web).
 2. Va dans **Insert > My Add-ins > Upload My Add-in**.
-3. Charge `manifest.xml` (racine du depot), `docs/manifest.xml`, ou l’URL `https://gpizzetta.github.io/palo-excel-addin/manifest.xml` une fois le deploiement a jour.
+3. Charge `docs/manifest.xml` (depuis le clone local) ou l’URL `https://gpizzetta.github.io/palo-excel-addin/manifest.xml` une fois le deploiement a jour.
+
+### Sideload Excel Desktop via office-addin-debugging
+
+Depuis la racine du depot :
+
+```bash
+npx office-addin-debugging start docs/manifest.xml desktop
+# pour arreter :
+npx office-addin-debugging stop docs/manifest.xml
+```
 
 ## Notes
 
