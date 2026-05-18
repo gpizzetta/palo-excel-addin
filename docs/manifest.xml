@@ -173,6 +173,9 @@
           </Runtimes>
           <AllFormFactors>
             <ExtensionPoint xsi:type="CustomFunctions">
+              <Script>
+                <SourceLocation resid="Taskpane.Url"/>
+              </Script>
               <Runtime resid="Taskpane.Url"/>
               <Page>
                 <SourceLocation resid="Taskpane.Url"/>

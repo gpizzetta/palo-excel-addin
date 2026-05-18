@@ -1,14 +1,103 @@
+/* global CustomFunctions, OfficeRuntime, importScripts */
+var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
+var PALO_ASSET_VERSION = "1.0.1.117";
+
+(function paloPreloadApiForJsOnlyRuntime() {
+  var g = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : null;
+  if (!g || (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function")) {
+    return;
+  }
+  if (typeof importScripts === "function") {
+    try {
+      importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+    } catch (_e) {
+      // Le runtime Page (functions.html) charge palo-api via une balise script.
+    }
+  }
+})();
+
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
   var datacRequestSeq = 0;
+  var paloBootstrapPromise = null;
 
-  function paloFnTrace() {
-    return typeof window !== "undefined" && Boolean(window.PALO_DEBUG);
+  function paloGlobalRef() {
+    if (typeof globalThis !== "undefined") {
+      return globalThis;
+    }
+    if (typeof self !== "undefined") {
+      return self;
+    }
+    return typeof window !== "undefined" ? window : {};
   }
 
-  function getConnectionManager() {
+  function paloFnTrace() {
+    var g = paloGlobalRef();
+    return Boolean(g.PALO_DEBUG);
+  }
+
+  function ensurePaloOfficeReady() {
+    if (!paloBootstrapPromise) {
+      paloBootstrapPromise = new Promise(function (resolve, reject) {
+        function finishBootstrap() {
+          var g = paloGlobalRef();
+          var po = g.PaloOffice;
+          if (!po || typeof po.createConnectionManager !== "function") {
+            reject(new Error(
+              "PaloOffice indisponible. Ouvrez le volet Connexion du complement, puis recalculez la feuille."
+            ));
+            return;
+          }
+          var storageReady = po.paloEnsureStorageReady && po.paloEnsureStorageReady();
+          if (storageReady && typeof storageReady.then === "function") {
+            storageReady.then(resolve).catch(resolve);
+          } else {
+            resolve();
+          }
+        }
+
+        function tryImportScripts() {
+          if (typeof importScripts !== "function") {
+            return false;
+          }
+          try {
+            importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+            finishBootstrap();
+            return true;
+          } catch (e) {
+            reject(e);
+            return true;
+          }
+        }
+
+        var g = paloGlobalRef();
+        if (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function") {
+          finishBootstrap();
+          return;
+        }
+        if (tryImportScripts()) {
+          return;
+        }
+        if (typeof document !== "undefined" && document.head) {
+          var script = document.createElement("script");
+          script.src = PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION;
+          script.onload = finishBootstrap;
+          script.onerror = function () {
+            reject(new Error("Echec chargement palo-api.js depuis " + script.src));
+          };
+          document.head.appendChild(script);
+          return;
+        }
+        reject(new Error("PaloOffice indisponible dans ce runtime Excel."));
+      });
+    }
+    return paloBootstrapPromise;
+  }
+
+  async function getConnectionManager() {
+    await ensurePaloOfficeReady();
     if (!connectionManager) {
-      connectionManager = window.PaloOffice.createConnectionManager();
+      connectionManager = paloGlobalRef().PaloOffice.createConnectionManager();
     }
     return connectionManager;
   }
@@ -18,9 +107,9 @@
     return "#PALO! " + message;
   }
 
-  function isDebugEnabledForServdb(servdb) {
+  async function isDebugEnabledForServdb(servdb) {
     try {
-      var manager = getConnectionManager();
+      var manager = await getConnectionManager();
       var parsed = manager.parseServDb(servdb);
       var profile = manager.getConnection(parsed.connectionName);
       return Boolean(profile && profile.debug);
@@ -34,8 +123,9 @@
   }
 
   function getLastApiUrl() {
-    if (window.PaloOffice && typeof window.PaloOffice.getLastApiUrl === "function") {
-      return window.PaloOffice.getLastApiUrl();
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.getLastApiUrl === "function") {
+      return po.getLastApiUrl();
     }
     return "";
   }
@@ -46,8 +136,9 @@
   }
 
   function traceDatac(eventName, payload) {
-    if (window.PaloOffice && typeof window.PaloOffice.trace === "function") {
-      window.PaloOffice.trace(eventName, payload || {});
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.trace === "function") {
+      po.trace(eventName, payload || {});
     }
   }
 
@@ -263,7 +354,7 @@
     }
 
     try {
-      var manager = getConnectionManager();
+      var manager = await getConnectionManager();
       var context = await manager.getClientAndContext(servdb);
       var idPath = await manager.buildCellIdPathFromSegments(
         context.connectionName,
@@ -325,7 +416,7 @@
         message: msg
       });
       if (
-        isDebugEnabledForServdb(servdb)
+        await isDebugEnabledForServdb(servdb)
         || msg.indexOf("Timeout HTTP") !== -1
         || msg.indexOf("HTTP ") !== -1
         || msg.indexOf("Impossible de joindre") !== -1
@@ -337,7 +428,7 @@
   }
 
   async function DATAC_TEST() {
-    var manager = getConnectionManager();
+    var manager = await getConnectionManager();
     var active = manager.getActiveConnectionName();
     if (!active) {
       return "#PALO! Aucune connexion active selectionnee. | url=(url indisponible)";
@@ -383,7 +474,7 @@
       return 0;
     }
     try {
-      var manager = getConnectionManager();
+      var manager = await getConnectionManager();
       var context = await manager.getClientAndContext(servdb);
       var idPath = await manager.buildCellIdPathFromSegments(
         context.connectionName,
@@ -430,7 +521,7 @@
       var dimensionName = args[1];
       var index = args[2];
 
-      var manager = getConnectionManager();
+      var manager = await getConnectionManager();
       var servRaw = coerceExcelScalarArg(servdb);
       var dimRaw = coerceExcelScalarArg(dimensionName);
       var elementRaw = coerceExcelScalarArg(index);

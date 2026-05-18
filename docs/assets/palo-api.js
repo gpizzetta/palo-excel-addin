@@ -4,11 +4,137 @@
    * viennent du serveur Pages, pas du PHP. Les appels fetch() vers le serveur Palo
    * exigent que Palo réponde avec les bons Access-Control-* pour l’origine Office.
    */
+  var paloGlobal = (function resolvePaloGlobal() {
+    if (typeof globalThis !== "undefined") {
+      return globalThis;
+    }
+    if (typeof self !== "undefined") {
+      return self;
+    }
+    if (typeof window !== "undefined") {
+      return window;
+    }
+    return {};
+  })();
+
   var PALO_TRACE_STORAGE_KEY = "palo.office365.trace.v1";
+  var PALO_CONNECTIONS_STORAGE_KEY = "palo.office365.connections.v1";
+  var PALO_ACTIVE_STORAGE_KEY = "palo.office365.active.v1";
   var PALO_TRACE_MAX_ENTRIES = 300;
+  var paloStorageMem = Object.create(null);
+  var paloStorageReadyPromise = null;
 
   function paloTraceEnabled() {
-    return Boolean(window.PALO_TRACE || window.PALO_DEBUG);
+    return Boolean(paloGlobal.PALO_TRACE || paloGlobal.PALO_DEBUG);
+  }
+
+  function paloHasLocalStorage() {
+    try {
+      return typeof window !== "undefined" && window.localStorage && typeof window.localStorage.getItem === "function";
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function paloOfficeRuntimeStorage() {
+    try {
+      if (typeof OfficeRuntime !== "undefined" && OfficeRuntime && OfficeRuntime.storage) {
+        return OfficeRuntime.storage;
+      }
+    } catch (_e) {
+    }
+    return null;
+  }
+
+  function paloStorageGetItem(key) {
+    if (paloHasLocalStorage()) {
+      try {
+        var fromLs = window.localStorage.getItem(key);
+        if (fromLs != null) {
+          paloStorageMem[key] = fromLs;
+          return fromLs;
+        }
+      } catch (_e) {
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(paloStorageMem, key)) {
+      return paloStorageMem[key];
+    }
+    return null;
+  }
+
+  function paloStorageSetItem(key, value) {
+    paloStorageMem[key] = value;
+    paloLocalStorageSetItem(key, value);
+    var ort = paloOfficeRuntimeStorage();
+    if (ort && typeof ort.setItem === "function") {
+      try {
+        var setResult = ort.setItem(key, value);
+        if (setResult && typeof setResult.catch === "function") {
+          setResult.catch(function () {});
+        }
+      } catch (_e) {
+      }
+    }
+  }
+
+  function paloStorageRemoveItem(key) {
+    delete paloStorageMem[key];
+    paloLocalStorageRemoveItem(key);
+    var ort = paloOfficeRuntimeStorage();
+    if (ort && typeof ort.removeItem === "function") {
+      try {
+        var removeResult = ort.removeItem(key);
+        if (removeResult && typeof removeResult.catch === "function") {
+          removeResult.catch(function () {});
+        }
+      } catch (_e) {
+      }
+    }
+  }
+
+  function paloEnsureStorageReady() {
+    if (paloStorageReadyPromise) {
+      return paloStorageReadyPromise;
+    }
+    paloStorageReadyPromise = new Promise(function (resolve) {
+      var keys = [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
+      if (paloHasLocalStorage()) {
+        var ort = paloOfficeRuntimeStorage();
+        var syncTasks = keys.map(function (k) {
+          try {
+            var v = window.localStorage.getItem(k);
+            if (v != null) {
+              paloStorageMem[k] = v;
+              if (ort && typeof ort.setItem === "function") {
+                return Promise.resolve(ort.setItem(k, v)).catch(function () {});
+              }
+            }
+          } catch (_e) {
+          }
+          return Promise.resolve();
+        });
+        Promise.all(syncTasks).then(function () {
+          resolve();
+        });
+        return;
+      }
+      var ort = paloOfficeRuntimeStorage();
+      if (!ort || typeof ort.getItem !== "function") {
+        resolve();
+        return;
+      }
+      Promise.all(keys.map(function (k) {
+        return Promise.resolve(ort.getItem(k)).then(function (v) {
+          if (v != null && v !== "") {
+            paloStorageMem[k] = v;
+          }
+        }).catch(function () {});
+      })).then(function () {
+        resolve();
+      });
+    });
+    return paloStorageReadyPromise;
   }
 
   function paloTraceConsole() {
@@ -40,7 +166,7 @@
       // Ne jamais casser le flux applicatif pour un log.
     }
     try {
-      var raw = window.localStorage.getItem(PALO_TRACE_STORAGE_KEY);
+      var raw = paloStorageGetItem(PALO_TRACE_STORAGE_KEY);
       var history = [];
       if (raw) {
         history = JSON.parse(raw);
@@ -52,7 +178,7 @@
       if (history.length > PALO_TRACE_MAX_ENTRIES) {
         history = history.slice(history.length - PALO_TRACE_MAX_ENTRIES);
       }
-      window.localStorage.setItem(PALO_TRACE_STORAGE_KEY, JSON.stringify(history));
+      paloStorageSetItem(PALO_TRACE_STORAGE_KEY, JSON.stringify(history));
     } catch (_storageError) {
       // Stockage best effort.
     }
@@ -60,7 +186,7 @@
 
   function paloGetTraceHistory() {
     try {
-      var raw = window.localStorage.getItem(PALO_TRACE_STORAGE_KEY);
+      var raw = paloStorageGetItem(PALO_TRACE_STORAGE_KEY);
       if (!raw) {
         return [];
       }
@@ -75,6 +201,9 @@
    * Persistance localStorage avec retry si quota (souvent du aux traces Palo).
    */
   function paloLocalStorageSetItem(key, value) {
+    if (!paloHasLocalStorage()) {
+      return;
+    }
     try {
       window.localStorage.setItem(key, value);
       return;
@@ -101,6 +230,9 @@
   }
 
   function paloLocalStorageRemoveItem(key) {
+    if (!paloHasLocalStorage()) {
+      return;
+    }
     try {
       window.localStorage.removeItem(key);
     } catch (_e) {
@@ -108,15 +240,15 @@
   }
 
   function paloSetLastApiUrl(url) {
-    window.PaloOffice = window.PaloOffice || {};
-    window.PaloOffice._lastApiUrl = String(url || "");
+    paloGlobal.PaloOffice = paloGlobal.PaloOffice || {};
+    paloGlobal.PaloOffice._lastApiUrl = String(url || "");
   }
 
   function paloGetLastApiUrl() {
-    if (!window.PaloOffice || !window.PaloOffice._lastApiUrl) {
+    if (!paloGlobal.PaloOffice || !paloGlobal.PaloOffice._lastApiUrl) {
       return "";
     }
-    return String(window.PaloOffice._lastApiUrl);
+    return String(paloGlobal.PaloOffice._lastApiUrl);
   }
 
   function leftRotate(x, c) {
@@ -1712,7 +1844,7 @@
   PaloConnectionManager.prototype.listConnections = function listConnections() {
     var raw = null;
     try {
-      raw = window.localStorage.getItem(this.storageKey);
+      raw = paloStorageGetItem(this.storageKey);
     } catch (_e) {
       return [];
     }
@@ -1738,7 +1870,7 @@
     }
     var all = this.listConnections().filter(function (p) { return p.name !== profile.name; });
     all.push(profile);
-    paloLocalStorageSetItem(this.storageKey, JSON.stringify(all));
+    paloStorageSetItem(this.storageKey, JSON.stringify(all));
     if (!this.getActiveConnectionName()) {
       this.setActiveConnectionName(profile.name);
     }
@@ -1746,9 +1878,9 @@
 
   PaloConnectionManager.prototype.deleteConnection = function deleteConnection(name) {
     var all = this.listConnections().filter(function (p) { return p.name !== name; });
-    paloLocalStorageSetItem(this.storageKey, JSON.stringify(all));
+    paloStorageSetItem(this.storageKey, JSON.stringify(all));
     if (this.getActiveConnectionName() === name) {
-      paloLocalStorageRemoveItem(this.activeKey);
+      paloStorageRemoveItem(this.activeKey);
     }
     this.sessions.delete(name);
     this.clearCachesForConnection(name);
@@ -1763,12 +1895,12 @@
   };
 
   PaloConnectionManager.prototype.setActiveConnectionName = function setActiveConnectionName(name) {
-    paloLocalStorageSetItem(this.activeKey, name);
+    paloStorageSetItem(this.activeKey, name);
   };
 
   PaloConnectionManager.prototype.getActiveConnectionName = function getActiveConnectionName() {
     try {
-      return window.localStorage.getItem(this.activeKey);
+      return paloStorageGetItem(this.activeKey);
     } catch (_e) {
       return null;
     }
@@ -1859,13 +1991,14 @@
     return login.sid;
   };
 
-  window.PaloOffice = window.PaloOffice || {};
-  window.PaloOffice.ApiClient = PaloApiClient;
-  window.PaloOffice.ConnectionManager = PaloConnectionManager;
-  window.PaloOffice.trace = paloTrace;
-  window.PaloOffice.getTraceHistory = paloGetTraceHistory;
-  window.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
-  window.PaloOffice.createConnectionManager = function createConnectionManager() {
+  paloGlobal.PaloOffice = paloGlobal.PaloOffice || {};
+  paloGlobal.PaloOffice.ApiClient = PaloApiClient;
+  paloGlobal.PaloOffice.ConnectionManager = PaloConnectionManager;
+  paloGlobal.PaloOffice.trace = paloTrace;
+  paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
+  paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
+  paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
 })();

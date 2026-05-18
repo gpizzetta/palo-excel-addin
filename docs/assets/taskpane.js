@@ -224,6 +224,13 @@
 
   function bindUi() {
     setText("plugin-version", PLUGIN_VERSION);
+    try {
+      var po = window.PaloOffice;
+      if (po && typeof po.paloEnsureStorageReady === "function") {
+        po.paloEnsureStorageReady().catch(function () {});
+      }
+    } catch (_storageInit) {
+    }
     refreshConnectionList();
 
     var saveBtn = document.getElementById("save-connection");
