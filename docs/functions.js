@@ -1,17 +1,23 @@
 /* global CustomFunctions, OfficeRuntime, importScripts */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.118";
+var PALO_ASSET_VERSION = "1.0.1.119";
 
-(function paloPreloadApiForJsOnlyRuntime() {
+(function paloPreloadBundleForJsOnlyRuntime() {
   var g = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : null;
   if (!g || (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function")) {
     return;
   }
+  if (g.__PALO_FUNCTIONS_CORE_LOADED__) {
+    return;
+  }
   if (typeof importScripts === "function") {
     try {
-      importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+      importScripts(PALO_CDN_BASE + "/functions-bundle.js?v=" + PALO_ASSET_VERSION);
     } catch (_e) {
-      // Le runtime Page (functions.html) charge palo-api via une balise script.
+      try {
+        importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+      } catch (_e2) {
+      }
     }
   }
 })();
@@ -30,6 +36,11 @@ var PALO_ASSET_VERSION = "1.0.1.118";
     }
     return typeof window !== "undefined" ? window : {};
   }
+
+  if (paloGlobalRef().__PALO_FUNCTIONS_CORE_LOADED__) {
+    return;
+  }
+  paloGlobalRef().__PALO_FUNCTIONS_CORE_LOADED__ = true;
 
   function paloFnTrace() {
     var g = paloGlobalRef();
@@ -58,7 +69,7 @@ var PALO_ASSET_VERSION = "1.0.1.118";
 
         function failNotReady() {
           reject(new Error(
-            "PaloOffice indisponible. Ouvrez le volet Connexion (ruban Palo), verifiez la version 1.0.1.118 en bas du volet, puis recalculez (Ctrl+Alt+F9)."
+            "PaloOffice indisponible. Ouvrez le volet Connexion (ruban Palo), verifiez la version 1.0.1.119 en bas du volet, puis recalculez (Ctrl+Alt+F9)."
           ));
         }
 
@@ -75,11 +86,16 @@ var PALO_ASSET_VERSION = "1.0.1.118";
             return false;
           }
           try {
-            importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+            importScripts(PALO_CDN_BASE + "/functions-bundle.js?v=" + PALO_ASSET_VERSION);
             return tryFinish();
-          } catch (e) {
-            reject(e);
-            return true;
+          } catch (e1) {
+            try {
+              importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
+              return tryFinish();
+            } catch (e2) {
+              reject(e1);
+              return true;
+            }
           }
         }
 
@@ -102,7 +118,7 @@ var PALO_ASSET_VERSION = "1.0.1.118";
         }
         if (typeof document !== "undefined" && document.head) {
           var script = document.createElement("script");
-          script.src = PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION;
+          script.src = PALO_CDN_BASE + "/functions-bundle.js?v=" + PALO_ASSET_VERSION;
           script.onload = function () {
             if (!tryFinish()) {
               schedulePoll();

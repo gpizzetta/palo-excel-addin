@@ -7,7 +7,7 @@ OUT="functions-bundle.js"
 {
   echo "/* Palo OLAP — bundle genere (ne pas editer). Voir build-bundle.sh */"
   cat ./assets/palo-api.js
-  # Sauter le bloc importScripts en tete de functions.js (deja inclus via palo-api).
-  awk 'BEGIN{skip=0} /^\/\* global CustomFunctions/{skip=1} skip && /^\(function paloFunctionsBootstrap/{skip=0} !skip {print}' ./functions.js
+  # Conserver PALO_CDN_BASE / PALO_ASSET_VERSION ; sauter seulement le preload importScripts.
+  awk 'NR<=3 { print; next } /^\(function paloPreloadBundleForJsOnlyRuntime/,/^\}\)\(\);$/ { next } { print }' ./functions.js
 } > "$OUT"
 echo "OK: $OUT ($(wc -c < "$OUT" | tr -d ' ') octets)"
