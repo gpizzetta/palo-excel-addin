@@ -1,6 +1,6 @@
 /* global CustomFunctions, OfficeRuntime, importScripts */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.117";
+var PALO_ASSET_VERSION = "1.0.1.118";
 
 (function paloPreloadApiForJsOnlyRuntime() {
   var g = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : null;
@@ -36,24 +36,38 @@ var PALO_ASSET_VERSION = "1.0.1.117";
     return Boolean(g.PALO_DEBUG);
   }
 
+  function hasPaloOffice() {
+    var g = paloGlobalRef();
+    return Boolean(g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function");
+  }
+
+  function resolveAfterStorageReady(resolve) {
+    var po = paloGlobalRef().PaloOffice;
+    var storageReady = po.paloEnsureStorageReady && po.paloEnsureStorageReady();
+    if (storageReady && typeof storageReady.then === "function") {
+      storageReady.then(resolve).catch(resolve);
+    } else {
+      resolve();
+    }
+  }
+
   function ensurePaloOfficeReady() {
     if (!paloBootstrapPromise) {
       paloBootstrapPromise = new Promise(function (resolve, reject) {
-        function finishBootstrap() {
-          var g = paloGlobalRef();
-          var po = g.PaloOffice;
-          if (!po || typeof po.createConnectionManager !== "function") {
-            reject(new Error(
-              "PaloOffice indisponible. Ouvrez le volet Connexion du complement, puis recalculez la feuille."
-            ));
-            return;
+        var deadline = Date.now() + 20000;
+
+        function failNotReady() {
+          reject(new Error(
+            "PaloOffice indisponible. Ouvrez le volet Connexion (ruban Palo), verifiez la version 1.0.1.118 en bas du volet, puis recalculez (Ctrl+Alt+F9)."
+          ));
+        }
+
+        function tryFinish() {
+          if (hasPaloOffice()) {
+            resolveAfterStorageReady(resolve);
+            return true;
           }
-          var storageReady = po.paloEnsureStorageReady && po.paloEnsureStorageReady();
-          if (storageReady && typeof storageReady.then === "function") {
-            storageReady.then(resolve).catch(resolve);
-          } else {
-            resolve();
-          }
+          return false;
         }
 
         function tryImportScripts() {
@@ -62,17 +76,25 @@ var PALO_ASSET_VERSION = "1.0.1.117";
           }
           try {
             importScripts(PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION);
-            finishBootstrap();
-            return true;
+            return tryFinish();
           } catch (e) {
             reject(e);
             return true;
           }
         }
 
-        var g = paloGlobalRef();
-        if (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function") {
-          finishBootstrap();
+        function schedulePoll() {
+          if (tryFinish()) {
+            return;
+          }
+          if (Date.now() > deadline) {
+            failNotReady();
+            return;
+          }
+          setTimeout(schedulePoll, 50);
+        }
+
+        if (tryFinish()) {
           return;
         }
         if (tryImportScripts()) {
@@ -81,14 +103,19 @@ var PALO_ASSET_VERSION = "1.0.1.117";
         if (typeof document !== "undefined" && document.head) {
           var script = document.createElement("script");
           script.src = PALO_CDN_BASE + "/assets/palo-api.js?v=" + PALO_ASSET_VERSION;
-          script.onload = finishBootstrap;
+          script.onload = function () {
+            if (!tryFinish()) {
+              schedulePoll();
+            }
+          };
           script.onerror = function () {
             reject(new Error("Echec chargement palo-api.js depuis " + script.src));
           };
           document.head.appendChild(script);
+          schedulePoll();
           return;
         }
-        reject(new Error("PaloOffice indisponible dans ce runtime Excel."));
+        failNotReady();
       });
     }
     return paloBootstrapPromise;
@@ -780,7 +807,10 @@ var PALO_ASSET_VERSION = "1.0.1.117";
     }
   }
 
-  if (typeof CustomFunctions !== "undefined") {
+  function registerCustomFunctions() {
+    if (typeof CustomFunctions === "undefined") {
+      return;
+    }
     CustomFunctions.associate("ADD", ADD);
     CustomFunctions.associate("DATAC", DATAC);
     CustomFunctions.associate("DATAC_TEST", DATAC_TEST);
@@ -799,6 +829,14 @@ var PALO_ASSET_VERSION = "1.0.1.117";
     CustomFunctions.associate("PALO_CUBE_LIST_DIMENSIONS", PALO_CUBE_LIST_DIMENSIONS);
     CustomFunctions.associate("PALO_DIMENSION_LIST_CUBES", PALO_DIMENSION_LIST_CUBES);
     CustomFunctions.associate("PALO_DIMENSION_LIST_ELEMENTS", PALO_DIMENSION_LIST_ELEMENTS);
+  }
+
+  if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
+    Office.onReady(function () {
+      registerCustomFunctions();
+    });
+  } else {
+    registerCustomFunctions();
   }
 })();
 

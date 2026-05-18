@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.117</Version>
+  <Version>1.0.1.118</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -26,7 +26,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.117"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.118"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
@@ -36,10 +36,10 @@
         <AllFormFactors>
           <ExtensionPoint xsi:type="CustomFunctions">
             <Script>
-              <SourceLocation resid="Functions.Url"/>
+              <SourceLocation resid="Functions.Bundle.Url"/>
             </Script>
             <Page>
-              <SourceLocation resid="Functions.Page.Url"/>
+              <SourceLocation resid="SharedRuntime.Url"/>
             </Page>
             <Metadata>
               <SourceLocation resid="Functions.Metadata.Url"/>
@@ -97,7 +97,6 @@
               </Group>
             </OfficeTab>
           </ExtensionPoint>
-          <!-- Menu contextuel cellule : sur Excel bureau, les cellules DANS un Tableau Excel (ListObject) utilisent un autre menu natif : l'entree du complement peut etre absente (comportement Office). Tester hors tableau ou Excel sur le web. -->
           <ExtensionPoint xsi:type="ContextMenu">
             <OfficeMenu id="ContextMenuCell">
               <Control xsi:type="Button" id="Palo.ContextMenu.Action">
@@ -131,12 +130,14 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.117"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/taskpane.html?v=1.0.1.117"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.117"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.117"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.1.117"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.117"/>
+        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.118"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.118"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.118"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.118"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.118"/>
+        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions-bundle.js?v=1.0.1.118"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.118"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.118"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -153,12 +154,9 @@
     </Resources>
 
     <!--
-      Bloc imbrique V1.1 : declare un shared runtime (lifetime=long) qui execute
-      taskpane.html, et y rattache custom functions + ribbon + context menu.
-      Consequence : sur Excel Desktop, plus de JS-only runtime separe pour
-      functions.js ; tout tourne dans la meme page taskpane (iframe avec DOM
-      + localStorage), donc window.PaloOffice est toujours defini.
-      Les hosts qui ne supportent pas V1.1 retombent sur le V1.0 ci-dessus.
+      V1.1 shared runtime : une seule page (shared-runtime.html) pour volet, formules et ruban.
+      lifetime=long garde PaloOffice en memoire. Si V1.1 n'est pas pris en charge, V1.0 utilise
+      functions-bundle.js (palo-api inclus) via Functions.Bundle.Url.
     -->
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
@@ -169,16 +167,16 @@
       <Hosts>
         <Host xsi:type="Workbook">
           <Runtimes>
-            <Runtime resid="Taskpane.Url" lifetime="long"/>
+            <Runtime resid="SharedRuntime.Url" lifetime="long"/>
           </Runtimes>
           <AllFormFactors>
             <ExtensionPoint xsi:type="CustomFunctions">
               <Script>
-                <SourceLocation resid="Taskpane.Url"/>
+                <SourceLocation resid="SharedRuntime.Url"/>
               </Script>
-              <Runtime resid="Taskpane.Url"/>
+              <Runtime resid="SharedRuntime.Url"/>
               <Page>
-                <SourceLocation resid="Taskpane.Url"/>
+                <SourceLocation resid="SharedRuntime.Url"/>
               </Page>
               <Metadata>
                 <SourceLocation resid="Functions.Metadata.Url"/>
@@ -192,7 +190,7 @@
               <Description resid="GetStarted.Description"/>
               <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
             </GetStarted>
-            <FunctionFile resid="Taskpane.Url"/>
+            <FunctionFile resid="SharedRuntime.Url"/>
             <ExtensionPoint xsi:type="PrimaryCommandSurface">
               <OfficeTab id="TabHome">
                 <Group id="Palo.Group.Actions">
