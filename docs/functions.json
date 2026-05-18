@@ -45,6 +45,13 @@
       ]
     },
     {
+      "id": "RUNTIME_DIAG",
+      "name": "RUNTIME_DIAG",
+      "description": "Diagnostic du runtime Excel (globals, PaloOffice, importScripts).",
+      "result": { "type": "string", "dimensionality": "scalar" },
+      "parameters": []
+    },
+    {
       "id": "ENAME",
       "name": "ENAME",
       "description": "Nom d'affichage d'un element (API element/info et dimensions par nom). Exactement 3 arguments utiles: servdb; dimension; elementName. Arguments supplementaires ignores.",

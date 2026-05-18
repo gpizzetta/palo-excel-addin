@@ -5,6 +5,8 @@
    * viennent du serveur Pages, pas du PHP. Les appels fetch() vers le serveur Palo
    * exigent que Palo réponde avec les bons Access-Control-* pour l’origine Office.
    */
+  /** Objet racine partage si le runtime n'expose ni globalThis, ni self, ni window (Excel CF isole). */
+  var PALO_RUNTIME_ROOT_BAG;
   var paloGlobal = (function resolvePaloGlobal() {
     if (typeof globalThis !== "undefined") {
       return globalThis;
@@ -15,7 +17,20 @@
     if (typeof window !== "undefined") {
       return window;
     }
-    return {};
+    try {
+      var viaFunction = Function("return this")();
+      if (viaFunction) {
+        return viaFunction;
+      }
+    } catch (_e) {
+    }
+    if (!PALO_RUNTIME_ROOT_BAG) {
+      PALO_RUNTIME_ROOT_BAG = {};
+    }
+    if (typeof Function !== "undefined") {
+      Function.__PALO_RUNTIME_BAG__ = PALO_RUNTIME_ROOT_BAG;
+    }
+    return PALO_RUNTIME_ROOT_BAG;
   })();
 
   var PALO_TRACE_STORAGE_KEY = "palo.office365.trace.v1";
@@ -2002,9 +2017,12 @@
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
+  paloGlobal.PaloOffice.getRuntimeRoot = function getRuntimeRoot() {
+    return paloGlobal;
+  };
 })();
 
 /* global CustomFunctions, OfficeRuntime, importScripts */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.119";
+var PALO_ASSET_VERSION = "1.0.1.120";
 

@@ -1,6 +1,6 @@
 /* global CustomFunctions, OfficeRuntime, importScripts */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.119";
+var PALO_ASSET_VERSION = "1.0.1.120";
 
 (function paloPreloadBundleForJsOnlyRuntime() {
   var g = typeof globalThis !== "undefined" ? globalThis : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : null;
@@ -34,7 +34,24 @@ var PALO_ASSET_VERSION = "1.0.1.119";
     if (typeof self !== "undefined") {
       return self;
     }
-    return typeof window !== "undefined" ? window : {};
+    if (typeof window !== "undefined") {
+      return window;
+    }
+    try {
+      var viaFunction = Function("return this")();
+      if (viaFunction) {
+        return viaFunction;
+      }
+    } catch (_e) {
+    }
+    if (typeof Function !== "undefined" && Function.__PALO_RUNTIME_BAG__) {
+      return Function.__PALO_RUNTIME_BAG__;
+    }
+    var g = {};
+    if (typeof Function !== "undefined") {
+      Function.__PALO_RUNTIME_BAG__ = g;
+    }
+    return g;
   }
 
   if (paloGlobalRef().__PALO_FUNCTIONS_CORE_LOADED__) {
@@ -68,8 +85,13 @@ var PALO_ASSET_VERSION = "1.0.1.119";
         var deadline = Date.now() + 20000;
 
         function failNotReady() {
+          var diag = "globalThis=" + (typeof globalThis !== "undefined" ? "oui" : "non");
+          diag += " self=" + (typeof self !== "undefined" ? "oui" : "non");
+          diag += " document=" + (typeof document !== "undefined" ? "oui" : "non");
+          diag += " importScripts=" + (typeof importScripts === "function" ? "oui" : "non");
           reject(new Error(
-            "PaloOffice indisponible. Ouvrez le volet Connexion (ruban Palo), verifiez la version 1.0.1.119 en bas du volet, puis recalculez (Ctrl+Alt+F9)."
+            "PaloOffice indisponible dans le runtime des formules (" + diag + "). "
+            + "Testez =PALO.RUNTIME_DIAG() puis ouvrez le volet Connexion et recalculez (Ctrl+Alt+F9)."
           ));
         }
 
@@ -196,6 +218,25 @@ var PALO_ASSET_VERSION = "1.0.1.119";
   /** Pas de connexion Palo : ne pas utiliser getConnectionManager. */
   function ADD(cellule1, cellule2) {
     return addOperandToNumber(cellule1) + addOperandToNumber(cellule2);
+  }
+
+  /** Diagnostic runtime Excel (ne depend pas de PaloOffice). */
+  function RUNTIME_DIAG() {
+    var g = paloGlobalRef();
+    var parts = [
+      "v=" + PALO_ASSET_VERSION,
+      "globalThis=" + (typeof globalThis !== "undefined" ? "oui" : "non"),
+      "self=" + (typeof self !== "undefined" ? "oui" : "non"),
+      "window=" + (typeof window !== "undefined" ? "oui" : "non"),
+      "document=" + (typeof document !== "undefined" ? "oui" : "non"),
+      "importScripts=" + (typeof importScripts === "function" ? "oui" : "non"),
+      "CustomFunctions=" + (typeof CustomFunctions !== "undefined" ? "oui" : "non"),
+      "Office=" + (typeof Office !== "undefined" ? "oui" : "non"),
+      "PaloOffice=" + (g.PaloOffice ? "oui" : "non"),
+      "createCM=" + (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function" ? "oui" : "non"),
+      "runtimeBag=" + (typeof Function !== "undefined" && Function.__PALO_RUNTIME_BAG__ ? "oui" : "non")
+    ];
+    return parts.join(" ");
   }
 
   /**
@@ -828,6 +869,7 @@ var PALO_ASSET_VERSION = "1.0.1.119";
       return;
     }
     CustomFunctions.associate("ADD", ADD);
+    CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
     CustomFunctions.associate("DATAC_TEST", DATAC_TEST);
     CustomFunctions.associate("PALO_SETDATA", PALO_SETDATA);
