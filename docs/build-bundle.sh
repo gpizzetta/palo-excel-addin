@@ -9,6 +9,7 @@ SRC="./functions-core.js"
 for OUT in functions.js functions-bundle.js; do
   {
     echo "/* Palo OLAP — genere depuis functions-core.js + palo-api.js. Ne pas editer. */"
+    cat ./assets/palo-cf-polyfills.js
     cat ./assets/palo-api.js
     awk 'NR<=3 { print; next } /^\(function paloPreloadBundleForJsOnlyRuntime/,/^\}\)\(\);$/ { next } { print }' "$SRC"
   } > "$OUT"

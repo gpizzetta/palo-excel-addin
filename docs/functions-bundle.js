@@ -1,4 +1,103 @@
 /* Palo OLAP — genere depuis functions-core.js + palo-api.js. Ne pas editer. */
+/**
+ * Polyfills pour le runtime Custom Functions Excel Desktop (worker sans DOM).
+ * Charge en premier dans functions.js (voir build-bundle.sh).
+ */
+(function paloCfPolyfillsBootstrap() {
+  var g = typeof globalThis !== "undefined" ? globalThis
+    : typeof self !== "undefined" ? self
+    : typeof window !== "undefined" ? window
+    : {};
+
+  if (typeof g.TextEncoder === "undefined") {
+    function TextEncoderPoly() {}
+    TextEncoderPoly.prototype.encode = function encodePoly(str) {
+      var s = String(str);
+      var encoded = unescape(encodeURIComponent(s));
+      var out = new Uint8Array(encoded.length);
+      var i;
+      for (i = 0; i < encoded.length; i += 1) {
+        out[i] = encoded.charCodeAt(i) & 0xff;
+      }
+      return out;
+    };
+    g.TextEncoder = TextEncoderPoly;
+  }
+
+  function urlSearchParamsBroken() {
+    if (typeof g.URLSearchParams === "undefined") {
+      return true;
+    }
+    try {
+      var t = new g.URLSearchParams();
+      t.set("palo", "1");
+      return String(t.get("palo")) !== "1";
+    } catch (_e) {
+      return true;
+    }
+  }
+
+  if (urlSearchParamsBroken()) {
+    function URLSearchParamsPoly(init) {
+      this._pairs = [];
+      if (typeof init === "string") {
+        var s = String(init).replace(/^\?/, "");
+        if (s) {
+          s.split("&").forEach(function (part) {
+            if (!part) {
+              return;
+            }
+            var eq = part.indexOf("=");
+            var k = eq >= 0 ? part.slice(0, eq) : part;
+            var v = eq >= 0 ? part.slice(eq + 1) : "";
+            this._pairs.push([decodeURIComponent(k.replace(/\+/g, " ")), decodeURIComponent(v.replace(/\+/g, " "))]);
+          }, this);
+        }
+      }
+    }
+    URLSearchParamsPoly.prototype.set = function set(key, value) {
+      this.delete(key);
+      this._pairs.push([String(key), String(value)]);
+    };
+    URLSearchParamsPoly.prototype.has = function has(key) {
+      var i;
+      var k = String(key);
+      for (i = 0; i < this._pairs.length; i += 1) {
+        if (this._pairs[i][0] === k) {
+          return true;
+        }
+      }
+      return false;
+    };
+    URLSearchParamsPoly.prototype.get = function get(key) {
+      var i;
+      var k = String(key);
+      for (i = 0; i < this._pairs.length; i += 1) {
+        if (this._pairs[i][0] === k) {
+          return this._pairs[i][1];
+        }
+      }
+      return null;
+    };
+    URLSearchParamsPoly.prototype.delete = function del(key) {
+      var i;
+      var k = String(key);
+      var next = [];
+      for (i = 0; i < this._pairs.length; i += 1) {
+        if (this._pairs[i][0] !== k) {
+          next.push(this._pairs[i]);
+        }
+      }
+      this._pairs = next;
+    };
+    URLSearchParamsPoly.prototype.toString = function toString() {
+      return this._pairs.map(function (pair) {
+        return encodeURIComponent(pair[0]) + "=" + encodeURIComponent(pair[1]);
+      }).join("&");
+    };
+    g.URLSearchParams = URLSearchParamsPoly;
+  }
+})();
 (function paloApiBootstrap() {
   /**
    * Hébergement statique (ex. GitHub Pages) : les en-têtes CORS des assets add-in
@@ -459,16 +558,44 @@
     return Boolean(window.PALO_DEBUG || window.PALO_BULK_TRACE);
   }
 
-  function paloRedactUrlForLog(urlString) {
-    try {
-      var u = new URL(urlString);
-      if (u.searchParams.has("password")) {
-        u.searchParams.set("password", "***");
-      }
-      return u.toString();
-    } catch (_e) {
-      return urlString;
+  function paloJoinUrlPath(base, path) {
+    var b = String(base || "").replace(/\/+$/, "");
+    var p = String(path || "");
+    if (!p) {
+      return b;
     }
+    if (p.charAt(0) !== "/") {
+      p = "/" + p;
+    }
+    return b + p;
+  }
+
+  function paloSerializeQueryParams(params) {
+    var parts = [];
+    if (!params || typeof params !== "object") {
+      return "";
+    }
+    Object.keys(params).forEach(function (key) {
+      var value = params[key];
+      if (value === undefined || value === null) {
+        return;
+      }
+      parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(value)));
+    });
+    return parts.join("&");
+  }
+
+  function paloBuildHttpUrl(base, path, params) {
+    var url = paloJoinUrlPath(base, path);
+    var qs = paloSerializeQueryParams(params);
+    if (!qs) {
+      return url;
+    }
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + qs;
+  }
+
+  function paloRedactUrlForLog(urlString) {
+    return String(urlString || "").replace(/([?&])password=[^&]*/gi, "$1password=***");
   }
 
   function paloSnapshotArgForLog(value) {
@@ -732,15 +859,7 @@
   }
 
   PaloApiClient.prototype.buildUrl = function buildUrl(path, params) {
-    var base = resolvePaloDirectBaseUrl(this.profile);
-    var url = new URL(base + path);
-    Object.keys(params).forEach(function (key) {
-      var value = params[key];
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
-    });
-    return url.toString();
+    return paloBuildHttpUrl(resolvePaloDirectBaseUrl(this.profile), path, params);
   };
 
   PaloApiClient.prototype.call = async function call(path, params) {
@@ -2040,7 +2159,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.122";
+var PALO_ASSET_VERSION = "1.0.1.123";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;

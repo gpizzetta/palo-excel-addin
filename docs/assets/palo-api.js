@@ -458,16 +458,44 @@
     return Boolean(window.PALO_DEBUG || window.PALO_BULK_TRACE);
   }
 
-  function paloRedactUrlForLog(urlString) {
-    try {
-      var u = new URL(urlString);
-      if (u.searchParams.has("password")) {
-        u.searchParams.set("password", "***");
-      }
-      return u.toString();
-    } catch (_e) {
-      return urlString;
+  function paloJoinUrlPath(base, path) {
+    var b = String(base || "").replace(/\/+$/, "");
+    var p = String(path || "");
+    if (!p) {
+      return b;
     }
+    if (p.charAt(0) !== "/") {
+      p = "/" + p;
+    }
+    return b + p;
+  }
+
+  function paloSerializeQueryParams(params) {
+    var parts = [];
+    if (!params || typeof params !== "object") {
+      return "";
+    }
+    Object.keys(params).forEach(function (key) {
+      var value = params[key];
+      if (value === undefined || value === null) {
+        return;
+      }
+      parts.push(encodeURIComponent(key) + "=" + encodeURIComponent(String(value)));
+    });
+    return parts.join("&");
+  }
+
+  function paloBuildHttpUrl(base, path, params) {
+    var url = paloJoinUrlPath(base, path);
+    var qs = paloSerializeQueryParams(params);
+    if (!qs) {
+      return url;
+    }
+    return url + (url.indexOf("?") >= 0 ? "&" : "?") + qs;
+  }
+
+  function paloRedactUrlForLog(urlString) {
+    return String(urlString || "").replace(/([?&])password=[^&]*/gi, "$1password=***");
   }
 
   function paloSnapshotArgForLog(value) {
@@ -731,15 +759,7 @@
   }
 
   PaloApiClient.prototype.buildUrl = function buildUrl(path, params) {
-    var base = resolvePaloDirectBaseUrl(this.profile);
-    var url = new URL(base + path);
-    Object.keys(params).forEach(function (key) {
-      var value = params[key];
-      if (value !== undefined && value !== null) {
-        url.searchParams.set(key, String(value));
-      }
-    });
-    return url.toString();
+    return paloBuildHttpUrl(resolvePaloDirectBaseUrl(this.profile), path, params);
   };
 
   PaloApiClient.prototype.call = async function call(path, params) {
