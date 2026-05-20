@@ -1,13 +1,16 @@
 #!/bin/sh
-# Genere functions-bundle.js (palo-api + functions) pour le fallback Excel Desktop V1.0.
-# Sans npm : a lancer avant chaque deploiement si functions.js ou palo-api.js changent.
+# Genere functions.js ET functions-bundle.js (palo-api + functions-core.js).
+# Sur Excel Desktop, le runtime CF charge souvent functions.js seul (sans importScripts).
+# Il faut donc que functions.js deploye contienne tout le code Palo.
+# Editer functions-core.js (source), puis : ./build-bundle.sh
 set -e
 cd "$(dirname "$0")"
-OUT="functions-bundle.js"
-{
-  echo "/* Palo OLAP — bundle genere (ne pas editer). Voir build-bundle.sh */"
-  cat ./assets/palo-api.js
-  # Conserver PALO_CDN_BASE / PALO_ASSET_VERSION ; sauter seulement le preload importScripts.
-  awk 'NR<=3 { print; next } /^\(function paloPreloadBundleForJsOnlyRuntime/,/^\}\)\(\);$/ { next } { print }' ./functions.js
-} > "$OUT"
-echo "OK: $OUT ($(wc -c < "$OUT" | tr -d ' ') octets)"
+SRC="./functions-core.js"
+for OUT in functions.js functions-bundle.js; do
+  {
+    echo "/* Palo OLAP — genere depuis functions-core.js + palo-api.js. Ne pas editer. */"
+    cat ./assets/palo-api.js
+    awk 'NR<=3 { print; next } /^\(function paloPreloadBundleForJsOnlyRuntime/,/^\}\)\(\);$/ { next } { print }' "$SRC"
+  } > "$OUT"
+  echo "OK: $OUT ($(wc -c < "$OUT" | tr -d ' ') octets)"
+done

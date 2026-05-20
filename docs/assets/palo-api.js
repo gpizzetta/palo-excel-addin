@@ -2019,5 +2019,9 @@
   paloGlobal.PaloOffice.getRuntimeRoot = function getRuntimeRoot() {
     return paloGlobal;
   };
+  try {
+    paloGlobal.__PALO_API_LOADED__ = true;
+  } catch (_markApi) {
+  }
 })();
 
