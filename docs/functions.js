@@ -272,7 +272,18 @@
   }
 
   function toUtf8Bytes(input) {
-    return Array.from(new TextEncoder().encode(input));
+    var s = String(input);
+    if (typeof TextEncoder !== "undefined") {
+      return Array.from(new TextEncoder().encode(s));
+    }
+    /* Runtime formules Excel (worker) : TextEncoder souvent absent ; MD5 login Palo. */
+    var encoded = unescape(encodeURIComponent(s));
+    var bytes = [];
+    var i;
+    for (i = 0; i < encoded.length; i += 1) {
+      bytes.push(encoded.charCodeAt(i) & 0xff);
+    }
+    return bytes;
   }
 
   function toWordArrayLittleEndian(bytes) {
@@ -2029,7 +2040,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.1.121";
+var PALO_ASSET_VERSION = "1.0.1.122";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
