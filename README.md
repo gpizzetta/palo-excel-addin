@@ -21,6 +21,7 @@ Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur 
   - Ouvrir taskpane
   - Tester connexion
   - Inserer formules `PALO.DATAC` / `PALO_SETDATA` / `PALO.ENAME`
+  - **Snapshot valeurs** : copie du classeur (tous les onglets, sans formules) enregistree sous `<fichier>_snapshot_AAAA-MM-JJ.xlsx`
 
 ## Prerequis
 

@@ -319,7 +319,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.1.123");
+      dialogUrl.searchParams.set("v", "1.0.1.124");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
@@ -494,6 +494,195 @@
     }
   }
 
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  function sanitizeFileNamePart(name) {
+    return String(name || "Workbook")
+      .replace(/[\\/:*?"<>|]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 180) || "Workbook";
+  }
+
+  function getDocumentBaseName() {
+    var url = "";
+    try {
+      url = Office.context && Office.context.document ? String(Office.context.document.url || "") : "";
+    } catch (_e) {
+      url = "";
+    }
+    if (!url) {
+      return "Workbook";
+    }
+    try {
+      var decoded = decodeURIComponent(url);
+      var parts = decoded.split(/[/\\]/);
+      var file = parts.length ? parts[parts.length - 1].split("?")[0] : "";
+      if (!file) {
+        return "Workbook";
+      }
+      return sanitizeFileNamePart(file.replace(/\.(xlsx|xlsm|xlsb|xls|csv)$/i, ""));
+    } catch (_e2) {
+      return "Workbook";
+    }
+  }
+
+  function buildSnapshotFileName() {
+    var d = new Date();
+    var dateStr = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    return getDocumentBaseName() + "_snapshot_" + dateStr + ".xlsx";
+  }
+
+  function arrayBufferToBase64(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var chunk = 8192;
+    var binary = "";
+    var i;
+    for (i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return window.btoa(binary);
+  }
+
+  function getWorkbookDocumentBase64() {
+    return new Promise(function (resolve, reject) {
+      if (!Office.context || !Office.context.document || typeof Office.context.document.getFileAsync !== "function") {
+        reject(new Error("Export du classeur non disponible sur ce client."));
+        return;
+      }
+      Office.context.document.getFileAsync(
+        Office.FileType.Compressed,
+        { sliceSize: 4194304 },
+        function (result) {
+          if (result.status !== Office.AsyncResultStatus.Succeeded) {
+            reject(new Error(result.error && result.error.message ? result.error.message : "Lecture du fichier impossible."));
+            return;
+          }
+          var file = result.value;
+          var sliceCount = file.sliceCount;
+          var slices = [];
+          var received = 0;
+
+          function onSliceError(err) {
+            reject(new Error(err && err.message ? err.message : "Lecture d'un fragment impossible."));
+          }
+
+          function getSlice(index) {
+            file.getSliceAsync(index, function (sliceResult) {
+              if (sliceResult.status !== Office.AsyncResultStatus.Succeeded) {
+                onSliceError(sliceResult.error);
+                return;
+              }
+              slices[index] = sliceResult.value.data;
+              received += 1;
+              if (received >= sliceCount) {
+                var total = 0;
+                var j;
+                for (j = 0; j < sliceCount; j += 1) {
+                  total += slices[j].byteLength;
+                }
+                var merged = new Uint8Array(total);
+                var offset = 0;
+                for (j = 0; j < sliceCount; j += 1) {
+                  merged.set(new Uint8Array(slices[j]), offset);
+                  offset += slices[j].byteLength;
+                }
+                resolve(arrayBufferToBase64(merged.buffer));
+                return;
+              }
+              getSlice(received);
+            });
+          }
+
+          getSlice(0);
+        }
+      );
+    });
+  }
+
+  async function convertAllSheetsToValues(context) {
+    var sheets = context.workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    var i;
+    for (i = 0; i < sheets.items.length; i += 1) {
+      var sheet = sheets.items[i];
+      var used = sheet.getUsedRangeOrNullObject();
+      used.load("values");
+      await context.sync();
+      if (!used.isNullObject) {
+        used.values = used.values;
+        await context.sync();
+      }
+    }
+  }
+
+  async function saveSnapshotWorkbook(fileName) {
+    await Excel.run(async function (context) {
+      var wb = context.workbook;
+      var baseName = String(fileName || "").replace(/\.xlsx$/i, "");
+      wb.name = baseName;
+      try {
+        wb.save(Excel.SaveBehavior.save);
+        await context.sync();
+      } catch (_save) {
+        wb.save(Excel.SaveBehavior.prompt);
+        await context.sync();
+      }
+    });
+  }
+
+  async function closeActiveWorkbookWithoutPrompt() {
+    await Excel.run(async function (context) {
+      context.workbook.close(Excel.CloseBehavior.skipSave);
+      await context.sync();
+    });
+  }
+
+  async function paloSnapshotWorkbookValues(event) {
+    var fileName = buildSnapshotFileName();
+    try {
+      if (typeof Excel === "undefined" || typeof Excel.createWorkbook !== "function") {
+        throw new Error("Snapshot non disponible (ExcelApi 1.8 requis).");
+      }
+      if (typeof Excel.run !== "function") {
+        throw new Error("Excel JavaScript API indisponible.");
+      }
+
+      var base64 = await getWorkbookDocumentBase64();
+      await Excel.createWorkbook(base64);
+
+      await Excel.run(async function (context) {
+        if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
+          context.application.suspendScreenUpdatingUntilNextSync();
+        }
+        await convertAllSheetsToValues(context);
+      });
+
+      await saveSnapshotWorkbook(fileName);
+
+      try {
+        await closeActiveWorkbookWithoutPrompt();
+      } catch (_close) {
+        // Le classeur snapshot peut rester ouvert si Excel refuse la fermeture.
+      }
+
+      window.alert(
+        "Snapshot enregistre : " + fileName + "\n\n"
+        + "Tous les onglets ont ete convertis en valeurs (sans formules). "
+        + "Le classeur d'origine avec les formules Palo est reste ouvert."
+      );
+    } catch (err) {
+      window.alert(
+        "Snapshot impossible : " + (err && err.message ? err.message : String(err))
+        + "\n\nNom prevu : " + fileName
+      );
+    }
+    complete(event);
+  }
+
   Office.onReady(function () {
     if (Office.actions && typeof Office.actions.associate === "function") {
       Office.actions.associate("openTaskpane", openTaskpane);
@@ -501,6 +690,7 @@
       Office.actions.associate("insertPaloDataFormula", insertPaloDataFormula);
       Office.actions.associate("insertPaloSetDataFormula", insertPaloSetDataFormula);
       Office.actions.associate("paloRibbonAction", paloRibbonAction);
+      Office.actions.associate("paloSnapshotWorkbookValues", paloSnapshotWorkbookValues);
     }
   });
 })();
