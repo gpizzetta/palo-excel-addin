@@ -9,11 +9,43 @@
   <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <style>
+    :root {
+      --palo-bg: #f3f2f1;
+      --palo-surface: #ffffff;
+      --palo-surface-alt: #faf9f8;
+      --palo-border: #edebe9;
+      --palo-text: #323130;
+      --palo-text-secondary: #605e5c;
+      --palo-hover: #f3f2f1;
+      --palo-active: #edebe9;
+      --palo-input-bg: #ffffff;
+      --palo-input-border: #8a8886;
+      --palo-focus: #0078d4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --palo-bg: #1f1f1f;
+        --palo-surface: #292827;
+        --palo-surface-alt: #252423;
+        --palo-border: #3b3a39;
+        --palo-text: #ffffff;
+        --palo-text-secondary: #c8c6c4;
+        --palo-hover: #323130;
+        --palo-active: #3b3a39;
+        --palo-input-bg: #292827;
+        --palo-input-border: #8a8886;
+        --palo-focus: #2899f5;
+      }
+    }
+    html.theme-dark {
+      color-scheme: dark;
+    }
     html, body { height: 100%; margin: 0; }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
       font-size: 13px;
-      color: #323130;
+      color: var(--palo-text);
+      background: var(--palo-bg);
       display: flex;
       flex-direction: column;
       min-height: 0;
@@ -23,20 +55,22 @@
       font-weight: 600;
       margin: 0;
       padding: 10px 12px;
-      border-bottom: 1px solid #edebe9;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface);
+      color: var(--palo-text);
       flex-shrink: 0;
     }
     #dimension-wrap {
       flex-shrink: 0;
       padding: 8px 12px;
-      border-bottom: 1px solid #edebe9;
-      background: #faf9f8;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface-alt);
     }
     #dimension-wrap label {
       display: block;
       font-size: 11px;
       font-weight: 600;
-      color: #605e5c;
+      color: var(--palo-text-secondary);
       margin-bottom: 4px;
     }
     #dimension-select {
@@ -44,14 +78,15 @@
       width: 100%;
       padding: 6px 8px;
       font: inherit;
-      border: 1px solid #8a8886;
+      color: var(--palo-text);
+      border: 1px solid var(--palo-input-border);
       border-radius: 2px;
       outline: none;
-      background: #fff;
+      background: var(--palo-input-bg);
     }
     #dimension-select:focus {
-      border-color: #0078d4;
-      box-shadow: 0 0 0 1px #0078d4 inset;
+      border-color: var(--palo-focus);
+      box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
     #dimension-select:disabled {
       opacity: 0.65;
@@ -60,27 +95,34 @@
     #filter-wrap {
       flex-shrink: 0;
       padding: 8px 12px;
-      border-bottom: 1px solid #edebe9;
-      background: #faf9f8;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface-alt);
     }
     #element-filter {
       box-sizing: border-box;
       width: 100%;
       padding: 6px 10px;
       font: inherit;
-      border: 1px solid #8a8886;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-input-border);
       border-radius: 2px;
       outline: none;
     }
+    #element-filter::placeholder {
+      color: var(--palo-text-secondary);
+      opacity: 0.9;
+    }
     #element-filter:focus {
-      border-color: #0078d4;
-      box-shadow: 0 0 0 1px #0078d4 inset;
+      border-color: var(--palo-focus);
+      box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
     #list-wrap {
       flex: 1;
       min-height: 0;
       overflow: auto;
       padding: 4px 0;
+      background: var(--palo-bg);
     }
     ul {
       list-style: none;
@@ -90,19 +132,20 @@
     li {
       padding: 8px 12px;
       cursor: pointer;
+      color: var(--palo-text);
     }
     li.consolidated {
       font-weight: 700;
     }
     li:hover {
-      background: #f3f2f1;
+      background: var(--palo-hover);
     }
     li:active {
-      background: #edebe9;
+      background: var(--palo-active);
     }
     #empty {
       padding: 12px;
-      color: #605e5c;
+      color: var(--palo-text-secondary);
     }
     .visually-hidden {
       position: absolute;
@@ -134,6 +177,38 @@
   <script>
     var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
+    function applyOfficeTheme() {
+      var theme = Office.context && Office.context.officeTheme;
+      if (!theme) {
+        return;
+      }
+      var root = document.documentElement;
+      function setVar(name, value) {
+        if (value) {
+          root.style.setProperty(name, value);
+        }
+      }
+      setVar("--palo-bg", theme.bodyBackgroundColor);
+      setVar("--palo-text", theme.bodyForegroundColor);
+      setVar("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
+      setVar("--palo-surface-alt", theme.controlBackgroundColor || theme.bodyBackgroundColor);
+      setVar("--palo-input-bg", theme.controlBackgroundColor);
+      if (theme.controlForegroundColor) {
+        setVar("--palo-text", theme.controlForegroundColor);
+      }
+      if (theme.isDarkTheme) {
+        root.classList.add("theme-dark");
+        setVar("--palo-border", "#3b3a39");
+        setVar("--palo-text-secondary", "#c8c6c4");
+        setVar("--palo-hover", "#323130");
+        setVar("--palo-active", "#3b3a39");
+        setVar("--palo-input-border", "#8a8886");
+        setVar("--palo-focus", "#2899f5");
+      } else {
+        root.classList.remove("theme-dark");
+      }
+    }
+
     function sendPick(name, dimension) {
       var payload = JSON.stringify({
         element: name,
@@ -145,6 +220,7 @@
     }
 
     Office.onReady(function () {
+      applyOfficeTheme();
       var ul = document.getElementById("elements");
       var empty = document.getElementById("empty");
       var dimSelect = document.getElementById("dimension-select");
