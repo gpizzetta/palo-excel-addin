@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.0";
+  var PLUGIN_VERSION = "1.0.2.1";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -292,7 +292,7 @@
         status("Creation du snapshot en cours…");
         window.paloSnapshotWorkbookValues({
           completed: function () {
-            status("Snapshot termine (voir message Excel).", "ok");
+            /* paloUserNotify met a jour #status-log (succes ou erreur). */
           }
         });
       });

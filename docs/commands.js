@@ -8,6 +8,56 @@
     }
   }
 
+  /**
+   * Excel Web / shared runtime : window.alert n'est pas supporte.
+   * Met a jour le volet (#status-log) si present, sinon mini-dialogue Office.
+   */
+  function paloUserNotify(message, kind, title) {
+    var text = String(message || "");
+    var state = kind === "error" ? "error" : kind === "ok" ? "ok" : "neutral";
+    var heading = title || (state === "error" ? "Palo — erreur" : "Palo");
+
+    var statusLog = document.getElementById("status-log");
+    if (statusLog) {
+      statusLog.textContent = text;
+      var banner = document.getElementById("status-banner");
+      if (banner) {
+        banner.classList.remove("status-banner--ok", "status-banner--error");
+        if (state === "ok") {
+          banner.classList.add("status-banner--ok");
+        } else if (state === "error") {
+          banner.classList.add("status-banner--error");
+        }
+      }
+      return Promise.resolve();
+    }
+
+    return new Promise(function (resolve) {
+      if (!Office.context || !Office.context.ui || typeof Office.context.ui.displayDialogAsync !== "function") {
+        console.warn("[Palo]", heading, text);
+        resolve();
+        return;
+      }
+      var notifyHref;
+      try {
+        var notifyUrl = new URL("palo-action-notify.html", window.location.href);
+        notifyUrl.searchParams.set("t", heading);
+        notifyUrl.searchParams.set("m", text);
+        notifyHref = notifyUrl.href;
+      } catch (_urlErr) {
+        notifyHref = "https://gpizzetta.github.io/palo-excel-addin/palo-action-notify.html?t="
+          + encodeURIComponent(heading) + "&m=" + encodeURIComponent(text);
+      }
+      Office.context.ui.displayDialogAsync(
+        notifyHref,
+        { height: 35, width: 40, displayInIframe: true },
+        function () {
+          resolve();
+        }
+      );
+    });
+  }
+
   async function openTaskpane(event) {
     try {
       if (Office.addin && typeof Office.addin.showAsTaskpane === "function") {
@@ -54,7 +104,7 @@
       var manager = window.PaloOffice.createConnectionManager();
       var active = manager.getActiveConnectionName();
       if (!active) {
-        window.alert("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.");
+        await paloUserNotify("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.", "error");
         complete(event);
         return;
       }
@@ -82,7 +132,7 @@
       var manager = window.PaloOffice.createConnectionManager();
       var active = manager.getActiveConnectionName();
       if (!active) {
-        window.alert("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.");
+        await paloUserNotify("Aucune connexion active. Ouvrez le volet Palo et selectionnez une connexion dans la liste.", "error");
         complete(event);
         return;
       }
@@ -175,8 +225,9 @@
   async function paloRibbonAction(event) {
     try {
       if (!window.paloEnameRibbon || !window.PaloOffice) {
-        window.alert(
-          "Palo action indisponible : script ruban incomplet (palo-ename-ribbon ou connexion Palo). Rechargez le volet ou reimportez le manifeste."
+        await paloUserNotify(
+          "Palo action indisponible : script ruban incomplet (palo-ename-ribbon ou connexion Palo). Rechargez le volet ou reimportez le manifeste.",
+          "error"
         );
         complete(event);
         return;
@@ -246,13 +297,13 @@
       }
 
       if (pickContext.skip) {
-        window.alert("Palo action fonctionne sur une cellule contenant PALO.ENAME(...).");
+        await paloUserNotify("Palo action fonctionne sur une cellule contenant PALO.ENAME(...).", "error");
         complete(event);
         return;
       }
 
       if (!pickContext.servdb || !pickContext.dimension) {
-        window.alert("PALO.ENAME: servdb ou dimension vide apres resolution des references.");
+        await paloUserNotify("PALO.ENAME: servdb ou dimension vide apres resolution des references.", "error");
         complete(event);
         return;
       }
@@ -295,7 +346,7 @@
       }
 
       if (!dimNames.length) {
-        window.alert("Aucune dimension pour la base courante.");
+        await paloUserNotify("Aucune dimension pour la base courante.", "error");
         complete(event);
         return;
       }
@@ -304,7 +355,7 @@
       var items = mapDimensionElementsToPickerItems(els);
 
       if (!items.length) {
-        window.alert("Aucun element pour la dimension \"" + pickContext.dimension + "\".");
+        await paloUserNotify("Aucun element pour la dimension \"" + pickContext.dimension + "\".", "error");
         complete(event);
         return;
       }
@@ -319,7 +370,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.2.0");
+      dialogUrl.searchParams.set("v", "1.0.2.1");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
@@ -328,10 +379,11 @@
           if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
             var errDetail = asyncResult.errorMessage || "";
             var errCode = asyncResult.errorCode != null ? String(asyncResult.errorCode) : "";
-            window.alert(
+            paloUserNotify(
               "Impossible d'ouvrir la fenetre de selection."
                 + (errCode ? " Code: " + errCode + "." : "")
-                + (errDetail ? " " + errDetail : "")
+                + (errDetail ? " " + errDetail : ""),
+              "error"
             );
             storageRemove(PICKER_STORAGE_KEY);
             complete(event);
@@ -464,7 +516,7 @@
                 targetRange = sel.getCell(metaS.row, metaS.col);
               }
               if (!parsed2 || parsed2.args.length < 3) {
-                window.alert("Cellule PALO.ENAME introuvable pour appliquer le choix.");
+                paloUserNotify("Cellule PALO.ENAME introuvable pour appliquer le choix.", "error");
                 return;
               }
               var newLit = window.paloEnameRibbon.buildExcelStringLiteral(chosen);
@@ -476,7 +528,7 @@
               }
               await applyFormulaLocalAndRecalculate(context, targetRange, updated);
             }).catch(function (err) {
-              window.alert(err && err.message ? err.message : String(err));
+              paloUserNotify(err && err.message ? err.message : String(err), "error");
             });
           });
 
@@ -488,7 +540,7 @@
         }
       );
     } catch (err) {
-      window.alert(err && err.message ? err.message : String(err));
+      await paloUserNotify(err && err.message ? err.message : String(err), "error");
       storageRemove(PICKER_STORAGE_KEY);
       complete(event);
     }
@@ -669,15 +721,19 @@
         // Le classeur snapshot peut rester ouvert si Excel refuse la fermeture.
       }
 
-      window.alert(
-        "Snapshot enregistre : " + fileName + "\n\n"
-        + "Tous les onglets ont ete convertis en valeurs (sans formules). "
-        + "Le classeur d'origine avec les formules Palo est reste ouvert."
+      await paloUserNotify(
+        "Snapshot enregistre : " + fileName + ". "
+        + "Tous les onglets en valeurs (sans formules). "
+        + "Le classeur d'origine avec formules Palo est reste ouvert.",
+        "ok",
+        "Snapshot"
       );
     } catch (err) {
-      window.alert(
+      await paloUserNotify(
         "Snapshot impossible : " + (err && err.message ? err.message : String(err))
-        + "\n\nNom prevu : " + fileName
+        + " — nom prevu : " + fileName,
+        "error",
+        "Snapshot"
       );
     }
     complete(event);
