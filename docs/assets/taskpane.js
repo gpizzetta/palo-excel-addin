@@ -1,5 +1,6 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.1.125";
+  var PLUGIN_VERSION = "1.0.1.126";
+  var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
   function setText(id, message) {
@@ -222,8 +223,38 @@
     status("Connexion " + name + " supprimee.");
   }
 
+  function refreshVersionFromServer() {
+    var url = PALO_CDN_BASE + "/version.json?_=" + String(Date.now());
+    fetch(url, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.json();
+      })
+      .then(function (data) {
+        var live = data && data.version ? String(data.version) : "";
+        if (!live) {
+          return;
+        }
+        var el = document.getElementById("plugin-version");
+        if (!el) {
+          return;
+        }
+        if (live === PLUGIN_VERSION) {
+          el.textContent = live;
+          return;
+        }
+        el.textContent = live + " (fichiers locaux " + PLUGIN_VERSION + " — recharger le complement)";
+      })
+      .catch(function () {
+        setText("plugin-version", PLUGIN_VERSION);
+      });
+  }
+
   function bindUi() {
     setText("plugin-version", PLUGIN_VERSION);
+    refreshVersionFromServer();
     try {
       var po = window.PaloOffice;
       if (po && typeof po.paloEnsureStorageReady === "function") {

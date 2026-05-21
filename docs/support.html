@@ -19,6 +19,14 @@
   <p>La commande est declaree dans le manifeste (<code>ExtensionPoint ContextMenu</code> + <code>OfficeMenu id="ContextMenuCell"</code>) et executee par <code>commands.js</code> (<code>Office.actions.associate("paloRibbonAction", …)</code>), comme le bouton du ruban.</p>
   <p><strong>Excel bureau (Windows / Mac)</strong> : Microsoft utilise un menu contextuel different pour les cellules situees <strong>dans un Tableau Excel</strong> (insertion &gt; Tableau). Dans ce cas, les entrees des complements peuvent <strong>ne pas apparaitre</strong> — limitation plateforme (<a href="https://github.com/OfficeDev/office-js/issues/6612">office-js#6612</a>). Essayez un clic droit sur une cellule <strong>hors</strong> tableau, ou utilisez le bouton <strong>Palo action</strong> dans l’onglet Accueil.</p>
   <p><strong>Apres modification du manifeste</strong> : recharger le complement (catalogue d’administration ou sideload) et vider le cache si besoin.</p>
+  <h2>Version affichee (ex. 1.0.1.124) alors que GitHub est plus recent</h2>
+  <p>Le volet affiche la version des <strong>fichiers charges par Excel</strong>, pas celle de GitHub. <code>Ctrl+F5</code> dans un navigateur ne vide pas le cache du WebView Excel.</p>
+  <ol>
+    <li>Verifier en ligne : <a href="https://gpizzetta.github.io/palo-excel-addin/version.json">version.json</a> (version deployee) et <a href="https://gpizzetta.github.io/palo-excel-addin/manifest.xml">manifest.xml</a> (doit contenir <code>Palo.Group.Snapshot</code>).</li>
+    <li>Dans le <strong>Centre d’administration Microsoft 365</strong> : deployer le complement via l’<strong>URL du manifeste</strong> (pas seulement un fichier XML telecharge une fois). Mettre a jour / republier apres chaque release.</li>
+    <li>Sur le poste : retirer le complement Palo, redemarrer Excel, le reinstaller.</li>
+    <li>Ouvrir le volet Connexion : si le pied de page indique une version plus recente que le script embarque, le complement est encore en cache.</li>
+  </ol>
 </body>
 </html>
 
