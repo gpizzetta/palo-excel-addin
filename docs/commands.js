@@ -370,7 +370,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.2.1");
+      dialogUrl.searchParams.set("v", "1.0.2.2");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
@@ -598,57 +598,118 @@
     return window.btoa(binary);
   }
 
+  function sliceDataToUint8(data) {
+    if (!data) {
+      return new Uint8Array(0);
+    }
+    if (data instanceof ArrayBuffer) {
+      return new Uint8Array(data);
+    }
+    if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(data)) {
+      return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+    return new Uint8Array(data);
+  }
+
+  function closeDocumentFileAsync(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || typeof file.closeAsync !== "function") {
+        resolve();
+        return;
+      }
+      file.closeAsync(function (closeResult) {
+        if (closeResult.status === Office.AsyncResultStatus.Succeeded) {
+          resolve();
+          return;
+        }
+        reject(new Error(
+          closeResult.error && closeResult.error.message
+            ? closeResult.error.message
+            : "closeAsync impossible."
+        ));
+      });
+    });
+  }
+
   function getWorkbookDocumentBase64() {
     return new Promise(function (resolve, reject) {
       if (!Office.context || !Office.context.document || typeof Office.context.document.getFileAsync !== "function") {
         reject(new Error("Export du classeur non disponible sur ce client."));
         return;
       }
+      var fileHandle = null;
+
+      function failWithClose(message) {
+        if (!fileHandle) {
+          reject(new Error(message));
+          return;
+        }
+        closeDocumentFileAsync(fileHandle).then(function () {
+          reject(new Error(message));
+        }).catch(function () {
+          reject(new Error(message));
+        });
+      }
+
       Office.context.document.getFileAsync(
         Office.FileType.Compressed,
-        { sliceSize: 4194304 },
+        { sliceSize: 65536 },
         function (result) {
           if (result.status !== Office.AsyncResultStatus.Succeeded) {
             reject(new Error(result.error && result.error.message ? result.error.message : "Lecture du fichier impossible."));
             return;
           }
-          var file = result.value;
-          var sliceCount = file.sliceCount;
-          var slices = [];
-          var received = 0;
-
-          function onSliceError(err) {
-            reject(new Error(err && err.message ? err.message : "Lecture d'un fragment impossible."));
+          fileHandle = result.value;
+          var sliceCount = fileHandle.sliceCount || 0;
+          if (sliceCount === 0) {
+            closeDocumentFileAsync(fileHandle).then(function () {
+              resolve("");
+            }).catch(reject);
+            return;
           }
 
-          function getSlice(index) {
-            file.getSliceAsync(index, function (sliceResult) {
+          var parts = new Array(sliceCount);
+
+          function readSlice(index) {
+            fileHandle.getSliceAsync(index, function (sliceResult) {
               if (sliceResult.status !== Office.AsyncResultStatus.Succeeded) {
-                onSliceError(sliceResult.error);
+                failWithClose(
+                  sliceResult.error && sliceResult.error.message
+                    ? sliceResult.error.message
+                    : "Lecture du fragment " + index + " impossible."
+                );
                 return;
               }
-              slices[index] = sliceResult.value.data;
-              received += 1;
-              if (received >= sliceCount) {
-                var total = 0;
-                var j;
-                for (j = 0; j < sliceCount; j += 1) {
-                  total += slices[j].byteLength;
-                }
-                var merged = new Uint8Array(total);
-                var offset = 0;
-                for (j = 0; j < sliceCount; j += 1) {
-                  merged.set(new Uint8Array(slices[j]), offset);
-                  offset += slices[j].byteLength;
-                }
-                resolve(arrayBufferToBase64(merged.buffer));
+              parts[index] = sliceDataToUint8(sliceResult.value && sliceResult.value.data);
+              if (index + 1 < sliceCount) {
+                readSlice(index + 1);
                 return;
               }
-              getSlice(received);
+              var total = 0;
+              var j;
+              for (j = 0; j < sliceCount; j += 1) {
+                total += parts[j].length;
+              }
+              var merged = new Uint8Array(total);
+              var offset = 0;
+              for (j = 0; j < sliceCount; j += 1) {
+                merged.set(parts[j], offset);
+                offset += parts[j].length;
+              }
+              closeDocumentFileAsync(fileHandle).then(function () {
+                fileHandle = null;
+                try {
+                  resolve(arrayBufferToBase64(merged.buffer));
+                } catch (encodeErr) {
+                  reject(encodeErr);
+                }
+              }).catch(function () {
+                failWithClose("Fermeture du fichier exporte impossible.");
+              });
             });
           }
 
-          getSlice(0);
+          readSlice(0);
         }
       );
     });
