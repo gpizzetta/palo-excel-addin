@@ -319,7 +319,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.1.126");
+      dialogUrl.searchParams.set("v", "1.0.2.0");
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
@@ -682,6 +682,8 @@
     }
     complete(event);
   }
+
+  window.paloSnapshotWorkbookValues = paloSnapshotWorkbookValues;
 
   Office.onReady(function () {
     if (Office.actions && typeof Office.actions.associate === "function") {

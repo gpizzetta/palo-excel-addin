@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.1.126";
+  var PLUGIN_VERSION = "1.0.2.0";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -281,6 +281,21 @@
     }
     if (delBtn) {
       delBtn.addEventListener("click", deleteConnection);
+    }
+    var snapshotBtn = document.getElementById("snapshot-workbook");
+    if (snapshotBtn) {
+      snapshotBtn.addEventListener("click", function () {
+        if (typeof window.paloSnapshotWorkbookValues !== "function") {
+          status("Snapshot indisponible : rechargez le complement (commands.js).", "error");
+          return;
+        }
+        status("Creation du snapshot en cours…");
+        window.paloSnapshotWorkbookValues({
+          completed: function () {
+            status("Snapshot termine (voir message Excel).", "ok");
+          }
+        });
+      });
     }
     if (list) {
       list.addEventListener("change", function () {

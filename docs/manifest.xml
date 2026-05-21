@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.1.126</Version>
+  <Version>1.0.2.0</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -26,7 +26,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
@@ -94,14 +94,6 @@
                     <FunctionName>paloRibbonAction</FunctionName>
                   </Action>
                 </Control>
-              </Group>
-              <Group id="Palo.Group.Snapshot">
-                <Label resid="Palo.Group.Snapshot.Label"/>
-                <Icon>
-                  <bt:Image size="16" resid="Snapshot.Icon.16"/>
-                  <bt:Image size="32" resid="Snapshot.Icon.32"/>
-                  <bt:Image size="80" resid="Snapshot.Icon.80"/>
-                </Icon>
                 <Control xsi:type="Button" id="Palo.Button.Snapshot">
                   <Label resid="Palo.Button.Snapshot.Label"/>
                   <Supertip>
@@ -156,14 +148,14 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.1.126"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.126"/>
-        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.126"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.126"/>
+        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.2.0"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.0"/>
+        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.0"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.0"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -171,7 +163,6 @@
         <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
         <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
         <bt:String id="Palo.Button.Action.Label" DefaultValue="Palo action"/>
-        <bt:String id="Palo.Group.Snapshot.Label" DefaultValue="Palo"/>
         <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
       </bt:ShortStrings>
       <bt:LongStrings>
@@ -262,14 +253,6 @@
                       <FunctionName>paloRibbonAction</FunctionName>
                     </Action>
                   </Control>
-                </Group>
-                <Group id="Palo.Group.Snapshot">
-                  <Label resid="Palo.Group.Snapshot.Label"/>
-                  <Icon>
-                    <bt:Image size="16" resid="Snapshot.Icon.16"/>
-                    <bt:Image size="32" resid="Snapshot.Icon.32"/>
-                    <bt:Image size="80" resid="Snapshot.Icon.80"/>
-                  </Icon>
                   <Control xsi:type="Button" id="Palo.Button.Snapshot">
                     <Label resid="Palo.Button.Snapshot.Label"/>
                     <Supertip>
@@ -323,16 +306,15 @@
           <bt:Image id="Snapshot.Icon.80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/palo_snapshot_80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.1.126"/>
-          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.1.126"/>
-          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.1.126"/>
+          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.0"/>
+          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.0"/>
+          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.0"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
           <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
           <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
-          <bt:String id="Palo.Group.Snapshot.Label" DefaultValue="Palo"/>
           <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
           <bt:String id="Palo.Button.Action.Label" DefaultValue="Palo action"/>
           <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
