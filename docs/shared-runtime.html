@@ -59,11 +59,8 @@
     <p class="version-line version-line--footer">Version plugin: <strong id="plugin-version">1.0.2.2</strong></p>
   </main>
 
-  <!--
-    Shared runtime : volet + ruban. Les formules PALO.* sont chargees via
-    functions-bundle.js (manifest CustomFunctions Script), pas ici.
-  -->
-  <script src="./assets/palo-api.js?v=1.0.2.2"></script>
+  <!-- functions.js = bundle (palo-api + fonctions PALO.*). Office.js est dans le head. -->
+  <script src="./functions.js?v=1.0.2.2"></script>
   <script src="./assets/palo-ename-ribbon.js?v=1.0.2.2"></script>
   <script src="./commands.js?v=1.0.2.2"></script>
   <script src="./assets/taskpane.js?v=1.0.2.2"></script>

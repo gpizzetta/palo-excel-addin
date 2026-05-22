@@ -2193,10 +2193,14 @@ var PALO_ASSET_VERSION = "1.0.2.2";
     return g;
   }
 
-  if (paloGlobalRef().__PALO_FUNCTIONS_CORE_LOADED__) {
+  var gBoot = paloGlobalRef();
+  if (gBoot.__PALO_FUNCTIONS_CORE_LOADED__) {
+    if (typeof gBoot.__paloScheduleRegisterCustomFunctions === "function") {
+      gBoot.__paloScheduleRegisterCustomFunctions();
+    }
     return;
   }
-  paloGlobalRef().__PALO_FUNCTIONS_CORE_LOADED__ = true;
+  gBoot.__PALO_FUNCTIONS_CORE_LOADED__ = true;
 
   function paloFnTrace() {
     var g = paloGlobalRef();
@@ -3006,7 +3010,10 @@ var PALO_ASSET_VERSION = "1.0.2.2";
 
   function registerCustomFunctions() {
     if (typeof CustomFunctions === "undefined") {
-      return;
+      return false;
+    }
+    if (gBoot.__PALO_CF_REGISTERED__) {
+      return true;
     }
     CustomFunctions.associate("ADD", ADD);
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
@@ -3027,14 +3034,42 @@ var PALO_ASSET_VERSION = "1.0.2.2";
     CustomFunctions.associate("PALO_CUBE_LIST_DIMENSIONS", PALO_CUBE_LIST_DIMENSIONS);
     CustomFunctions.associate("PALO_DIMENSION_LIST_CUBES", PALO_DIMENSION_LIST_CUBES);
     CustomFunctions.associate("PALO_DIMENSION_LIST_ELEMENTS", PALO_DIMENSION_LIST_ELEMENTS);
+    gBoot.__PALO_CF_REGISTERED__ = true;
+    return true;
   }
+
+  /** CustomFunctions peut arriver apres le premier parse du script (worker / shared runtime). */
+  function scheduleRegisterCustomFunctions() {
+    if (registerCustomFunctions()) {
+      return;
+    }
+    var deadline = Date.now() + 30000;
+    function tick() {
+      if (registerCustomFunctions()) {
+        return;
+      }
+      if (Date.now() > deadline) {
+        if (typeof console !== "undefined" && console.error) {
+          console.error(
+            "[PaloOffice] CustomFunctions indisponible apres 30s — aucune fonction PALO.* enregistree. "
+            + "Verifiez le manifeste et rechargez le complement."
+          );
+        }
+        return;
+      }
+      setTimeout(tick, 50);
+    }
+    tick();
+  }
+
+  gBoot.__paloScheduleRegisterCustomFunctions = scheduleRegisterCustomFunctions;
 
   if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
     Office.onReady(function () {
-      registerCustomFunctions();
+      scheduleRegisterCustomFunctions();
     });
   } else {
-    registerCustomFunctions();
+    scheduleRegisterCustomFunctions();
   }
 })();
 
