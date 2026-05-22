@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.2.3</Version>
+  <Version>1.0.2.4</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -27,7 +27,7 @@
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
@@ -149,14 +149,14 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.2.3"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.3"/>
-        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.3"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.2.3"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.3"/>
+        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.2.4"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.4"/>
+        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.4"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.2.4"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.4"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -307,10 +307,10 @@
           <bt:Image id="Snapshot.Icon.80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/palo_snapshot_80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
-          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.3"/>
-          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.3"/>
-          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.3"/>
+          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
+          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.4"/>
+          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.4"/>
+          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.4"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>

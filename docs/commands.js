@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.2.3";
+  var PALO_PLUGIN_VERSION = "1.0.2.4";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -716,8 +716,12 @@
     });
   }
 
-  async function convertAllSheetsToValues(context) {
-    var sheets = context.workbook.worksheets;
+  function getWorkbookById(context, workbookId) {
+    return context.application.workbooks.getItem(workbookId);
+  }
+
+  async function convertAllSheetsToValues(context, workbook) {
+    var sheets = workbook.worksheets;
     sheets.load("items/name");
     await context.sync();
     var copyValuesOnly = Excel.RangeCopyType && Excel.RangeCopyType.values;
@@ -738,13 +742,64 @@
     }
   }
 
+  async function removeDefaultBlankSheetAfterInsert(context, workbook) {
+    var sheets = workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    if (sheets.items.length <= 1) {
+      return;
+    }
+    var defaultNames = { Sheet1: true, Feuil1: true, Tabelle1: true };
+    var i;
+    for (i = 0; i < sheets.items.length; i += 1) {
+      if (defaultNames[sheets.items[i].name]) {
+        sheets.items[i].delete();
+        await context.sync();
+        return;
+      }
+    }
+  }
+
   /**
-   * Etape 1 : enregistrer la copie (Save As) sous le nom snapshot — formules encore presentes.
-   * Le classeur d'origine n'est jamais modifie (export lecture seule avant createWorkbook).
+   * Copie le classeur dans la MEME instance Excel (pas Excel.createWorkbook).
+   * Excel.run reste lie au classeur hote : on cible la copie par son id, jamais context.workbook.
    */
-  async function saveSnapshotWorkbookAs(fileName) {
+  async function createSnapshotWorkbookFromBase64(base64) {
+    var snapshotWbId = null;
     await Excel.run(async function (context) {
-      var wb = context.workbook;
+      if (!context.application || !context.application.workbooks
+        || typeof context.application.workbooks.add !== "function") {
+        throw new Error("Snapshot: creation de classeur indisponible sur ce client.");
+      }
+      var snapshotWb = context.application.workbooks.add();
+      snapshotWb.load("id");
+      await context.sync();
+      snapshotWbId = snapshotWb.id;
+      if (typeof snapshotWb.insertWorksheetsFromBase64 !== "function") {
+        snapshotWb.close(Excel.CloseBehavior.skipSave);
+        await context.sync();
+        throw new Error("Snapshot: ExcelApi insertWorksheetsFromBase64 requis (1.8+).");
+      }
+      snapshotWb.insertWorksheetsFromBase64(base64);
+      await context.sync();
+      if (typeof snapshotWb.activate === "function") {
+        snapshotWb.activate();
+        await context.sync();
+      }
+      await removeDefaultBlankSheetAfterInsert(context, snapshotWb);
+    });
+    if (!snapshotWbId) {
+      throw new Error("Snapshot: id du classeur copie introuvable.");
+    }
+    return snapshotWbId;
+  }
+
+  /**
+   * Etape 1 : enregistrer la copie (Save As) — formules intactes, classeur cible par id.
+   */
+  async function saveSnapshotWorkbookAs(fileName, snapshotWbId) {
+    await Excel.run(async function (context) {
+      var wb = getWorkbookById(context, snapshotWbId);
       var baseName = String(fileName || "").replace(/\.xlsx$/i, "");
       wb.name = baseName;
       await context.sync();
@@ -766,11 +821,11 @@
   }
 
   /**
-   * Etape 3 : reecrire le fichier snapshot apres conversion en valeurs (autosave desactive ou non).
+   * Etape 3 : reecrire le fichier snapshot apres conversion en valeurs.
    */
-  async function saveSnapshotWorkbookPersist() {
+  async function saveSnapshotWorkbookPersist(snapshotWbId) {
     await Excel.run(async function (context) {
-      var wb = context.workbook;
+      var wb = getWorkbookById(context, snapshotWbId);
       try {
         wb.save(Excel.SaveBehavior.save);
         await context.sync();
@@ -785,43 +840,41 @@
     });
   }
 
-  async function closeActiveWorkbookWithoutPrompt() {
+  async function closeSnapshotWorkbookWithoutPrompt(snapshotWbId) {
     await Excel.run(async function (context) {
-      context.workbook.close(Excel.CloseBehavior.skipSave);
+      getWorkbookById(context, snapshotWbId).close(Excel.CloseBehavior.skipSave);
       await context.sync();
     });
   }
 
   async function paloSnapshotWorkbookValues(event) {
     var fileName = buildSnapshotFileName();
+    var snapshotWbId = null;
     try {
-      if (typeof Excel === "undefined" || typeof Excel.createWorkbook !== "function") {
-        throw new Error("Snapshot non disponible (ExcelApi 1.8 requis).");
-      }
-      if (typeof Excel.run !== "function") {
+      if (typeof Excel === "undefined" || typeof Excel.run !== "function") {
         throw new Error("Excel JavaScript API indisponible.");
       }
 
-      // Lecture seule du fichier ouvert : aucune formule supprimee sur l'original (autosave inclus).
+      // Export lecture seule du classeur hote (Office.context.document), sans Excel.run sur ses feuilles.
       var base64 = await getWorkbookDocumentBase64();
-      await Excel.createWorkbook(base64);
+      snapshotWbId = await createSnapshotWorkbookFromBase64(base64);
 
-      // (1) Enregistrer sous la copie (formules intactes) avant toute conversion.
-      await saveSnapshotWorkbookAs(fileName);
+      // (1) Enregistrer sous la copie (formules intactes).
+      await saveSnapshotWorkbookAs(fileName, snapshotWbId);
 
-      // (2) Supprimer les formules uniquement sur la copie snapshot.
+      // (2) Convertir en valeurs uniquement la copie (id explicite, pas context.workbook = original).
       await Excel.run(async function (context) {
         if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
           context.application.suspendScreenUpdatingUntilNextSync();
         }
-        await convertAllSheetsToValues(context);
+        await convertAllSheetsToValues(context, getWorkbookById(context, snapshotWbId));
       });
 
-      // (3) Reenregistrer la copie (valeurs seules) si l'autosave n'a pas deja ecrit le fichier.
-      await saveSnapshotWorkbookPersist();
+      // (3) Reenregistrer la copie.
+      await saveSnapshotWorkbookPersist(snapshotWbId);
 
       try {
-        await closeActiveWorkbookWithoutPrompt();
+        await closeSnapshotWorkbookWithoutPrompt(snapshotWbId);
       } catch (_close) {
         // La copie snapshot peut rester ouverte si Excel refuse la fermeture.
       }
@@ -829,11 +882,18 @@
       await paloUserNotify(
         "Snapshot enregistre : " + fileName + ". "
         + "Copie en valeurs (sans formules). "
-        + "Votre classeur d'origine avec formules n'a pas ete modifie.",
+        + "Le classeur d'origine avec formules n'a pas ete modifie.",
         "ok",
         "Snapshot"
       );
     } catch (err) {
+      if (snapshotWbId) {
+        try {
+          await closeSnapshotWorkbookWithoutPrompt(snapshotWbId);
+        } catch (_cleanup) {
+          // Copie partielle : fermeture best-effort.
+        }
+      }
       await paloUserNotify(
         "Snapshot impossible : " + (err && err.message ? err.message : String(err))
         + " — nom prevu : " + fileName
