@@ -37,6 +37,16 @@ Add-in Excel Microsoft 365 en fichiers statiques (HTML / JS / JSON), aligne sur 
 
 `docs/manifest.xml` pointe vers `https://gpizzetta.github.io/palo-excel-addin/` (taskpane, `functions.json`, assets). Pour un autre domaine ou compte GitHub, editer `docs/manifest.xml` (c'est le seul fichier a modifier).
 
+### Numeroter une release
+
+Source de verite : `docs/version.json`. Pour propager la version partout (manifeste, cache-busting `?v=`, volet, fonctions, bundle) :
+
+```bash
+cd docs && ./bump-version.sh 1.0.2.4
+```
+
+Le script met a jour `version.json`, `manifest.xml`, HTML, `functions-core.js`, `taskpane.js`, `commands.js`, puis lance `./build-bundle.sh`. Verifier qu'il ne reste aucune ancienne version : `grep -r "1.0.2.3" docs` (adapter le numero).
+
 ## 3) Sideload dans Excel
 
 1. Ouvre Excel (Office 365 desktop ou web).

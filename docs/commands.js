@@ -1,5 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
+  var PALO_PLUGIN_VERSION = "1.0.2.3";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -370,7 +371,7 @@
       await storageSetJson(PICKER_STORAGE_KEY, pickerPayload);
 
       var dialogUrl = new URL("palo-ename-picker.html", window.location.href);
-      dialogUrl.searchParams.set("v", "1.0.2.2");
+      dialogUrl.searchParams.set("v", PALO_PLUGIN_VERSION);
 
       Office.context.ui.displayDialogAsync(
         dialogUrl.href,
