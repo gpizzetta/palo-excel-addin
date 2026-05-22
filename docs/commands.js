@@ -719,6 +719,7 @@
     var sheets = context.workbook.worksheets;
     sheets.load("items/name");
     await context.sync();
+    var copyValuesOnly = Excel.RangeCopyType && Excel.RangeCopyType.values;
     var i;
     for (i = 0; i < sheets.items.length; i += 1) {
       var sheet = sheets.items[i];
@@ -726,23 +727,59 @@
       used.load("values");
       await context.sync();
       if (!used.isNullObject) {
-        used.values = used.values;
+        if (copyValuesOnly) {
+          used.copyFrom(used, Excel.RangeCopyType.values, false, false);
+        } else {
+          used.values = used.values;
+        }
         await context.sync();
       }
     }
   }
 
-  async function saveSnapshotWorkbook(fileName) {
+  /**
+   * Etape 1 : enregistrer la copie (Save As) sous le nom snapshot — formules encore presentes.
+   * Le classeur d'origine n'est jamais modifie (export lecture seule avant createWorkbook).
+   */
+  async function saveSnapshotWorkbookAs(fileName) {
     await Excel.run(async function (context) {
       var wb = context.workbook;
       var baseName = String(fileName || "").replace(/\.xlsx$/i, "");
       wb.name = baseName;
+      await context.sync();
+      try {
+        wb.save(Excel.SaveBehavior.saveAs);
+        await context.sync();
+        return;
+      } catch (_saveAs) {
+        // Certains clients n'exposent pas saveAs : repli save / prompt.
+      }
       try {
         wb.save(Excel.SaveBehavior.save);
         await context.sync();
       } catch (_save) {
         wb.save(Excel.SaveBehavior.prompt);
         await context.sync();
+      }
+    });
+  }
+
+  /**
+   * Etape 3 : reecrire le fichier snapshot apres conversion en valeurs (autosave desactive ou non).
+   */
+  async function saveSnapshotWorkbookPersist() {
+    await Excel.run(async function (context) {
+      var wb = context.workbook;
+      try {
+        wb.save(Excel.SaveBehavior.save);
+        await context.sync();
+      } catch (_save) {
+        try {
+          wb.save(Excel.SaveBehavior.prompt);
+          await context.sync();
+        } catch (_prompt) {
+          // Autosave peut deja avoir persisté la copie.
+        }
       }
     });
   }
@@ -764,9 +801,14 @@
         throw new Error("Excel JavaScript API indisponible.");
       }
 
+      // Lecture seule du fichier ouvert : aucune formule supprimee sur l'original (autosave inclus).
       var base64 = await getWorkbookDocumentBase64();
       await Excel.createWorkbook(base64);
 
+      // (1) Enregistrer sous la copie (formules intactes) avant toute conversion.
+      await saveSnapshotWorkbookAs(fileName);
+
+      // (2) Supprimer les formules uniquement sur la copie snapshot.
       await Excel.run(async function (context) {
         if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
           context.application.suspendScreenUpdatingUntilNextSync();
@@ -774,25 +816,27 @@
         await convertAllSheetsToValues(context);
       });
 
-      await saveSnapshotWorkbook(fileName);
+      // (3) Reenregistrer la copie (valeurs seules) si l'autosave n'a pas deja ecrit le fichier.
+      await saveSnapshotWorkbookPersist();
 
       try {
         await closeActiveWorkbookWithoutPrompt();
       } catch (_close) {
-        // Le classeur snapshot peut rester ouvert si Excel refuse la fermeture.
+        // La copie snapshot peut rester ouverte si Excel refuse la fermeture.
       }
 
       await paloUserNotify(
         "Snapshot enregistre : " + fileName + ". "
-        + "Tous les onglets en valeurs (sans formules). "
-        + "Le classeur d'origine avec formules Palo est reste ouvert.",
+        + "Copie en valeurs (sans formules). "
+        + "Votre classeur d'origine avec formules n'a pas ete modifie.",
         "ok",
         "Snapshot"
       );
     } catch (err) {
       await paloUserNotify(
         "Snapshot impossible : " + (err && err.message ? err.message : String(err))
-        + " — nom prevu : " + fileName,
+        + " — nom prevu : " + fileName
+        + ". Si une boite Enregistrer sous s'est ouverte, validez l'enregistrement ou annulez avant de reessayer.",
         "error",
         "Snapshot"
       );

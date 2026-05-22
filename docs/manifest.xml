@@ -163,14 +163,14 @@
         <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
         <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
         <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
-        <bt:String id="Palo.Button.Action.Label" DefaultValue="Palo action"/>
+        <bt:String id="Palo.Button.Action.Label" DefaultValue="Action"/>
         <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
         <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
         <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element) dans la dimension."/>
-        <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Enregistre une copie du classeur (tous les onglets, valeurs affichees uniquement) sous le nom &lt;fichier&gt;_snapshot_&lt;date&gt;.xlsx. Le fichier actuel avec formules reste ouvert."/>
+        <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Enregistre sous &lt;fichier&gt;_snapshot_&lt;date&gt;.xlsx une copie (formules puis valeurs), sans modifier le classeur d'origine."/>
       </bt:LongStrings>
     </Resources>
 
@@ -317,14 +317,14 @@
           <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
           <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
           <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
-          <bt:String id="Palo.Button.Action.Label" DefaultValue="Palo action"/>
+          <bt:String id="Palo.Button.Action.Label" DefaultValue="Action"/>
           <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
           <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
           <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element) dans la dimension."/>
-          <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Enregistre une copie du classeur (tous les onglets, valeurs affichees uniquement) sous le nom &lt;fichier&gt;_snapshot_&lt;date&gt;.xlsx."/>
+          <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Enregistre sous &lt;fichier&gt;_snapshot_&lt;date&gt;.xlsx une copie (formules puis valeurs), sans modifier le classeur d'origine."/>
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>
