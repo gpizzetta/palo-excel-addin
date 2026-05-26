@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Palo — Snapshot</title>
+  <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      margin: 14px;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #323130;
+    }
+    h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+    p { margin: 0 0 10px; }
+    .actions { margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end; }
+    button { padding: 6px 16px; font-size: 13px; cursor: pointer; }
+    #yes { font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Snapshot valeurs</h1>
+  <p><strong>All formulas will be deleted</strong> and replaced by the values currently displayed in the cells.</p>
+  <p>Make sure you are working on a <strong>copy</strong> of your original document.</p>
+  <p lang="fr" class="muted">Toutes les formules seront supprimees. Travaillez sur une copie du document d'origine.</p>
+  <div class="actions">
+    <button id="no" type="button">No / Non</button>
+    <button id="yes" type="button">Yes / Oui</button>
+  </div>
+  <script>
+    Office.onReady(function () {
+      function reply(code) {
+        if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
+          Office.context.ui.messageParent(code, { targetOrigin: "*" });
+        }
+      }
+      document.getElementById("yes").onclick = function () { reply("yes"); };
+      document.getElementById("no").onclick = function () { reply("no"); };
+    });
+  </script>
+</body>
+</html>
