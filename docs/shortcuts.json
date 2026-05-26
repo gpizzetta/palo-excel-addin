@@ -1,0 +1,20 @@
+{
+  "actions": [
+    {
+      "id": "paloRibbonAction",
+      "type": "ExecuteFunction",
+      "name": "Palo action (PALO.ENAME)"
+    }
+  ],
+  "shortcuts": [
+    {
+      "action": "paloRibbonAction",
+      "key": {
+        "default": "Ctrl+Alt+A",
+        "windows": "Ctrl+Alt+A",
+        "web": "Ctrl+Alt+A",
+        "mac": "Ctrl+Option+A"
+      }
+    }
+  ]
+}

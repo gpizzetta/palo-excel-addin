@@ -5,7 +5,7 @@
            xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
            xsi:type="TaskPaneApp">
   <Id>9e35717b-2d76-4b84-b9f2-c7c1df86d901</Id>
-  <Version>1.0.2.5</Version>
+  <Version>1.0.2.6</Version>
   <ProviderName>Palo OLAP Add-in</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in"/>
@@ -24,10 +24,12 @@
       <Set Name="AddinCommands" MinVersion="1.1"/>
       <Set Name="DialogApi" MinVersion="1.2"/>
       <Set Name="CustomFunctionsRuntime" MinVersion="1.1"/>
+      <Set Name="SharedRuntime" MinVersion="1.1"/>
+      <Set Name="KeyboardShortcuts" MinVersion="1.1"/>
     </Sets>
   </Requirements>
   <DefaultSettings>
-    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
+    <SourceLocation DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
   </DefaultSettings>
   <Permissions>ReadWriteDocument</Permissions>
 
@@ -149,14 +151,14 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/support.html"/>
-        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
-        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
-        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.2.5"/>
-        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.5"/>
-        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.5"/>
-        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.2.5"/>
-        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.5"/>
+        <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
+        <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/commands.html?v=1.0.2.6"/>
+        <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.6"/>
+        <bt:Url id="Functions.Bundle.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.6"/>
+        <bt:Url id="Functions.Page.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.html?v=1.0.2.6"/>
+        <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.6"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -169,7 +171,7 @@
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
         <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
-        <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element) dans la dimension."/>
+        <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element). Raccourci : Ctrl+Alt+A (cellule selectionnee)."/>
         <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Apres confirmation : supprime toutes les formules du classeur ouvert (valeurs affichees uniquement). Aucun enregistrement automatique — travaillez sur une copie."/>
       </bt:LongStrings>
     </Resources>
@@ -182,7 +184,8 @@
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
       <Requirements>
         <bt:Sets DefaultMinVersion="1.1">
-          <bt:Set Name="SharedRuntime" MinVersion="1.0"/>
+          <bt:Set Name="SharedRuntime" MinVersion="1.1"/>
+          <bt:Set Name="KeyboardShortcuts" MinVersion="1.1"/>
         </bt:Sets>
       </Requirements>
       <Hosts>
@@ -307,10 +310,10 @@
           <bt:Image id="Snapshot.Icon.80" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/assets/icons/palo_snapshot_80.png"/>
         </bt:Images>
         <bt:Urls>
-          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
-          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.5"/>
-          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.5"/>
-          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.5"/>
+          <bt:Url id="SharedRuntime.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
+          <bt:Url id="Taskpane.Connection.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/shared-runtime.html?v=1.0.2.6"/>
+          <bt:Url id="Functions.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.js?v=1.0.2.6"/>
+          <bt:Url id="Functions.Metadata.Url" DefaultValue="https://gpizzetta.github.io/palo-excel-addin/functions.json?v=1.0.2.6"/>
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in"/>
@@ -323,10 +326,11 @@
         <bt:LongStrings>
           <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
           <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
-          <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element) dans la dimension."/>
+          <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element). Raccourci : Ctrl+Alt+A (cellule selectionnee)."/>
           <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Apres confirmation : supprime toutes les formules du classeur ouvert (valeurs affichees uniquement). Aucun enregistrement automatique — travaillez sur une copie."/>
         </bt:LongStrings>
       </Resources>
     </VersionOverrides>
   </VersionOverrides>
+  <ExtendedOverrides Url="https://gpizzetta.github.io/palo-excel-addin/shortcuts.json?v=1.0.2.6"/>
 </OfficeApp>
