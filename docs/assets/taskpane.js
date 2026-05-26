@@ -282,21 +282,6 @@
     if (delBtn) {
       delBtn.addEventListener("click", deleteConnection);
     }
-    var snapshotBtn = document.getElementById("snapshot-workbook");
-    if (snapshotBtn) {
-      snapshotBtn.addEventListener("click", function () {
-        if (typeof window.paloSnapshotWorkbookValues !== "function") {
-          status("Snapshot indisponible : rechargez le complement (commands.js).", "error");
-          return;
-        }
-        status("Creation du snapshot en cours…");
-        window.paloSnapshotWorkbookValues({
-          completed: function () {
-            /* paloUserNotify met a jour #status-log (succes ou erreur). */
-          }
-        });
-      });
-    }
     if (list) {
       list.addEventListener("change", function () {
         var value = getSelectedConnection();
