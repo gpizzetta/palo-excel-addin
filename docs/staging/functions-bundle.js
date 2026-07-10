@@ -2265,7 +2265,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.16";
+var PALO_ASSET_VERSION = "1.0.2.17";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2837,6 +2837,34 @@ var PALO_ASSET_VERSION = "1.0.2.16";
     return out;
   }
 
+  /** Diagnostic coords separees : lit les N premiers arguments a partir de startIndex. */
+  function paloDiagReadArgsCount(cfArgs, startIndex, count) {
+    var parts = [];
+    var i;
+    for (i = 0; i < count; i += 1) {
+      var idx = startIndex + i;
+      try {
+        if (idx >= cfArgs.length) {
+          return {
+            ok: false,
+            error: "Arg manquant (index formulaire " + idx + ", attendu " + count + " coords)",
+            parts: parts
+          };
+        }
+        var raw = cfArgs[idx];
+        if (isOfficeCustomFunctionMeta(raw)) {
+          return { ok: false, error: "Meta Office a l'index " + idx, parts: parts };
+        }
+        var scalar = paloCoerceCfArgSafe(raw);
+        parts.push(String(scalar == null ? "" : scalar).trim());
+      } catch (err) {
+        var em = err && err.message ? err.message : String(err);
+        return { ok: false, error: "Exception index " + idx + ": " + em, parts: parts };
+      }
+    }
+    return { ok: true, parts: parts, error: "" };
+  }
+
   function paloJoinCoordsLiteral(coordinates) {
     var parts = [];
     var i;
@@ -3069,7 +3097,7 @@ var PALO_ASSET_VERSION = "1.0.2.16";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.16+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.17+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -3091,8 +3119,8 @@ var PALO_ASSET_VERSION = "1.0.2.16";
 
   /**
    * Diagnostic BETA par etapes.
-   * 0=v | 1=conn | 2=ctx | 32=nargs | 31=path | 33=url | 3=value (/cell/value)
-   * Preferer 1 seul arg name_path (virgules) : evite plantage Excel Online multi-args.
+   * 0=v | 1=conn | 2=ctx | 32=nargs | 31=path (1 chaine) | 33=url | 3=value
+   * 34-39=lit 1..6 coords separees | 40=join multi | 41=value multi-args
    */
   async function DATAN_STEP(step) {
     var stepNum = 0;
@@ -3121,8 +3149,40 @@ var PALO_ASSET_VERSION = "1.0.2.16";
         return "STEP2 db=" + context2.database + " conn=" + context2.connectionName;
       }
 
+      if (stepNum >= 34 && stepNum <= 39) {
+        var coordCount = stepNum - 33;
+        var readN = paloDiagReadArgsCount(cfArgs, 3, coordCount);
+        if (!readN.ok) {
+          return "#PALO! STEP" + stepNum + " " + readN.error;
+        }
+        return "STEP" + stepNum + " n=" + readN.parts.length + " " + readN.parts.join("|");
+      }
+
       var servdbArg = paloCoerceCfArgSafe(cfArgs.length > 1 ? cfArgs[1] : "");
       var cubeArg = paloCoerceCfArgSafe(cfArgs.length > 2 ? cfArgs[2] : "");
+
+      if (stepNum === 40) {
+        var coords40 = paloCollectCoordinateArgs(cfArgs, 3);
+        var path40 = paloJoinCoordsLiteral(coords40);
+        if (!path40.ok) {
+          return "#PALO! STEP40 " + path40.error;
+        }
+        return "STEP40 multi n=" + coords40.length + " " + path40.path.split(",").join("|");
+      }
+
+      if (stepNum === 41) {
+        var coords41 = paloCollectCoordinateArgs(cfArgs, 3);
+        var path41 = paloJoinCoordsLiteral(coords41);
+        if (!path41.ok) {
+          return "#PALO! STEP41 " + path41.error;
+        }
+        var direct41 = await paloFetchCellByNamePathLiteral(servdbArg, cubeArg, path41.path);
+        if (!direct41.ok) {
+          return "#PALO! STEP41 " + direct41.error;
+        }
+        return "STEP41 multi n=" + coords41.length + " value=" + String(paloCfDatacReturn(direct41.value));
+      }
+
       var pathResolved = paloResolveNamePathFromCfArgs(cfArgs, 3);
 
       if (stepNum === 31) {

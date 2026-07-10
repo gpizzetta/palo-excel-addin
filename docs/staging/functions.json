@@ -41,7 +41,7 @@
     {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
-      "description": "BETA diagnostic: 31=path, 33=url, 3=value. Preferer 1 arg name_path (virgules).",
+      "description": "BETA diagnostic: 34-39=coords separees (1 a 6), 40=join multi, 41=value multi.",
       "result": { "type": "string", "dimensionality": "scalar" },
       "parameters": [
         { "name": "step", "type": "number" },
