@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.13";
+var PALO_ASSET_VERSION = "1.0.2.14";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -522,6 +522,56 @@ var PALO_ASSET_VERSION = "1.0.2.13";
     return out;
   }
 
+  function paloJoinCoordsLiteral(coordinates) {
+    var parts = [];
+    var i;
+    for (i = 0; i < coordinates.length; i += 1) {
+      var scalar = paloCoerceCfArgSafe(coordinates[i]);
+      var seg = String(scalar == null ? "" : scalar).trim();
+      if (!seg) {
+        return { ok: false, path: "", error: "Coordonnee vide (index " + i + ")." };
+      }
+      parts.push(seg);
+    }
+    if (!parts.length) {
+      return { ok: false, path: "", error: "Aucune coordonnee." };
+    }
+    return { ok: true, path: parts.join(","), error: "" };
+  }
+
+  /** Lecture unitaire /cell/value?name_path=... sans cache dimensions ni bulk. */
+  async function paloFetchCellByNamePath(servdb, cubeName, coordinates) {
+    var pathSafe = paloJoinCoordsLiteral(coordinates);
+    if (!pathSafe.ok) {
+      return { ok: false, error: pathSafe.error, value: null, path: "", url: "" };
+    }
+    var manager = await getConnectionManager();
+    if (!manager) {
+      return { ok: false, error: "Runtime pas pret (volet Connexion)", value: null, path: pathSafe.path, url: "" };
+    }
+    var context = await manager.getClientAndContext(paloCoerceCfArgSafe(servdb));
+    var cube = paloCoerceCfArgSafe(cubeName);
+    var url = context.client.buildUrl("/cell/value", {
+      sid: context.sid,
+      name_database: context.database,
+      name_cube: cube,
+      name_path: pathSafe.path
+    });
+    var value = await context.client.cellValue(
+      context.sid,
+      context.database,
+      cube,
+      pathSafe.path
+    );
+    return {
+      ok: true,
+      error: "",
+      value: value,
+      path: pathSafe.path,
+      url: url
+    };
+  }
+
   async function getClientContextForServdb(servdb) {
     if (paloCfInOpenGrace()) {
       return null;
@@ -597,16 +647,11 @@ var PALO_ASSET_VERSION = "1.0.2.13";
       });
       var value;
       if (paloIsCfExcelHost()) {
-        var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
-        if (!pathSafe.ok) {
-          return "#PALO! " + pathSafe.error;
+        var direct = await paloFetchCellByNamePath(servdb, cubeName, coordinates);
+        if (!direct.ok) {
+          return "#PALO! " + direct.error;
         }
-        value = await context.client.cellValue(
-          context.sid,
-          context.database,
-          cubeName,
-          pathSafe.path
-        );
+        value = direct.value;
       } else {
         value = await manager.requestCellValueBatched(
           context.connectionName,
@@ -653,7 +698,7 @@ var PALO_ASSET_VERSION = "1.0.2.13";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.13+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.14+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -661,17 +706,21 @@ var PALO_ASSET_VERSION = "1.0.2.13";
         servdb: String(servdb || ""),
         cubeName: String(cubeName || "")
       });
-      var args = Array.prototype.slice.call(arguments);
-      return await DATAC.apply(null, args);
+      var cfArgs = arguments;
+      var datacArgs = [cfArgs[0], cfArgs[1]];
+      var di;
+      for (di = 2; di < cfArgs.length; di += 1) {
+        datacArgs.push(cfArgs[di]);
+      }
+      return await DATAC.apply(null, datacArgs);
     } catch (error) {
       return toError(error);
     }
   }
 
   /**
-   * Diagnostic BETA par etapes (evite le plantage Excel Online).
-   * STEP 0=v | 1=conn | 2=ctx | 32=count args | 3=path | 4=value
-   * Ne pas utiliser slice(arguments) : Excel Online evalue toutes les coords d'un coup.
+   * Diagnostic BETA par etapes.
+   * 0=v | 1=conn | 2=ctx | 31=path | 33=url | 3=/cell/value direct | 4=id. step3
    */
   async function DATAN_STEP(step) {
     var stepNum = 0;
@@ -683,6 +732,51 @@ var PALO_ASSET_VERSION = "1.0.2.13";
       if (paloCfInOpenGrace()) {
         return "STEP" + stepNum + " grace";
       }
+
+      var cfArgs = arguments;
+
+      if (stepNum === 32) {
+        return "STEP32 rawArgs=" + Math.max(0, cfArgs.length - 3);
+      }
+
+      var servdbArg = paloCoerceCfArgSafe(cfArgs.length > 1 ? cfArgs[1] : "");
+      var cubeArg = paloCoerceCfArgSafe(cfArgs.length > 2 ? cfArgs[2] : "");
+      var coordArgs = paloCollectCoordinateArgs(cfArgs, 3);
+
+      if (stepNum === 31) {
+        var path31 = paloJoinCoordsLiteral(coordArgs);
+        if (!path31.ok) {
+          return "#PALO! STEP31 " + path31.error;
+        }
+        return "STEP31 " + path31.path.split(",").join("|");
+      }
+
+      if (stepNum === 33) {
+        var path33 = paloJoinCoordsLiteral(coordArgs);
+        if (!path33.ok) {
+          return "#PALO! STEP33 " + path33.error;
+        }
+        var manager33 = await getConnectionManager();
+        if (!manager33) {
+          return "STEP33 no manager";
+        }
+        var ctx33 = await manager33.getClientAndContext(servdbArg);
+        return "STEP33 " + ctx33.client.buildUrl("/cell/value", {
+          sid: ctx33.sid,
+          name_database: ctx33.database,
+          name_cube: cubeArg,
+          name_path: path33.path
+        });
+      }
+
+      if (stepNum === 3 || stepNum === 4) {
+        var direct3 = await paloFetchCellByNamePath(servdbArg, cubeArg, coordArgs);
+        if (!direct3.ok) {
+          return "#PALO! STEP" + stepNum + " " + direct3.error;
+        }
+        return "STEP" + stepNum + " value=" + String(paloCfDatacReturn(direct3.value));
+      }
+
       var manager = await getConnectionManager();
       if (!manager) {
         return "STEP" + stepNum + " no manager";
@@ -691,35 +785,12 @@ var PALO_ASSET_VERSION = "1.0.2.13";
         return "STEP1 conn=" + (manager.getActiveConnectionName() || "(none)");
       }
 
-      var cfArgs = arguments;
-      var servdb = paloCoerceCfArgSafe(cfArgs.length > 1 ? cfArgs[1] : "");
-
       if (stepNum === 2) {
-        var context2 = await manager.getClientAndContext(servdb);
+        var context2 = await manager.getClientAndContext(servdbArg);
         return "STEP2 db=" + context2.database + " conn=" + context2.connectionName;
       }
 
-      if (stepNum === 32) {
-        return "STEP32 rawArgs=" + Math.max(0, cfArgs.length - 3);
-      }
-
-      var cubeName = paloCoerceCfArgSafe(cfArgs.length > 2 ? cfArgs[2] : "");
-      var coordinates = paloCollectCoordinateArgs(cfArgs, 3);
-      var context = await manager.getClientAndContext(servdb);
-      var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
-      if (!pathSafe.ok) {
-        return "#PALO! STEP3 " + pathSafe.error;
-      }
-      if (stepNum === 3) {
-        return "STEP3 path=" + pathSafe.path;
-      }
-      var value = await context.client.cellValue(
-        context.sid,
-        context.database,
-        cubeName,
-        pathSafe.path
-      );
-      return "STEP4 value=" + String(paloCfDatacReturn(value));
+      return "#PALO! STEP inconnu: " + stepNum;
     } catch (error) {
       var msg = error && error.message ? error.message : String(error);
       return "#PALO! STEP" + stepNum + " " + msg;

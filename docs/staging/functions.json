@@ -29,7 +29,7 @@
     {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
-      "description": "BETA diagnostic DATAC (0=v,1=conn,2=ctx sans coords,32=compte,3=path,4=value).",
+      "description": "BETA diagnostic: 31=path, 33=url /cell/value, 3=lecture directe (sans cache bulk).",
       "result": { "type": "string", "dimensionality": "scalar" },
       "parameters": [
         { "name": "step", "type": "number" },
