@@ -2265,7 +2265,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.15";
+var PALO_ASSET_VERSION = "1.0.2.16";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2325,6 +2325,59 @@ var PALO_ASSET_VERSION = "1.0.2.15";
     return at > 0 && (Date.now() - at) < PALO_CF_OPEN_GRACE_MS;
   }
 
+  function paloCfWaitPastGrace() {
+    var at = gBoot.__PALO_CF_REGISTERED_AT__ || 0;
+    if (at <= 0) {
+      return Promise.resolve();
+    }
+    var remain = PALO_CF_OPEN_GRACE_MS - (Date.now() - at);
+    if (remain <= 0) {
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve) {
+      setTimeout(resolve, remain);
+    });
+  }
+
+  async function paloCfAwaitStorageReady() {
+    if (!hasPaloOffice()) {
+      return;
+    }
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.paloEnsureStorageReady === "function") {
+      await po.paloEnsureStorageReady();
+    }
+  }
+
+  async function paloCfEnsureRuntimeReady() {
+    await paloCfWaitPastGrace();
+    await ensurePaloOfficeReady();
+    await paloCfAwaitStorageReady();
+  }
+
+  function paloWarmActiveSessionAfterGrace() {
+    paloCfEnsureRuntimeReady()
+      .then(function () {
+        return getConnectionManager();
+      })
+      .then(function (manager) {
+        if (!manager) {
+          return;
+        }
+        var name = manager.getActiveConnectionName();
+        if (!name) {
+          return;
+        }
+        var profile = manager.getConnection(name);
+        var ApiClient = paloGlobalRef().PaloOffice.ApiClient;
+        var client = new ApiClient(profile);
+        return manager.getValidSid(name, client);
+      })
+      .catch(function () {
+        // ignore
+      });
+  }
+
   function paloWarmStorageAfterRegister() {
     if (!hasPaloOffice()) {
       return;
@@ -2335,6 +2388,7 @@ var PALO_ASSET_VERSION = "1.0.2.15";
         // ignore
       });
     }
+    paloWarmActiveSessionAfterGrace();
   }
 
   function resolveAfterStorageReady(resolve) {
@@ -2428,11 +2482,8 @@ var PALO_ASSET_VERSION = "1.0.2.15";
   }
 
   async function getConnectionManager() {
-    if (paloCfInOpenGrace()) {
-      return null;
-    }
     try {
-      await ensurePaloOfficeReady();
+      await paloCfEnsureRuntimeReady();
     } catch (_boot) {
       return null;
     }
@@ -2873,9 +2924,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
   }
 
   async function getClientContextForServdb(servdb) {
-    if (paloCfInOpenGrace()) {
-      return null;
-    }
     var manager = await getConnectionManager();
     if (!manager) {
       return null;
@@ -2895,9 +2943,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
   }
 
   async function DATAC(servdb, cubeName) {
-    if (paloCfInOpenGrace()) {
-      return "";
-    }
     var cfArgs = arguments;
     var coordinates = paloCollectCoordinateArgs(cfArgs, 2);
     servdb = paloCoerceCfArgSafe(servdb);
@@ -3007,9 +3052,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
    * Evite le plantage quand plusieurs coords sont passees en arguments separes.
    */
   async function DATAP(servdb, cubeName, namePath) {
-    if (paloCfInOpenGrace()) {
-      return "";
-    }
     servdb = paloCoerceCfArgSafe(servdb);
     cubeName = paloCoerceCfArgSafe(cubeName);
     namePath = paloCoerceCfArgSafe(namePath);
@@ -3027,7 +3069,7 @@ var PALO_ASSET_VERSION = "1.0.2.15";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.15+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.16+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -3058,9 +3100,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
       stepNum = Number(step) || 0;
       if (stepNum <= 0) {
         return "STEP0 v=" + PALO_ASSET_VERSION;
-      }
-      if (paloCfInOpenGrace()) {
-        return "STEP" + stepNum + " grace";
       }
 
       var cfArgs = arguments;
@@ -3158,9 +3197,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
   }
 
   async function PALO_SETDATA(value, splash, servdb, cubeName) {
-    if (paloCfInOpenGrace()) {
-      return 0;
-    }
     var coordinates = sanitizePaloCoordinates(Array.prototype.slice.call(arguments, 4));
     if (paloFnTrace()) {
       console.info("[PaloOffice PALO_SETDATA] start", {
@@ -3223,9 +3259,6 @@ var PALO_ASSET_VERSION = "1.0.2.15";
 
   async function ENAME() {
     try {
-      if (paloCfInOpenGrace()) {
-        return "";
-      }
       var args = Array.prototype.slice.call(arguments);
       if (args.length < 3) {
         return "#PALO! ENAME: il faut au moins 3 arguments (servdb; dimension; element). Recu: " + args.length + ".";
@@ -3236,7 +3269,7 @@ var PALO_ASSET_VERSION = "1.0.2.15";
 
       var manager = await getConnectionManager();
       if (!manager) {
-        return "";
+        return "#PALO! ENAME: runtime pas pret (F9 pour recalculer).";
       }
       var servRaw = coerceExcelScalarArg(servdb);
       var dimRaw = coerceExcelScalarArg(dimensionName);
