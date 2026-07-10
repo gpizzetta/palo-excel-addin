@@ -1,7 +1,9 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.6";
+var PALO_ASSET_VERSION = "1.0.2.9";
+  /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
+  var PALO_CF_OPEN_GRACE_MS = 3500;
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -52,6 +54,23 @@ var PALO_ASSET_VERSION = "1.0.2.6";
   function hasPaloOffice() {
     var g = paloGlobalRef();
     return Boolean(g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function");
+  }
+
+  function paloCfInOpenGrace() {
+    var at = gBoot.__PALO_CF_REGISTERED_AT__ || 0;
+    return at > 0 && (Date.now() - at) < PALO_CF_OPEN_GRACE_MS;
+  }
+
+  function paloWarmStorageAfterRegister() {
+    if (!hasPaloOffice()) {
+      return;
+    }
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.paloEnsureStorageReady === "function") {
+      po.paloEnsureStorageReady().catch(function () {
+        // ignore
+      });
+    }
   }
 
   function resolveAfterStorageReady(resolve) {
@@ -145,7 +164,17 @@ var PALO_ASSET_VERSION = "1.0.2.6";
   }
 
   async function getConnectionManager() {
-    await ensurePaloOfficeReady();
+    if (paloCfInOpenGrace()) {
+      return null;
+    }
+    try {
+      await ensurePaloOfficeReady();
+    } catch (_boot) {
+      return null;
+    }
+    if (!hasPaloOffice()) {
+      return null;
+    }
     if (!connectionManager) {
       connectionManager = paloGlobalRef().PaloOffice.createConnectionManager();
     }
@@ -397,15 +426,32 @@ var PALO_ASSET_VERSION = "1.0.2.6";
     return toError(error);
   }
 
+  async function getClientContextForServdb(servdb) {
+    if (paloCfInOpenGrace()) {
+      return null;
+    }
+    var manager = await getConnectionManager();
+    if (!manager) {
+      return null;
+    }
+    return manager.getClientAndContext(servdb);
+  }
+
   async function getElementByName(servdb, dimension, elementName) {
     if (shouldBlockPaloDatacArg(servdb) || shouldBlockPaloDatacArg(dimension) || shouldBlockPaloDatacArg(elementName)) {
       return null;
     }
-    var context = await getConnectionManager().getClientAndContext(servdb);
+    var context = await getClientContextForServdb(servdb);
+    if (!context) {
+      return null;
+    }
     return context.client.elementInfo(context.sid, context.database, dimension, elementName);
   }
 
   async function DATAC(servdb, cubeName) {
+    if (paloCfInOpenGrace()) {
+      return "";
+    }
     var coordinates = sanitizePaloCoordinates(Array.prototype.slice.call(arguments, 2));
     var requestId = nextDatacRequestId();
     var blockedEarly = shouldBlockPaloDatacArg(servdb)
@@ -425,6 +471,9 @@ var PALO_ASSET_VERSION = "1.0.2.6";
 
     try {
       var manager = await getConnectionManager();
+      if (!manager) {
+        return "";
+      }
       var context = await manager.getClientAndContext(servdb);
       var idPath = await manager.buildCellIdPathFromSegments(
         context.connectionName,
@@ -497,8 +546,22 @@ var PALO_ASSET_VERSION = "1.0.2.6";
     }
   }
 
+  /** Wrapper BETA (v1.0.2.9+) : meme signature que DATAC, canal staging uniquement. */
+  async function DATAN(servdb, cubeName) {
+    traceDatac("datan-beta", {
+      version: PALO_ASSET_VERSION,
+      servdb: String(servdb || ""),
+      cubeName: String(cubeName || "")
+    });
+    var args = Array.prototype.slice.call(arguments);
+    return DATAC.apply(null, args);
+  }
+
   async function DATAC_TEST() {
     var manager = await getConnectionManager();
+    if (!manager) {
+      return "#PALO! Runtime Palo pas pret (reouvrez le volet Connexion). | url=(url indisponible)";
+    }
     var active = manager.getActiveConnectionName();
     if (!active) {
       return "#PALO! Aucune connexion active selectionnee. | url=(url indisponible)";
@@ -524,6 +587,9 @@ var PALO_ASSET_VERSION = "1.0.2.6";
   }
 
   async function PALO_SETDATA(value, splash, servdb, cubeName) {
+    if (paloCfInOpenGrace()) {
+      return 0;
+    }
     var coordinates = sanitizePaloCoordinates(Array.prototype.slice.call(arguments, 4));
     if (paloFnTrace()) {
       console.info("[PaloOffice PALO_SETDATA] start", {
@@ -545,6 +611,9 @@ var PALO_ASSET_VERSION = "1.0.2.6";
     }
     try {
       var manager = await getConnectionManager();
+      if (!manager) {
+        return 0;
+      }
       var context = await manager.getClientAndContext(servdb);
       var idPath = await manager.buildCellIdPathFromSegments(
         context.connectionName,
@@ -583,6 +652,9 @@ var PALO_ASSET_VERSION = "1.0.2.6";
 
   async function ENAME() {
     try {
+      if (paloCfInOpenGrace()) {
+        return "";
+      }
       var args = Array.prototype.slice.call(arguments);
       if (args.length < 3) {
         return "#PALO! ENAME: il faut au moins 3 arguments (servdb; dimension; element). Recu: " + args.length + ".";
@@ -592,6 +664,9 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       var index = args[2];
 
       var manager = await getConnectionManager();
+      if (!manager) {
+        return "";
+      }
       var servRaw = coerceExcelScalarArg(servdb);
       var dimRaw = coerceExcelScalarArg(dimensionName);
       var elementRaw = coerceExcelScalarArg(index);
@@ -643,7 +718,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       if (shouldBlockPaloDatacArg(servdb) || shouldBlockPaloDatacArg(dimensionName)) {
         return 0;
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return 0;
+      }
       var items = await context.client.dimensionElements(context.sid, context.database, dimensionName);
       return items.length;
     } catch (error) {
@@ -673,7 +751,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       ) {
         return "";
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return "";
+      }
       var parent = await context.client.elementInfo(context.sid, context.database, dimensionName, elementName);
       var childId = parent.childIds[Math.floor(childIndex) - 1];
       if (!childId) {
@@ -709,7 +790,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       ) {
         return "";
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return "";
+      }
       var child = await context.client.elementInfo(context.sid, context.database, dimensionName, elementName);
       var parentId = child.parentIds[Math.floor(parentIndex) - 1];
       if (!parentId) {
@@ -778,7 +862,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       ) {
         return 0;
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return 0;
+      }
       var parent = await context.client.elementInfo(context.sid, context.database, dimensionName, parentName);
       var child = await context.client.elementInfo(context.sid, context.database, dimensionName, childName);
       var idx = parent.childIds.findIndex(function (id) { return id === child.id; });
@@ -796,7 +883,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       if (shouldBlockPaloDatacArg(servdb)) {
         return emptyPaloMatrixCell();
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return emptyPaloMatrixCell();
+      }
       var dimensions = await context.client.databaseDimensions(context.sid, context.database);
       return asStringMatrix(dimensions.map(function (item) { return item.name; }));
     } catch (error) {
@@ -809,7 +899,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       if (shouldBlockPaloDatacArg(servdb) || shouldBlockPaloDatacArg(cubeName)) {
         return emptyPaloMatrixCell();
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return emptyPaloMatrixCell();
+      }
       var info = await context.client.cubeInfo(context.sid, context.database, cubeName);
       var allDimensions = await context.client.databaseDimensions(context.sid, context.database);
       var names = info.dimensionIds
@@ -829,7 +922,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       if (shouldBlockPaloDatacArg(servdb) || shouldBlockPaloDatacArg(dimensionName)) {
         return emptyPaloMatrixCell();
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return emptyPaloMatrixCell();
+      }
       var cubes = await context.client.dimensionCubes(context.sid, context.database, dimensionName);
       return asStringMatrix(cubes.map(function (item) { return item.name; }));
     } catch (error) {
@@ -842,7 +938,10 @@ var PALO_ASSET_VERSION = "1.0.2.6";
       if (shouldBlockPaloDatacArg(servdb) || shouldBlockPaloDatacArg(dimensionName)) {
         return emptyPaloMatrixCell();
       }
-      var context = await getConnectionManager().getClientAndContext(servdb);
+      var context = await getClientContextForServdb(servdb);
+      if (!context) {
+        return emptyPaloMatrixCell();
+      }
       var elements = await context.client.dimensionElements(context.sid, context.database, dimensionName);
       return asStringMatrix(elements.map(function (item) { return item.name; }));
     } catch (error) {
@@ -860,6 +959,7 @@ var PALO_ASSET_VERSION = "1.0.2.6";
     CustomFunctions.associate("ADD", ADD);
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
+    CustomFunctions.associate("DATAN", DATAN);
     CustomFunctions.associate("DATAC_TEST", DATAC_TEST);
     CustomFunctions.associate("PALO_SETDATA", PALO_SETDATA);
     CustomFunctions.associate("ENAME", ENAME);
@@ -877,6 +977,8 @@ var PALO_ASSET_VERSION = "1.0.2.6";
     CustomFunctions.associate("PALO_DIMENSION_LIST_CUBES", PALO_DIMENSION_LIST_CUBES);
     CustomFunctions.associate("PALO_DIMENSION_LIST_ELEMENTS", PALO_DIMENSION_LIST_ELEMENTS);
     gBoot.__PALO_CF_REGISTERED__ = true;
+    gBoot.__PALO_CF_REGISTERED_AT__ = Date.now();
+    paloWarmStorageAfterRegister();
     return true;
   }
 

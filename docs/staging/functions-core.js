@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.8";
+var PALO_ASSET_VERSION = "1.0.2.9";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -546,6 +546,17 @@ var PALO_ASSET_VERSION = "1.0.2.8";
     }
   }
 
+  /** Wrapper BETA (v1.0.2.9+) : meme signature que DATAC, canal staging uniquement. */
+  async function DATAN(servdb, cubeName) {
+    traceDatac("datan-beta", {
+      version: PALO_ASSET_VERSION,
+      servdb: String(servdb || ""),
+      cubeName: String(cubeName || "")
+    });
+    var args = Array.prototype.slice.call(arguments);
+    return DATAC.apply(null, args);
+  }
+
   async function DATAC_TEST() {
     var manager = await getConnectionManager();
     if (!manager) {
@@ -948,6 +959,7 @@ var PALO_ASSET_VERSION = "1.0.2.8";
     CustomFunctions.associate("ADD", ADD);
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
+    CustomFunctions.associate("DATAN", DATAN);
     CustomFunctions.associate("DATAC_TEST", DATAC_TEST);
     CustomFunctions.associate("PALO_SETDATA", PALO_SETDATA);
     CustomFunctions.associate("ENAME", ENAME);

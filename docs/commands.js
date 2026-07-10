@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.2.6";
+  var PALO_PLUGIN_VERSION = "1.0.2.9";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -547,6 +547,179 @@
     }
   }
 
+  function pad2(n) {
+    return n < 10 ? "0" + n : String(n);
+  }
+
+  function sanitizeFileNamePart(name) {
+    return String(name || "")
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function getDocumentBaseName() {
+    var url = "";
+    try {
+      url = Office.context && Office.context.document ? String(Office.context.document.url || "") : "";
+    } catch (_e) {
+      url = "";
+    }
+    if (!url) {
+      return "Workbook";
+    }
+    try {
+      var decoded = decodeURIComponent(url);
+      var parts = decoded.split(/[/\\]/);
+      var file = parts.length ? parts[parts.length - 1].split("?")[0] : "";
+      if (!file) {
+        return "Workbook";
+      }
+      return sanitizeFileNamePart(file.replace(/\.(xlsx|xlsm|xlsb|xls|csv)$/i, ""));
+    } catch (_e2) {
+      return "Workbook";
+    }
+  }
+
+  function buildSnapshotFileName() {
+    var d = new Date();
+    var dateStr = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
+    return getDocumentBaseName() + "_snapshot_" + dateStr + ".xlsx";
+  }
+
+  function arrayBufferToBase64(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var chunk = 8192;
+    var binary = "";
+    var i;
+    for (i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return window.btoa(binary);
+  }
+
+  function sliceDataToUint8(data) {
+    if (!data) {
+      return new Uint8Array(0);
+    }
+    if (data instanceof ArrayBuffer) {
+      return new Uint8Array(data);
+    }
+    if (typeof ArrayBuffer !== "undefined" && ArrayBuffer.isView(data)) {
+      return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+    }
+    return new Uint8Array(data);
+  }
+
+  function closeDocumentFileAsync(file) {
+    return new Promise(function (resolve, reject) {
+      if (!file || typeof file.closeAsync !== "function") {
+        resolve();
+        return;
+      }
+      file.closeAsync(function (closeResult) {
+        if (closeResult.status === Office.AsyncResultStatus.Succeeded) {
+          resolve();
+          return;
+        }
+        reject(new Error(
+          closeResult.error && closeResult.error.message
+            ? closeResult.error.message
+            : "closeAsync impossible."
+        ));
+      });
+    });
+  }
+
+  /** Export binaire du classeur hote (lecture seule — ne modifie pas le fichier ouvert). */
+  function getWorkbookDocumentBase64() {
+    return new Promise(function (resolve, reject) {
+      if (!Office.context || !Office.context.document || typeof Office.context.document.getFileAsync !== "function") {
+        reject(new Error("Export du classeur non disponible sur ce client."));
+        return;
+      }
+      var fileHandle = null;
+
+      function failWithClose(message) {
+        if (!fileHandle) {
+          reject(new Error(message));
+          return;
+        }
+        closeDocumentFileAsync(fileHandle).then(function () {
+          reject(new Error(message));
+        }).catch(function () {
+          reject(new Error(message));
+        });
+      }
+
+      Office.context.document.getFileAsync(
+        Office.FileType.Compressed,
+        { sliceSize: 65536 },
+        function (result) {
+          if (result.status !== Office.AsyncResultStatus.Succeeded) {
+            reject(new Error(result.error && result.error.message ? result.error.message : "Lecture du fichier impossible."));
+            return;
+          }
+          fileHandle = result.value;
+          var sliceCount = fileHandle.sliceCount || 0;
+          if (sliceCount === 0) {
+            closeDocumentFileAsync(fileHandle).then(function () {
+              resolve("");
+            }).catch(reject);
+            return;
+          }
+
+          var parts = new Array(sliceCount);
+
+          function readSlice(index) {
+            fileHandle.getSliceAsync(index, function (sliceResult) {
+              if (sliceResult.status !== Office.AsyncResultStatus.Succeeded) {
+                failWithClose(
+                  sliceResult.error && sliceResult.error.message
+                    ? sliceResult.error.message
+                    : "Lecture du fragment " + index + " impossible."
+                );
+                return;
+              }
+              parts[index] = sliceDataToUint8(sliceResult.value && sliceResult.value.data);
+              if (index + 1 < sliceCount) {
+                readSlice(index + 1);
+                return;
+              }
+              var total = 0;
+              var j;
+              for (j = 0; j < sliceCount; j += 1) {
+                total += parts[j].length;
+              }
+              var merged = new Uint8Array(total);
+              var offset = 0;
+              for (j = 0; j < sliceCount; j += 1) {
+                merged.set(parts[j], offset);
+                offset += parts[j].length;
+              }
+              closeDocumentFileAsync(fileHandle).then(function () {
+                fileHandle = null;
+                try {
+                  resolve(arrayBufferToBase64(merged.buffer));
+                } catch (encodeErr) {
+                  reject(encodeErr);
+                }
+              }).catch(function () {
+                failWithClose("Fermeture du fichier exporte impossible.");
+              });
+            });
+          }
+
+          readSlice(0);
+        }
+      );
+    });
+  }
+
+  function getWorkbookById(context, workbookId) {
+    return context.application.workbooks.getItem(workbookId);
+  }
+
   function paloConfirmSnapshotDialog() {
     return new Promise(function (resolve) {
       if (!Office.context || !Office.context.ui || typeof Office.context.ui.displayDialogAsync !== "function") {
@@ -592,53 +765,146 @@
     });
   }
 
-  async function convertAllSheetsToValues(context) {
-    var workbook = context.workbook;
-    var sheets = workbook.worksheets;
-    sheets.load("items/name");
-    await context.sync();
-    var copyValuesOnly = Excel.RangeCopyType && Excel.RangeCopyType.values;
-    var i;
-    for (i = 0; i < sheets.items.length; i += 1) {
-      var sheet = sheets.items[i];
-      var used = sheet.getUsedRangeOrNullObject();
-      used.load("values");
+  async function convertAllSheetsToValues(context, workbook) {
+    var app = context.application;
+    var previousCalcMode = null;
+    if (app && Excel.CalculationMode) {
+      app.load("calculationMode");
       await context.sync();
-      if (!used.isNullObject) {
-        if (copyValuesOnly) {
-          used.copyFrom(used, Excel.RangeCopyType.values, false, false);
-        } else {
-          used.values = used.values;
+      previousCalcMode = app.calculationMode;
+      app.calculationMode = Excel.CalculationMode.manual;
+      await context.sync();
+    }
+    try {
+      var sheets = workbook.worksheets;
+      sheets.load("items/name");
+      await context.sync();
+      var copyValuesOnly = Excel.RangeCopyType && Excel.RangeCopyType.values;
+      var i;
+      for (i = 0; i < sheets.items.length; i += 1) {
+        var sheet = sheets.items[i];
+        var used = sheet.getUsedRangeOrNullObject();
+        used.load("values");
+        await context.sync();
+        if (!used.isNullObject) {
+          if (copyValuesOnly) {
+            used.copyFrom(used, Excel.RangeCopyType.values, false, false);
+          } else {
+            used.values = used.values;
+          }
+          await context.sync();
         }
+      }
+    } finally {
+      if (app && previousCalcMode != null && Excel.CalculationMode) {
+        app.calculationMode = previousCalcMode;
         await context.sync();
       }
     }
   }
 
-  async function applySnapshotValuesInCurrentWorkbook() {
-    await Excel.run(async function (context) {
-      if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
-        context.application.suspendScreenUpdatingUntilNextSync();
+  async function removeDefaultBlankSheetAfterInsert(context, workbook) {
+    var sheets = workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    if (sheets.items.length <= 1) {
+      return;
+    }
+    var defaultNames = { Sheet1: true, Feuil1: true, Tabelle1: true };
+    var i;
+    for (i = 0; i < sheets.items.length; i += 1) {
+      if (defaultNames[sheets.items[i].name]) {
+        sheets.items[i].delete();
+        await context.sync();
+        return;
       }
-      await convertAllSheetsToValues(context);
-    });
-    try {
-      await Excel.run(async function (context) {
-        if (
-          typeof context.workbook.application.calculate === "function"
-          && typeof Excel !== "undefined"
-          && Excel.CalculationType
-        ) {
-          context.workbook.application.calculate(Excel.CalculationType.recalculate);
-          await context.sync();
-        }
-      });
-    } catch (_recalc) {
-      // Recalcul optionnel.
     }
   }
 
+  /**
+   * Copie dans la meme instance Excel. context.workbook reste le classeur hote :
+   * toutes les ecritures ciblent snapshotWbId explicitement.
+   */
+  async function createSnapshotWorkbookFromBase64(base64) {
+    var snapshotWbId = null;
+    await Excel.run(async function (context) {
+      if (!context.application || !context.application.workbooks
+        || typeof context.application.workbooks.add !== "function") {
+        throw new Error("Snapshot: creation de classeur indisponible sur ce client.");
+      }
+      var snapshotWb = context.application.workbooks.add();
+      snapshotWb.load("id");
+      await context.sync();
+      snapshotWbId = snapshotWb.id;
+      if (typeof snapshotWb.insertWorksheetsFromBase64 !== "function") {
+        snapshotWb.close(Excel.CloseBehavior.skipSave);
+        await context.sync();
+        throw new Error("Snapshot: ExcelApi insertWorksheetsFromBase64 requis (1.8+).");
+      }
+      snapshotWb.insertWorksheetsFromBase64(base64);
+      await context.sync();
+      if (typeof snapshotWb.activate === "function") {
+        snapshotWb.activate();
+        await context.sync();
+      }
+      await removeDefaultBlankSheetAfterInsert(context, snapshotWb);
+    });
+    if (!snapshotWbId) {
+      throw new Error("Snapshot: id du classeur copie introuvable.");
+    }
+    return snapshotWbId;
+  }
+
+  async function saveSnapshotWorkbookAs(fileName, snapshotWbId) {
+    await Excel.run(async function (context) {
+      var wb = getWorkbookById(context, snapshotWbId);
+      var baseName = String(fileName || "").replace(/\.xlsx$/i, "");
+      wb.name = baseName;
+      await context.sync();
+      try {
+        wb.save(Excel.SaveBehavior.saveAs);
+        await context.sync();
+        return;
+      } catch (_saveAs) {
+        // Repli save / prompt.
+      }
+      try {
+        wb.save(Excel.SaveBehavior.save);
+        await context.sync();
+      } catch (_save) {
+        wb.save(Excel.SaveBehavior.prompt);
+        await context.sync();
+      }
+    });
+  }
+
+  async function saveSnapshotWorkbookPersist(snapshotWbId) {
+    await Excel.run(async function (context) {
+      var wb = getWorkbookById(context, snapshotWbId);
+      try {
+        wb.save(Excel.SaveBehavior.save);
+        await context.sync();
+      } catch (_save) {
+        try {
+          wb.save(Excel.SaveBehavior.prompt);
+          await context.sync();
+        } catch (_prompt) {
+          // Autosave peut deja avoir persisté la copie.
+        }
+      }
+    });
+  }
+
+  async function closeSnapshotWorkbookWithoutPrompt(snapshotWbId) {
+    await Excel.run(async function (context) {
+      getWorkbookById(context, snapshotWbId).close(Excel.CloseBehavior.skipSave);
+      await context.sync();
+    });
+  }
+
   async function paloSnapshotWorkbookValues(event) {
+    var fileName = buildSnapshotFileName();
+    var snapshotWbId = null;
     try {
       if (typeof Excel === "undefined" || typeof Excel.run !== "function") {
         throw new Error("Excel JavaScript API indisponible.");
@@ -651,18 +917,47 @@
         return;
       }
 
-      await paloUserNotify("Suppression des formules en cours (tous les onglets)…", "neutral", "Snapshot");
-      await applySnapshotValuesInCurrentWorkbook();
+      await paloUserNotify("Creation du snapshot en cours…", "neutral", "Snapshot");
+
+      var base64 = await getWorkbookDocumentBase64();
+      snapshotWbId = await createSnapshotWorkbookFromBase64(base64);
+
+      await saveSnapshotWorkbookAs(fileName, snapshotWbId);
+
+      await Excel.run(async function (context) {
+        if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
+          context.application.suspendScreenUpdatingUntilNextSync();
+        }
+        await convertAllSheetsToValues(context, getWorkbookById(context, snapshotWbId));
+      });
+
+      await saveSnapshotWorkbookPersist(snapshotWbId);
+
+      try {
+        await closeSnapshotWorkbookWithoutPrompt(snapshotWbId);
+        snapshotWbId = null;
+      } catch (_close) {
+        // La copie peut rester ouverte.
+      }
 
       await paloUserNotify(
-        "Toutes les formules ont ete remplacees par les valeurs affichees. "
-        + "Aucun enregistrement automatique : utilisez Fichier > Enregistrer si vous souhaitez garder ce fichier.",
+        "Snapshot enregistre : " + fileName + ". "
+        + "Copie en valeurs (sans formules). "
+        + "Le classeur d'origine avec formules n'a pas ete modifie.",
         "ok",
         "Snapshot"
       );
     } catch (err) {
+      if (snapshotWbId) {
+        try {
+          await closeSnapshotWorkbookWithoutPrompt(snapshotWbId);
+        } catch (_cleanup) {
+          // ignore
+        }
+      }
       await paloUserNotify(
-        "Snapshot impossible : " + (err && err.message ? err.message : String(err)),
+        "Snapshot impossible : " + (err && err.message ? err.message : String(err))
+        + " — nom prevu : " + fileName,
         "error",
         "Snapshot"
       );

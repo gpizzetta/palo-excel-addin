@@ -15,6 +15,18 @@
       ]
     },
     {
+      "id": "DATAN",
+      "name": "DATAN",
+      "description": "BETA uniquement — wrapper DATAC (v1.0.2.9+). #NOM? si seule la prod 1.0.2.6 est chargee.",
+      "result": { "type": "any", "dimensionality": "scalar" },
+      "volatile": false,
+      "parameters": [
+        { "name": "servdb", "type": "string" },
+        { "name": "cube", "type": "string" },
+        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+      ]
+    },
+    {
       "id": "DATAC_TEST",
       "name": "DATAC_TEST",
       "description": "Diagnostic DATAC: retourne URL appelee et valeur lue.",
