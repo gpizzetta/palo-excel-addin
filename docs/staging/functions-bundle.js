@@ -776,7 +776,18 @@
     return 45000;
   }
 
+  function paloInCustomFunctionsRuntime() {
+    try {
+      return typeof CustomFunctions !== "undefined";
+    } catch (_cfDetect) {
+      return false;
+    }
+  }
+
   function paloHttpMaxConcurrent() {
+    if (paloInCustomFunctionsRuntime()) {
+      return 2;
+    }
     if (typeof window !== "undefined" && window.PALO_HTTP_MAX_CONCURRENT != null) {
       var n = Number(window.PALO_HTTP_MAX_CONCURRENT);
       if (!Number.isNaN(n) && n >= 1) {
@@ -1257,6 +1268,10 @@
   }
 
   function cellBatchDelayMs() {
+    // Excel Online CF : pas de file setTimeout (plantages) ; lecture unitaire immediate.
+    if (paloInCustomFunctionsRuntime()) {
+      return 0;
+    }
     // Bulk /cell/values actif par defaut (24 ms), avec fallback unitaire et decoupage automatique.
     if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH !== undefined) {
       return window.PALO_DISABLE_BATCH ? 0 : 24;
@@ -1286,6 +1301,29 @@
    * Pour ce seul cas : resolution des noms d'elements en IDs a la volee (pas de cache id), puis parametre API `paths`.
    * Desactiver le batch : PALO_CELL_BATCH_MS = 0 (un appel /cell/value par cellule).
    */
+  PaloConnectionManager.prototype._resolveCellValueByNameSegments = async function _resolveCellValueByNameSegments(
+    connectionName,
+    sid,
+    client,
+    name_database,
+    name_cube,
+    pathSegments,
+    namePath
+  ) {
+    if (Array.isArray(pathSegments) && pathSegments.length > 0) {
+      var builtNamePath = await this.buildCellNamePath(
+        connectionName,
+        sid,
+        client,
+        name_database,
+        name_cube,
+        pathSegments
+      );
+      return client.cellValue(sid, name_database, name_cube, builtNamePath);
+    }
+    return client.cellValue(sid, name_database, name_cube, namePath);
+  };
+
   PaloConnectionManager.prototype.requestCellValueBatched = function requestCellValueBatched(
     connectionName,
     sid,
@@ -1298,19 +1336,15 @@
   ) {
     var manager = this;
     if (cellBatchDelayMs() === 0) {
-      if (Array.isArray(pathSegments) && pathSegments.length > 0) {
-        return this.buildCellIdPathsListFromSegments(
-          connectionName,
-          sid,
-          client,
-          name_database,
-          name_cube,
-          [pathSegments]
-        ).then(function (list) {
-          return client.cellValueByIds(sid, name_database, name_cube, list[0]);
-        });
-      }
-      return client.cellValue(sid, name_database, name_cube, namePath);
+      return this._resolveCellValueByNameSegments(
+        connectionName,
+        sid,
+        client,
+        name_database,
+        name_cube,
+        pathSegments,
+        namePath
+      );
     }
     return new Promise(function (resolve, reject) {
       var key = cellBatchKey(connectionName, sid, name_database, name_cube);
@@ -1372,21 +1406,32 @@
     var name_database = q.name_database;
     var name_cube = q.name_cube;
     try {
-      if (items.length === 1) {
-        var single;
-        if (Array.isArray(items[0].pathSegments) && items[0].pathSegments.length > 0) {
-          var singleIdPathList = await this.buildCellIdPathsListFromSegments(
+      if (paloInCustomFunctionsRuntime()) {
+        var cfIdx;
+        for (cfIdx = 0; cfIdx < items.length; cfIdx += 1) {
+          var cfVal = await this._resolveCellValueByNameSegments(
             q.connectionName,
             sid,
             client,
             name_database,
             name_cube,
-            [items[0].pathSegments]
+            items[cfIdx].pathSegments,
+            items[cfIdx].namePath
           );
-          single = await client.cellValueByIds(sid, name_database, name_cube, singleIdPathList[0]);
-        } else {
-          single = await client.cellValue(sid, name_database, name_cube, items[0].namePath);
+          items[cfIdx].resolve(cfVal);
         }
+        return;
+      }
+      if (items.length === 1) {
+        var single = await this._resolveCellValueByNameSegments(
+          q.connectionName,
+          sid,
+          client,
+          name_database,
+          name_cube,
+          items[0].pathSegments,
+          items[0].namePath
+        );
         items[0].resolve(single);
         if (paloBulkTraceEnabled()) {
           paloTrace("cell-values-single-resolve", {
@@ -2163,7 +2208,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.9";
+var PALO_ASSET_VERSION = "1.0.2.10";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2588,6 +2633,19 @@ var PALO_ASSET_VERSION = "1.0.2.9";
     return toError(error);
   }
 
+  function paloCfDatacReturn(value) {
+    if (value === null || value === undefined) {
+      return "";
+    }
+    if (typeof value === "number") {
+      return Number.isFinite(value) ? value : "";
+    }
+    if (typeof value === "boolean") {
+      return value;
+    }
+    return String(value);
+  }
+
   async function getClientContextForServdb(servdb) {
     if (paloCfInOpenGrace()) {
       return null;
@@ -2637,20 +2695,14 @@ var PALO_ASSET_VERSION = "1.0.2.9";
         return "";
       }
       var context = await manager.getClientAndContext(servdb);
-      var idPath = await manager.buildCellIdPathFromSegments(
-        context.connectionName,
-        context.sid,
-        context.client,
-        context.database,
-        cubeName,
-        coordinates
-      );
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] cell/value params", {
           requestId: requestId,
           name_database: context.database,
           name_cube: cubeName,
-          path: idPath
+          coordinates: coordinates.map(function (coord) {
+            return String(coerceExcelScalarArg(coord));
+          })
         });
       }
       traceDatac("datac-start", {
@@ -2662,7 +2714,7 @@ var PALO_ASSET_VERSION = "1.0.2.9";
         coordinates: coordinates.map(function (coord) {
           return String(coerceExcelScalarArg(coord));
         }),
-        idPath: idPath
+        mode: "name_path"
       });
       var value = await manager.requestCellValueBatched(
         context.connectionName,
@@ -2686,7 +2738,7 @@ var PALO_ASSET_VERSION = "1.0.2.9";
         requestId: requestId,
         value: value
       });
-      return value === null ? "" : value;
+      return paloCfDatacReturn(value);
     } catch (error) {
       var msg = error && error.message ? String(error.message) : String(error);
       if (paloFnTrace() || (typeof window !== "undefined" && window.PALO_LOG_HTTP)) {
@@ -2708,15 +2760,19 @@ var PALO_ASSET_VERSION = "1.0.2.9";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.9+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.10+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
-    traceDatac("datan-beta", {
-      version: PALO_ASSET_VERSION,
-      servdb: String(servdb || ""),
-      cubeName: String(cubeName || "")
-    });
-    var args = Array.prototype.slice.call(arguments);
-    return DATAC.apply(null, args);
+    try {
+      traceDatac("datan-beta", {
+        version: PALO_ASSET_VERSION,
+        servdb: String(servdb || ""),
+        cubeName: String(cubeName || "")
+      });
+      var args = Array.prototype.slice.call(arguments);
+      return await DATAC.apply(null, args);
+    } catch (error) {
+      return toError(error);
+    }
   }
 
   async function DATAC_TEST() {

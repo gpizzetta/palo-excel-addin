@@ -17,7 +17,7 @@
     {
       "id": "DATAN",
       "name": "DATAN",
-      "description": "BETA uniquement — wrapper DATAC (v1.0.2.9+). #NOM? si seule la prod 1.0.2.6 est chargee.",
+      "description": "BETA uniquement — wrapper DATAC (v1.0.2.9+). Lit via name_path (stable Excel Online).",
       "result": { "type": "any", "dimensionality": "scalar" },
       "volatile": false,
       "parameters": [
