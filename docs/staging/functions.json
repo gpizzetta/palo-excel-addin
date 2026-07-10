@@ -29,7 +29,7 @@
     {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
-      "description": "BETA diagnostic DATAC par etapes (0=v, 1=conn, 2=ctx, 3=path, 4=value).",
+      "description": "BETA diagnostic DATAC par etapes (0=v, 1=conn, 2=ctx, 32=count, 3=path, 4=value).",
       "result": { "type": "string", "dimensionality": "scalar" },
       "parameters": [
         { "name": "step", "type": "number" },

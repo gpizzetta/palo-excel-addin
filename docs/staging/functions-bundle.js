@@ -699,6 +699,9 @@
       } catch (_keys) {
         keysStr = "?";
       }
+      if (paloInCustomFunctionsRuntime()) {
+        return "";
+      }
       var segPart = debugFrom && debugFrom.segmentIndex !== undefined
         ? " segmentIndex=" + debugFrom.segmentIndex
         : "";
@@ -778,9 +781,50 @@
 
   function paloInCustomFunctionsRuntime() {
     try {
-      return typeof CustomFunctions !== "undefined";
+      if (typeof CustomFunctions !== "undefined") {
+        return true;
+      }
     } catch (_cfDetect) {
-      return false;
+    }
+    try {
+      if (typeof Office !== "undefined" && typeof importScripts !== "function") {
+        return true;
+      }
+    } catch (_officeDetect) {
+    }
+    return false;
+  }
+
+  /** Construit name_path sans lever d'exception (Excel Online CF : throw = plantage). */
+  function paloBuildNamePathSafe(pathSegments, cubeName) {
+    try {
+      var input = normalizePaloPathSegmentsInput(pathSegments);
+      var normalized = [];
+      var i;
+      for (i = 0; i < input.length; i += 1) {
+        var seg = String(normalizePaloPathSegment(input[i], {
+          segmentIndex: i,
+          pathLength: input.length
+        })).trim();
+        if (!seg) {
+          return { ok: false, path: "", error: "Coordonnee vide (index " + i + ")." };
+        }
+        normalized.push(seg);
+      }
+      if (!normalized.length) {
+        return {
+          ok: false,
+          path: "",
+          error: "Aucune coordonnee pour " + String(cubeName || "cube") + "."
+        };
+      }
+      return { ok: true, path: normalized.join(","), error: "" };
+    } catch (err) {
+      return {
+        ok: false,
+        path: "",
+        error: err && err.message ? err.message : String(err)
+      };
     }
   }
 
@@ -1842,12 +1886,12 @@
         throw new Error("Coordonnee vide (index " + i + ").");
       }
     }
-    /**
-     * Excel Online CF : pas de cube/info ni /database/dimensions (listes enormes).
-     * Le serveur Palo valide name_path ; erreur HTTP -> #PALO! cote formule.
-     */
     if (paloInCustomFunctionsRuntime()) {
-      return normalized.join(",");
+      var safe = paloBuildNamePathSafe(pathSegments, cubeName);
+      if (!safe.ok) {
+        throw new Error(safe.error);
+      }
+      return safe.path;
     }
     var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     if (normalized.length !== dimNames.length) {
@@ -2205,6 +2249,7 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
@@ -2220,7 +2265,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.11";
+var PALO_ASSET_VERSION = "1.0.2.12";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2658,6 +2703,25 @@ var PALO_ASSET_VERSION = "1.0.2.11";
     return String(value);
   }
 
+  function paloIsCfExcelHost() {
+    if (typeof CustomFunctions !== "undefined") {
+      return true;
+    }
+    try {
+      return typeof Office !== "undefined" && typeof importScripts !== "function";
+    } catch (_host) {
+      return false;
+    }
+  }
+
+  function paloBuildNamePathFromCoords(coordinates, cubeName) {
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.paloBuildNamePathSafe === "function") {
+      return po.paloBuildNamePathSafe(coordinates, cubeName);
+    }
+    return { ok: false, path: "", error: "paloBuildNamePathSafe indisponible" };
+  }
+
   async function getClientContextForServdb(servdb) {
     if (paloCfInOpenGrace()) {
       return null;
@@ -2728,21 +2792,35 @@ var PALO_ASSET_VERSION = "1.0.2.11";
         }),
         mode: "name_path"
       });
-      var value = await manager.requestCellValueBatched(
-        context.connectionName,
-        context.sid,
-        context.client,
-        context.database,
-        cubeName,
-        "",
-        coordinates,
-        {
-          requestId: requestId,
-          coordinates: coordinates.map(function (coord) {
-            return String(coerceExcelScalarArg(coord));
-          })
+      var value;
+      if (paloIsCfExcelHost()) {
+        var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
+        if (!pathSafe.ok) {
+          return "#PALO! " + pathSafe.error;
         }
-      );
+        value = await context.client.cellValue(
+          context.sid,
+          context.database,
+          cubeName,
+          pathSafe.path
+        );
+      } else {
+        value = await manager.requestCellValueBatched(
+          context.connectionName,
+          context.sid,
+          context.client,
+          context.database,
+          cubeName,
+          "",
+          coordinates,
+          {
+            requestId: requestId,
+            coordinates: coordinates.map(function (coord) {
+              return String(coerceExcelScalarArg(coord));
+            })
+          }
+        );
+      }
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] fin OK", { requestId: requestId, value: value });
       }
@@ -2772,7 +2850,7 @@ var PALO_ASSET_VERSION = "1.0.2.11";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.11+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.12+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -2816,22 +2894,21 @@ var PALO_ASSET_VERSION = "1.0.2.11";
       if (stepNum === 2) {
         return "STEP2 db=" + context.database + " conn=" + context.connectionName;
       }
-      var namePath = await manager.buildCellNamePath(
-        context.connectionName,
-        context.sid,
-        context.client,
-        context.database,
-        cubeName,
-        coordinates
-      );
+      if (stepNum === 32) {
+        return "STEP32 coords=" + coordinates.length + " args=" + (tail.length - 2);
+      }
+      var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
+      if (!pathSafe.ok) {
+        return "#PALO! STEP3 " + pathSafe.error;
+      }
       if (stepNum === 3) {
-        return "STEP3 path=" + namePath;
+        return "STEP3 path=" + pathSafe.path;
       }
       var value = await context.client.cellValue(
         context.sid,
         context.database,
         cubeName,
-        namePath
+        pathSafe.path
       );
       return "STEP4 value=" + String(paloCfDatacReturn(value));
     } catch (error) {

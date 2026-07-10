@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.11";
+var PALO_ASSET_VERSION = "1.0.2.12";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -439,6 +439,25 @@ var PALO_ASSET_VERSION = "1.0.2.11";
     return String(value);
   }
 
+  function paloIsCfExcelHost() {
+    if (typeof CustomFunctions !== "undefined") {
+      return true;
+    }
+    try {
+      return typeof Office !== "undefined" && typeof importScripts !== "function";
+    } catch (_host) {
+      return false;
+    }
+  }
+
+  function paloBuildNamePathFromCoords(coordinates, cubeName) {
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.paloBuildNamePathSafe === "function") {
+      return po.paloBuildNamePathSafe(coordinates, cubeName);
+    }
+    return { ok: false, path: "", error: "paloBuildNamePathSafe indisponible" };
+  }
+
   async function getClientContextForServdb(servdb) {
     if (paloCfInOpenGrace()) {
       return null;
@@ -509,21 +528,35 @@ var PALO_ASSET_VERSION = "1.0.2.11";
         }),
         mode: "name_path"
       });
-      var value = await manager.requestCellValueBatched(
-        context.connectionName,
-        context.sid,
-        context.client,
-        context.database,
-        cubeName,
-        "",
-        coordinates,
-        {
-          requestId: requestId,
-          coordinates: coordinates.map(function (coord) {
-            return String(coerceExcelScalarArg(coord));
-          })
+      var value;
+      if (paloIsCfExcelHost()) {
+        var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
+        if (!pathSafe.ok) {
+          return "#PALO! " + pathSafe.error;
         }
-      );
+        value = await context.client.cellValue(
+          context.sid,
+          context.database,
+          cubeName,
+          pathSafe.path
+        );
+      } else {
+        value = await manager.requestCellValueBatched(
+          context.connectionName,
+          context.sid,
+          context.client,
+          context.database,
+          cubeName,
+          "",
+          coordinates,
+          {
+            requestId: requestId,
+            coordinates: coordinates.map(function (coord) {
+              return String(coerceExcelScalarArg(coord));
+            })
+          }
+        );
+      }
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] fin OK", { requestId: requestId, value: value });
       }
@@ -553,7 +586,7 @@ var PALO_ASSET_VERSION = "1.0.2.11";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.11+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.12+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -597,22 +630,21 @@ var PALO_ASSET_VERSION = "1.0.2.11";
       if (stepNum === 2) {
         return "STEP2 db=" + context.database + " conn=" + context.connectionName;
       }
-      var namePath = await manager.buildCellNamePath(
-        context.connectionName,
-        context.sid,
-        context.client,
-        context.database,
-        cubeName,
-        coordinates
-      );
+      if (stepNum === 32) {
+        return "STEP32 coords=" + coordinates.length + " args=" + (tail.length - 2);
+      }
+      var pathSafe = paloBuildNamePathFromCoords(coordinates, cubeName);
+      if (!pathSafe.ok) {
+        return "#PALO! STEP3 " + pathSafe.error;
+      }
       if (stepNum === 3) {
-        return "STEP3 path=" + namePath;
+        return "STEP3 path=" + pathSafe.path;
       }
       var value = await context.client.cellValue(
         context.sid,
         context.database,
         cubeName,
-        namePath
+        pathSafe.path
       );
       return "STEP4 value=" + String(paloCfDatacReturn(value));
     } catch (error) {

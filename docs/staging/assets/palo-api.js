@@ -599,6 +599,9 @@
       } catch (_keys) {
         keysStr = "?";
       }
+      if (paloInCustomFunctionsRuntime()) {
+        return "";
+      }
       var segPart = debugFrom && debugFrom.segmentIndex !== undefined
         ? " segmentIndex=" + debugFrom.segmentIndex
         : "";
@@ -678,9 +681,50 @@
 
   function paloInCustomFunctionsRuntime() {
     try {
-      return typeof CustomFunctions !== "undefined";
+      if (typeof CustomFunctions !== "undefined") {
+        return true;
+      }
     } catch (_cfDetect) {
-      return false;
+    }
+    try {
+      if (typeof Office !== "undefined" && typeof importScripts !== "function") {
+        return true;
+      }
+    } catch (_officeDetect) {
+    }
+    return false;
+  }
+
+  /** Construit name_path sans lever d'exception (Excel Online CF : throw = plantage). */
+  function paloBuildNamePathSafe(pathSegments, cubeName) {
+    try {
+      var input = normalizePaloPathSegmentsInput(pathSegments);
+      var normalized = [];
+      var i;
+      for (i = 0; i < input.length; i += 1) {
+        var seg = String(normalizePaloPathSegment(input[i], {
+          segmentIndex: i,
+          pathLength: input.length
+        })).trim();
+        if (!seg) {
+          return { ok: false, path: "", error: "Coordonnee vide (index " + i + ")." };
+        }
+        normalized.push(seg);
+      }
+      if (!normalized.length) {
+        return {
+          ok: false,
+          path: "",
+          error: "Aucune coordonnee pour " + String(cubeName || "cube") + "."
+        };
+      }
+      return { ok: true, path: normalized.join(","), error: "" };
+    } catch (err) {
+      return {
+        ok: false,
+        path: "",
+        error: err && err.message ? err.message : String(err)
+      };
     }
   }
 
@@ -1742,12 +1786,12 @@
         throw new Error("Coordonnee vide (index " + i + ").");
       }
     }
-    /**
-     * Excel Online CF : pas de cube/info ni /database/dimensions (listes enormes).
-     * Le serveur Palo valide name_path ; erreur HTTP -> #PALO! cote formule.
-     */
     if (paloInCustomFunctionsRuntime()) {
-      return normalized.join(",");
+      var safe = paloBuildNamePathSafe(pathSegments, cubeName);
+      if (!safe.ok) {
+        throw new Error(safe.error);
+      }
+      return safe.path;
     }
     var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     if (normalized.length !== dimNames.length) {
@@ -2105,6 +2149,7 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
