@@ -27,9 +27,21 @@
       ]
     },
     {
+      "id": "DATAP",
+      "name": "DATAP",
+      "description": "BETA Excel Online — lit une cellule via name_path (1 seule chaine, coords separees par des virgules).",
+      "result": { "type": "any", "dimensionality": "scalar" },
+      "volatile": false,
+      "parameters": [
+        { "name": "servdb", "type": "string" },
+        { "name": "cube", "type": "string" },
+        { "name": "name_path", "type": "string" }
+      ]
+    },
+    {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
-      "description": "BETA diagnostic: 31=path, 33=url /cell/value, 3=lecture directe (sans cache bulk).",
+      "description": "BETA diagnostic: 31=path, 33=url, 3=value. Preferer 1 arg name_path (virgules).",
       "result": { "type": "string", "dimensionality": "scalar" },
       "parameters": [
         { "name": "step", "type": "number" },
