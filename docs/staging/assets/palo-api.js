@@ -1017,7 +1017,7 @@
     if (type === 2) {
       return value;
     }
-    return null;
+    return "";
   }
 
   PaloApiClient.prototype.cellValue = async function cellValue(sid, database, cube, path) {
@@ -1728,13 +1728,28 @@
     cubeName,
     pathSegments
   ) {
-    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     var input = normalizePaloPathSegmentsInput(pathSegments);
     var normalized = [];
     var i;
     for (i = 0; i < input.length; i += 1) {
       normalized.push(String(normalizePaloPathSegment(input[i], { segmentIndex: i, pathLength: input.length })).trim());
     }
+    if (!normalized.length) {
+      throw new Error("Aucune coordonnee fournie pour le cube " + cubeName + ".");
+    }
+    for (i = 0; i < normalized.length; i += 1) {
+      if (!normalized[i]) {
+        throw new Error("Coordonnee vide (index " + i + ").");
+      }
+    }
+    /**
+     * Excel Online CF : pas de cube/info ni /database/dimensions (listes enormes).
+     * Le serveur Palo valide name_path ; erreur HTTP -> #PALO! cote formule.
+     */
+    if (paloInCustomFunctionsRuntime()) {
+      return normalized.join(",");
+    }
+    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     if (normalized.length !== dimNames.length) {
       throw new Error(
         "Nombre de coordonnees (" + normalized.length + ") different du nombre de dimensions du cube (" + dimNames.length + ")."
@@ -1742,9 +1757,6 @@
     }
     for (i = 0; i < normalized.length; i += 1) {
       var seg = String(normalized[i]).trim();
-      if (!seg) {
-        throw new Error("Coordonnee vide pour la dimension " + dimNames[i]);
-      }
       paloTrace("cell-name-path-segment", {
         connectionName: connectionName,
         database: database,

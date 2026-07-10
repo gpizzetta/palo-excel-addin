@@ -27,6 +27,18 @@
       ]
     },
     {
+      "id": "DATAN_STEP",
+      "name": "DATAN_STEP",
+      "description": "BETA diagnostic DATAC par etapes (0=v, 1=conn, 2=ctx, 3=path, 4=value).",
+      "result": { "type": "string", "dimensionality": "scalar" },
+      "parameters": [
+        { "name": "step", "type": "number" },
+        { "name": "servdb", "type": "string", "optional": true },
+        { "name": "cube", "type": "string", "optional": true },
+        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+      ]
+    },
+    {
       "id": "DATAC_TEST",
       "name": "DATAC_TEST",
       "description": "Diagnostic DATAC: retourne URL appelee et valeur lue.",

@@ -1117,7 +1117,7 @@
     if (type === 2) {
       return value;
     }
-    return null;
+    return "";
   }
 
   PaloApiClient.prototype.cellValue = async function cellValue(sid, database, cube, path) {
@@ -1828,13 +1828,28 @@
     cubeName,
     pathSegments
   ) {
-    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     var input = normalizePaloPathSegmentsInput(pathSegments);
     var normalized = [];
     var i;
     for (i = 0; i < input.length; i += 1) {
       normalized.push(String(normalizePaloPathSegment(input[i], { segmentIndex: i, pathLength: input.length })).trim());
     }
+    if (!normalized.length) {
+      throw new Error("Aucune coordonnee fournie pour le cube " + cubeName + ".");
+    }
+    for (i = 0; i < normalized.length; i += 1) {
+      if (!normalized[i]) {
+        throw new Error("Coordonnee vide (index " + i + ").");
+      }
+    }
+    /**
+     * Excel Online CF : pas de cube/info ni /database/dimensions (listes enormes).
+     * Le serveur Palo valide name_path ; erreur HTTP -> #PALO! cote formule.
+     */
+    if (paloInCustomFunctionsRuntime()) {
+      return normalized.join(",");
+    }
+    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     if (normalized.length !== dimNames.length) {
       throw new Error(
         "Nombre de coordonnees (" + normalized.length + ") different du nombre de dimensions du cube (" + dimNames.length + ")."
@@ -1842,9 +1857,6 @@
     }
     for (i = 0; i < normalized.length; i += 1) {
       var seg = String(normalized[i]).trim();
-      if (!seg) {
-        throw new Error("Coordonnee vide pour la dimension " + dimNames[i]);
-      }
       paloTrace("cell-name-path-segment", {
         connectionName: connectionName,
         database: database,
@@ -2208,7 +2220,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.10";
+var PALO_ASSET_VERSION = "1.0.2.11";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2760,7 +2772,7 @@ var PALO_ASSET_VERSION = "1.0.2.10";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.10+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.11+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -2772,6 +2784,59 @@ var PALO_ASSET_VERSION = "1.0.2.10";
       return await DATAC.apply(null, args);
     } catch (error) {
       return toError(error);
+    }
+  }
+
+  /**
+   * Diagnostic BETA par etapes (evite le plantage Excel Online).
+   * STEP 0=v seul | 1=connexion | 2=contexte | 3=name_path | 4=cell/value
+   */
+  async function DATAN_STEP(step) {
+    var stepNum = 0;
+    try {
+      stepNum = Number(step) || 0;
+      if (stepNum <= 0) {
+        return "STEP0 v=" + PALO_ASSET_VERSION;
+      }
+      if (paloCfInOpenGrace()) {
+        return "STEP" + stepNum + " grace";
+      }
+      var tail = Array.prototype.slice.call(arguments, 1);
+      var servdb = tail[0];
+      var cubeName = tail[1];
+      var coordinates = sanitizePaloCoordinates(tail.slice(2));
+      var manager = await getConnectionManager();
+      if (!manager) {
+        return "STEP" + stepNum + " no manager";
+      }
+      if (stepNum === 1) {
+        return "STEP1 conn=" + (manager.getActiveConnectionName() || "(none)");
+      }
+      var context = await manager.getClientAndContext(servdb);
+      if (stepNum === 2) {
+        return "STEP2 db=" + context.database + " conn=" + context.connectionName;
+      }
+      var namePath = await manager.buildCellNamePath(
+        context.connectionName,
+        context.sid,
+        context.client,
+        context.database,
+        cubeName,
+        coordinates
+      );
+      if (stepNum === 3) {
+        return "STEP3 path=" + namePath;
+      }
+      var value = await context.client.cellValue(
+        context.sid,
+        context.database,
+        cubeName,
+        namePath
+      );
+      return "STEP4 value=" + String(paloCfDatacReturn(value));
+    } catch (error) {
+      var msg = error && error.message ? error.message : String(error);
+      return "#PALO! STEP" + stepNum + " " + msg;
     }
   }
 
@@ -3178,6 +3243,7 @@ var PALO_ASSET_VERSION = "1.0.2.10";
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
     CustomFunctions.associate("DATAN", DATAN);
+    CustomFunctions.associate("DATAN_STEP", DATAN_STEP);
     CustomFunctions.associate("DATAC_TEST", DATAC_TEST);
     CustomFunctions.associate("PALO_SETDATA", PALO_SETDATA);
     CustomFunctions.associate("ENAME", ENAME);
