@@ -6,7 +6,7 @@
            xsi:type="TaskPaneApp">
   <Id>b8c4e29a-3f61-4a5e-9d2b-7a1e0c4f8b32</Id>
   <Version>1.0.2.8</Version>
-  <ProviderName>Palo OLAP Add-in</ProviderName>
+  <ProviderName>Palo OLAP Add-in (BETA)</ProviderName>
   <DefaultLocale>fr-CH</DefaultLocale>
   <DisplayName DefaultValue="Palo OLAP Add-in (BETA)"/>
   <Description DefaultValue="Fonctions Palo pour Excel Microsoft 365."/>
@@ -163,14 +163,14 @@
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in (BETA)"/>
         <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
-        <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
+        <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo BETA"/>
         <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
         <bt:String id="Palo.Button.Action.Label" DefaultValue="Action"/>
         <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
       </bt:ShortStrings>
       <bt:LongStrings>
         <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
-        <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
+        <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo (canal BETA)."/>
         <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element). Raccourci : Ctrl+Alt+A (cellule selectionnee)."/>
         <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Cree une copie *_snapshot_*.xlsx (formules puis valeurs). Le classeur ouvert n'est pas modifie."/>
       </bt:LongStrings>
@@ -319,14 +319,14 @@
         <bt:ShortStrings>
           <bt:String id="GetStarted.Title" DefaultValue="Palo OLAP Add-in (BETA)"/>
           <bt:String id="Functions.Namespace" DefaultValue="PALO"/>
-          <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo"/>
+          <bt:String id="Palo.Group.Actions.Label" DefaultValue="Palo BETA"/>
           <bt:String id="Palo.Button.OpenTaskpane.Label" DefaultValue="Connexion"/>
           <bt:String id="Palo.Button.Action.Label" DefaultValue="Action"/>
           <bt:String id="Palo.Button.Snapshot.Label" DefaultValue="Snapshot"/>
         </bt:ShortStrings>
         <bt:LongStrings>
           <bt:String id="GetStarted.Description" DefaultValue="Configure la connexion Palo et utilise PALO.DATAC, PALO.ENAME et les autres fonctions PALO.* dans Excel."/>
-          <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo."/>
+          <bt:String id="Palo.Button.OpenTaskpane.Tooltip" DefaultValue="Ouvre la gestion des connexions Palo (canal BETA)."/>
           <bt:String id="Palo.Button.Action.Tooltip" DefaultValue="Sur PALO.ENAME: choisir le 3e argument (element). Raccourci : Ctrl+Alt+A (cellule selectionnee)."/>
           <bt:String id="Palo.Button.Snapshot.Tooltip" DefaultValue="Cree une copie *_snapshot_*.xlsx (formules puis valeurs). Le classeur ouvert n'est pas modifie."/>
         </bt:LongStrings>

@@ -46,7 +46,7 @@
         notifyUrl.searchParams.set("m", text);
         notifyHref = notifyUrl.href;
       } catch (_urlErr) {
-        notifyHref = "https://gpizzetta.github.io/palo-excel-addin/palo-action-notify.html?t="
+        notifyHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-action-notify.html?t="
           + encodeURIComponent(heading) + "&m=" + encodeURIComponent(text);
       }
       Office.context.ui.displayDialogAsync(
@@ -730,7 +730,7 @@
       try {
         confirmHref = new URL("palo-snapshot-confirm.html", window.location.href).href;
       } catch (_urlErr) {
-        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/palo-snapshot-confirm.html";
+        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-snapshot-confirm.html";
       }
       Office.context.ui.displayDialogAsync(
         confirmHref,

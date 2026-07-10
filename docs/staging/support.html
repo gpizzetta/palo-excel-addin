@@ -19,10 +19,12 @@
   <p>La commande est declaree dans le manifeste (<code>ExtensionPoint ContextMenu</code> + <code>OfficeMenu id="ContextMenuCell"</code>) et executee par <code>commands.js</code> (<code>Office.actions.associate("paloRibbonAction", …)</code>), comme le bouton du ruban.</p>
   <p><strong>Excel bureau (Windows / Mac)</strong> : Microsoft utilise un menu contextuel different pour les cellules situees <strong>dans un Tableau Excel</strong> (insertion &gt; Tableau). Dans ce cas, les entrees des complements peuvent <strong>ne pas apparaitre</strong> — limitation plateforme (<a href="https://github.com/OfficeDev/office-js/issues/6612">office-js#6612</a>). Essayez un clic droit sur une cellule <strong>hors</strong> tableau, ou utilisez le bouton <strong>Palo action</strong> dans l’onglet Accueil.</p>
   <p><strong>Apres modification du manifeste</strong> : recharger le complement (catalogue d’administration ou sideload) et vider le cache si besoin.</p>
+  <h2>Canal BETA (staging)</h2>
+  <p>Tests sans toucher la production : <a href="https://gpizzetta.github.io/palo-excel-addin/staging/staging/manifest.xml">manifest staging</a> — complement <strong>Palo OLAP Add-in (BETA)</strong> (Id Office different, peut coexister avec la prod).</p>
   <h2>Erreur « Sorry, something went wrong » a l'ouverture</h2>
   <p>Souvent lie au <strong>recalcul massif</strong> des formules <code>PALO.*</code> pendant le chargement du complement. Depuis la 1.0.2.8 : delai de grace a l'ouverture, pas de double chargement <code>palo-api.js</code>, page unique shared runtime.</p>
   <ol>
-    <li>Retirer le complement Palo, redemarrer Excel, reinstaller le manifeste a jour (<a href="https://gpizzetta.github.io/palo-excel-addin/manifest.xml">manifest.xml</a>).</li>
+    <li>Retirer le complement Palo, redemarrer Excel, reinstaller le manifeste a jour (<a href="https://gpizzetta.github.io/palo-excel-addin/staging/manifest.xml">manifest.xml</a>).</li>
     <li>Ouvrir le fichier <strong>sans</strong> complement (ou desactiver temporairement les complements) pour recuperer le contenu.</li>
     <li>Après ouverture : attendre quelques secondes puis <strong>Ctrl+Alt+F9</strong> pour recalculer les formules Palo.</li>
     <li>Ouvrir le volet <strong>Connexion</strong> et selectionner une connexion active avant le recalcul.</li>
@@ -30,13 +32,13 @@
   <h2>Erreur « Sorry, something went wrong » (autres cas)</h2>
   <p>Message generique Excel (souvent au chargement du complement ou d'un classeur avec formules <code>PALO.*</code>). Pistes :</p>
   <ol>
-    <li>Retirer le complement Palo, redemarrer Excel, reinstaller le manifeste a jour (<a href="https://gpizzetta.github.io/palo-excel-addin/manifest.xml">manifest.xml</a>).</li>
+    <li>Retirer le complement Palo, redemarrer Excel, reinstaller le manifeste a jour (<a href="https://gpizzetta.github.io/palo-excel-addin/staging/manifest.xml">manifest.xml</a>).</li>
     <li>Ouvrir le fichier <strong>sans</strong> complement (ou desactiver temporairement les complements) pour recuperer le contenu.</li>
     <li>Utiliser <strong>Snapshot</strong> uniquement sur une copie : la version 1.0.2.7+ cree un fichier <code>*_snapshot_*.xlsx</code> separe sans modifier le classeur ouvert.</li>
   </ol>
   <p>Le volet affiche la version des <strong>fichiers charges par Excel</strong>, pas celle de GitHub. <code>Ctrl+F5</code> dans un navigateur ne vide pas le cache du WebView Excel.</p>
   <ol>
-    <li>Verifier en ligne : <a href="https://gpizzetta.github.io/palo-excel-addin/version.json">version.json</a> (version deployee) et <a href="https://gpizzetta.github.io/palo-excel-addin/manifest.xml">manifest.xml</a> (doit contenir <code>Palo.Group.Snapshot</code>).</li>
+    <li>Verifier en ligne : <a href="https://gpizzetta.github.io/palo-excel-addin/staging/version.json">version.json</a> (version deployee) et <a href="https://gpizzetta.github.io/palo-excel-addin/staging/manifest.xml">manifest.xml</a> (doit contenir <code>Palo.Group.Snapshot</code>).</li>
     <li>Dans le <strong>Centre d’administration Microsoft 365</strong> : deployer le complement via l’<strong>URL du manifeste</strong> (pas seulement un fichier XML telecharge une fois). Mettre a jour / republier apres chaque release.</li>
     <li>Sur le poste : retirer le complement Palo, redemarrer Excel, le reinstaller.</li>
     <li>Ouvrir le volet Connexion : si le pied de page indique une version plus recente que le script embarque, le complement est encore en cache.</li>
