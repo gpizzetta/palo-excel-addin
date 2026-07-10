@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.17";
+var PALO_ASSET_VERSION = "1.0.2.18";
   /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
   var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -320,11 +320,52 @@ var PALO_ASSET_VERSION = "1.0.2.17";
     if (Object.prototype.hasOwnProperty.call(value, "_isInValuePreview")) {
       return true;
     }
+    if (Object.prototype.hasOwnProperty.call(value, "onCanceled")
+      && Object.prototype.hasOwnProperty.call(value, "setResult")) {
+      return true;
+    }
+    if (Object.prototype.hasOwnProperty.call(value, "parameterAddresses")) {
+      return true;
+    }
     if (Object.prototype.hasOwnProperty.call(value, "setResult")
       && Object.prototype.hasOwnProperty.call(value, "setError")) {
       return true;
     }
     return false;
+  }
+
+  /** Compte args utilisateur vs objets internes Excel (invocation, preview…). */
+  function paloAnalyzeCfArgs(cfArgs, userStartIndex) {
+    var start = userStartIndex === undefined ? 0 : userStartIndex;
+    var rawLen = cfArgs.length;
+    var metaIdx = [];
+    var userIdx = [];
+    var i;
+    for (i = 0; i < rawLen; i += 1) {
+      try {
+        if (isOfficeCustomFunctionMeta(cfArgs[i])) {
+          metaIdx.push(i);
+        } else {
+          userIdx.push(i);
+        }
+      } catch (_scan) {
+        metaIdx.push(i);
+      }
+    }
+    var userFromStart = 0;
+    for (i = 0; i < userIdx.length; i += 1) {
+      if (userIdx[i] >= start) {
+        userFromStart += 1;
+      }
+    }
+    return {
+      rawLen: rawLen,
+      metaCount: metaIdx.length,
+      userCount: userIdx.length,
+      userFromStart: userFromStart,
+      metaIdx: metaIdx,
+      userIdx: userIdx
+    };
   }
 
   function sanitizePaloCoordinates(values) {
@@ -833,7 +874,7 @@ var PALO_ASSET_VERSION = "1.0.2.17";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.17+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.18+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -869,7 +910,19 @@ var PALO_ASSET_VERSION = "1.0.2.17";
       var cfArgs = arguments;
 
       if (stepNum === 32) {
-        return "STEP32 nargs=" + cfArgs.length + " trailing=" + Math.max(0, cfArgs.length - 3);
+        var an32 = paloAnalyzeCfArgs(cfArgs, 0);
+        var anTrail = paloAnalyzeCfArgs(cfArgs, 3);
+        var out32 = [
+          "STEP32",
+          "raw=" + an32.rawLen,
+          "user=" + an32.userCount,
+          "meta=" + an32.metaCount,
+          "userFrom3=" + anTrail.userFromStart
+        ];
+        if (an32.metaIdx.length) {
+          out32.push("metaAt=" + an32.metaIdx.join(","));
+        }
+        return out32.join(" ");
       }
 
       if (stepNum === 1 || stepNum === 2) {

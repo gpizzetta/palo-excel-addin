@@ -41,7 +41,7 @@
     {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
-      "description": "BETA diagnostic: 34-39=coords separees (1 a 6), 40=join multi, 41=value multi.",
+      "description": "BETA diagnostic: 32=raw/user/meta args, 34-39=coords separees, 40-41=multi.",
       "result": { "type": "string", "dimensionality": "scalar" },
       "parameters": [
         { "name": "step", "type": "number" },
