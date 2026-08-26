@@ -30,11 +30,16 @@
       }
       document.getElementById("msg").textContent = body || "";
       document.getElementById("ok").onclick = function () {
-        if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
-          Office.context.ui.messageParent("close", { targetOrigin: "*" });
-          return;
+        try {
+          if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
+            Office.context.ui.messageParent("close", { targetOrigin: "*" });
+          }
+        } catch (_msg) {
         }
-        window.close();
+        try {
+          window.close();
+        } catch (_wc) {
+        }
       };
     });
   </script>

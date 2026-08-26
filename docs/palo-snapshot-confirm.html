@@ -25,13 +25,13 @@
 <body>
   <h1>Snapshot valeurs</h1>
   <div id="msg-copy">
-    <p>Le complement cree une <strong>copie</strong> du classeur (<code>*_snapshot_*.xlsx</code>), enregistree sous un nouveau nom, puis supprime les formules <strong>uniquement dans cette copie</strong>.</p>
-    <p>Le classeur d'origine (celui que vous avez ouvert) <strong>ne sera pas modifie</strong>, meme si l'enregistrement automatique est active.</p>
+    <p>Le complement cree une <strong>copie</strong> dont le nom contient <code>snapshot</code> (<code>*_snapshot_*.xlsx</code>), puis remplace les formules <strong>uniquement dans cette copie</strong>.</p>
+    <p>Le classeur d'origine <strong>ne sera pas modifie</strong>.</p>
   </div>
   <div id="msg-inplace" hidden>
     <p class="warn"><strong>Excel Online / client limite :</strong> creation automatique d'une copie impossible.</p>
-    <p>Le Snapshot va remplacer <strong>toutes les formules du classeur ouvert</strong> par les valeurs affichees.</p>
-    <p>Si vous devez garder les formules Palo : annulez, faites d'abord <strong>Fichier &gt; Enregistrer une copie</strong>, puis relancez Snapshot sur cette copie.</p>
+    <p>Le Snapshot remplace les formules <strong>uniquement</strong> si le nom du fichier contient <code>snapshot</code>.</p>
+    <p>Sinon : annulez, faites <strong>Fichier &gt; Enregistrer une copie</strong> (ex. <code>Budget_snapshot.xlsx</code>), ouvrez cette copie, puis relancez Snapshot.</p>
   </div>
   <div class="actions">
     <button id="no" type="button">No / Non</button>

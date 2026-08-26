@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.2.22";
+  var PALO_PLUGIN_VERSION = "1.0.2.23";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -52,8 +52,31 @@
       Office.context.ui.displayDialogAsync(
         notifyHref,
         { height: 35, width: 40, displayInIframe: true },
-        function () {
-          resolve();
+        function (asyncResult) {
+          if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+            resolve();
+            return;
+          }
+          var dlg = asyncResult.value;
+          var settled = false;
+          function finish() {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            try {
+              dlg.close();
+            } catch (_close) {
+              // ignore
+            }
+            resolve();
+          }
+          dlg.addEventHandler(Office.EventType.DialogMessageReceived, function () {
+            finish();
+          });
+          dlg.addEventHandler(Office.EventType.DialogEventReceived, function () {
+            finish();
+          });
         }
       );
     });
@@ -587,6 +610,36 @@
     return getDocumentBaseName() + "_snapshot_" + dateStr + ".xlsx";
   }
 
+  /** Conversion formules→valeurs autorisee seulement si le nom contient "snapshot" (casse ignoree). */
+  function nameAllowsSnapshotConvert(name) {
+    return String(name || "").toLowerCase().indexOf("snapshot") !== -1;
+  }
+
+  async function getWorkbookDisplayName(workbookId) {
+    var name = "";
+    await Excel.run(async function (context) {
+      var wb = workbookId ? getWorkbookById(context, workbookId) : context.workbook;
+      wb.load("name");
+      await context.sync();
+      name = String(wb.name || "");
+    });
+    if (name) {
+      return name;
+    }
+    return getDocumentBaseName();
+  }
+
+  function assertSnapshotNameOrThrow(name) {
+    if (nameAllowsSnapshotConvert(name)) {
+      return;
+    }
+    throw new Error(
+      "Conversion refusee : le nom du fichier doit contenir \"snapshot\" "
+      + "(ex. MonFichier_snapshot.xlsx). Nom actuel : \"" + String(name || "") + "\". "
+      + "Sur Excel Online : Fichier > Enregistrer une copie avec \"snapshot\" dans le nom, puis relancer Snapshot."
+    );
+  }
+
   function arrayBufferToBase64(buffer) {
     var bytes = new Uint8Array(buffer);
     var chunk = 8192;
@@ -958,13 +1011,13 @@
       }
 
       if (!canCopy) {
-        await paloUserNotify("Conversion en valeurs du classeur ouvert (Excel Online)…", "neutral", "Snapshot");
+        var openName = await getWorkbookDisplayName(null);
+        assertSnapshotNameOrThrow(openName);
+        await paloUserNotify("Conversion en valeurs du classeur ouvert…", "neutral", "Snapshot");
         await applySnapshotValuesInPlace();
         await paloUserNotify(
-          "Formules remplacees par les valeurs affichees dans ce classeur. "
-          + "Sur Excel Online, aucune copie automatique n'est possible — "
-          + "utilisez Fichier > Enregistrer une copie avant Snapshot si vous devez garder les formules. "
-          + "Sur Excel Desktop, Snapshot cree un fichier " + fileName + " separe.",
+          "Formules remplacees par les valeurs affichees dans \"" + openName + "\". "
+          + "Le nom contenait bien \"snapshot\".",
           "ok",
           "Snapshot"
         );
@@ -978,6 +1031,14 @@
       snapshotWbId = await createSnapshotWorkbookFromBase64(base64);
 
       await saveSnapshotWorkbookAs(fileName, snapshotWbId);
+
+      var copyName = await getWorkbookDisplayName(snapshotWbId);
+      if (!nameAllowsSnapshotConvert(copyName) && !nameAllowsSnapshotConvert(fileName)) {
+        throw new Error(
+          "La copie n'a pas \"snapshot\" dans le nom (\"" + copyName + "\" / \"" + fileName + "\")."
+        );
+      }
+      assertSnapshotNameOrThrow(nameAllowsSnapshotConvert(copyName) ? copyName : fileName);
 
       await Excel.run(async function (context) {
         if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
