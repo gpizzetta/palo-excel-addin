@@ -10,7 +10,7 @@ Dernière mise à jour : 2026-05-20.
 - **Repo** : `palo-excel-addin` — complément Excel M365, assets dans `docs/`
 - **Déploiement** : GitHub Pages → `https://gpizzetta.github.io/palo-excel-addin/`
 - **Manifeste** : `docs/manifest.xml` (déploiement admin M365 + sideload)
-- **Version actuelle** : **1.0.2.6** (vérifier `docs/version.json`)
+- **Version actuelle** : **1.0.2.18** (prod = staging promu le 2026-08-26 ; vérifier `docs/version.json`)
 - **Architecture** :
   - Shared runtime : `docs/shared-runtime.html`
   - Formules : `docs/functions-core.js` → `./build-bundle.sh` génère `docs/functions.js`
