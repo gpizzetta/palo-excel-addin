@@ -2265,7 +2265,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.20";
+var PALO_ASSET_VERSION = "1.0.2.21";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2880,6 +2880,11 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       } catch (_skip) {
       }
     }
+    // Excel Online passe coord1..coord20 optionnels : les slots non fournis arrivent vides.
+    // Les retirer en queue, sinon shouldBlockPaloDatacArg / join renvoient "" ou une erreur.
+    while (out.length && isBlankPaloArg(out[out.length - 1])) {
+      out.pop();
+    }
     return out;
   }
 
@@ -2933,17 +2938,13 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
    * Si un seul argument apres le cube, il est utilise tel quel comme name_path (virgules incluses).
    */
   function paloResolveNamePathFromCfArgs(cfArgs, startIndex) {
-    var trailing = Math.max(0, cfArgs.length - startIndex);
-    if (trailing === 0) {
+    var coordinates = paloCollectCoordinateArgs(cfArgs, startIndex);
+    if (!coordinates.length) {
       return { ok: false, path: "", error: "Aucune coordonnee (name_path)." };
     }
-    if (trailing === 1) {
+    if (coordinates.length === 1) {
       try {
-        var raw = cfArgs[startIndex];
-        if (isOfficeCustomFunctionMeta(raw)) {
-          return { ok: false, path: "", error: "Argument coord invalide." };
-        }
-        var scalar = paloCoerceCfArgSafe(raw);
+        var scalar = paloCoerceCfArgSafe(coordinates[0]);
         var pathStr = String(scalar == null ? "" : scalar).trim();
         if (!pathStr) {
           return { ok: false, path: "", error: "name_path vide." };
@@ -2953,7 +2954,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         return { ok: false, path: "", error: "Lecture name_path impossible." };
       }
     }
-    return paloJoinCoordsLiteral(paloCollectCoordinateArgs(cfArgs, startIndex));
+    return paloJoinCoordsLiteral(coordinates);
   }
 
   /** Lecture unitaire /cell/value?name_path=... sans cache dimensions ni bulk. */
@@ -3143,7 +3144,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.20+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.21+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -3181,15 +3182,22 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       if (stepNum === 32) {
         var an32 = paloAnalyzeCfArgs(cfArgs, 0);
         var anTrail = paloAnalyzeCfArgs(cfArgs, 3);
+        var coords32 = paloCollectCoordinateArgs(cfArgs, 3);
         var out32 = [
           "STEP32",
           "raw=" + an32.rawLen,
           "user=" + an32.userCount,
           "meta=" + an32.metaCount,
-          "userFrom3=" + anTrail.userFromStart
+          "userFrom3=" + anTrail.userFromStart,
+          "coords=" + coords32.length
         ];
         if (an32.metaIdx.length) {
           out32.push("metaAt=" + an32.metaIdx.join(","));
+        }
+        if (coords32.length) {
+          out32.push("path=" + coords32.map(function (c) {
+            return String(paloCoerceCfArgSafe(c) == null ? "" : paloCoerceCfArgSafe(c)).trim();
+          }).join("|"));
         }
         return out32.join(" ");
       }
