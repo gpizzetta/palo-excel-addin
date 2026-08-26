@@ -32,6 +32,10 @@
     return PALO_RUNTIME_ROOT_BAG;
   })();
 
+  if (paloGlobal.__PALO_API_LOADED__) {
+    return;
+  }
+
   var PALO_TRACE_STORAGE_KEY = "palo.office365.trace.v1";
   var PALO_CONNECTIONS_STORAGE_KEY = "palo.office365.connections.v1";
   var PALO_ACTIVE_STORAGE_KEY = "palo.office365.active.v1";
@@ -595,6 +599,9 @@
       } catch (_keys) {
         keysStr = "?";
       }
+      if (paloInCustomFunctionsRuntime()) {
+        return "";
+      }
       var segPart = debugFrom && debugFrom.segmentIndex !== undefined
         ? " segmentIndex=" + debugFrom.segmentIndex
         : "";
@@ -672,7 +679,59 @@
     return 45000;
   }
 
+  function paloInCustomFunctionsRuntime() {
+    try {
+      if (typeof CustomFunctions !== "undefined") {
+        return true;
+      }
+    } catch (_cfDetect) {
+    }
+    try {
+      if (typeof Office !== "undefined" && typeof importScripts !== "function") {
+        return true;
+      }
+    } catch (_officeDetect) {
+    }
+    return false;
+  }
+
+  /** Construit name_path sans lever d'exception (Excel Online CF : throw = plantage). */
+  function paloBuildNamePathSafe(pathSegments, cubeName) {
+    try {
+      var input = normalizePaloPathSegmentsInput(pathSegments);
+      var normalized = [];
+      var i;
+      for (i = 0; i < input.length; i += 1) {
+        var seg = String(normalizePaloPathSegment(input[i], {
+          segmentIndex: i,
+          pathLength: input.length
+        })).trim();
+        if (!seg) {
+          return { ok: false, path: "", error: "Coordonnee vide (index " + i + ")." };
+        }
+        normalized.push(seg);
+      }
+      if (!normalized.length) {
+        return {
+          ok: false,
+          path: "",
+          error: "Aucune coordonnee pour " + String(cubeName || "cube") + "."
+        };
+      }
+      return { ok: true, path: normalized.join(","), error: "" };
+    } catch (err) {
+      return {
+        ok: false,
+        path: "",
+        error: err && err.message ? err.message : String(err)
+      };
+    }
+  }
+
   function paloHttpMaxConcurrent() {
+    if (paloInCustomFunctionsRuntime()) {
+      return 2;
+    }
     if (typeof window !== "undefined" && window.PALO_HTTP_MAX_CONCURRENT != null) {
       var n = Number(window.PALO_HTTP_MAX_CONCURRENT);
       if (!Number.isNaN(n) && n >= 1) {
@@ -1002,7 +1061,7 @@
     if (type === 2) {
       return value;
     }
-    return null;
+    return "";
   }
 
   PaloApiClient.prototype.cellValue = async function cellValue(sid, database, cube, path) {
@@ -1153,6 +1212,10 @@
   }
 
   function cellBatchDelayMs() {
+    // Excel Online CF : pas de file setTimeout (plantages) ; lecture unitaire immediate.
+    if (paloInCustomFunctionsRuntime()) {
+      return 0;
+    }
     // Bulk /cell/values actif par defaut (24 ms), avec fallback unitaire et decoupage automatique.
     if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH !== undefined) {
       return window.PALO_DISABLE_BATCH ? 0 : 24;
@@ -1182,6 +1245,29 @@
    * Pour ce seul cas : resolution des noms d'elements en IDs a la volee (pas de cache id), puis parametre API `paths`.
    * Desactiver le batch : PALO_CELL_BATCH_MS = 0 (un appel /cell/value par cellule).
    */
+  PaloConnectionManager.prototype._resolveCellValueByNameSegments = async function _resolveCellValueByNameSegments(
+    connectionName,
+    sid,
+    client,
+    name_database,
+    name_cube,
+    pathSegments,
+    namePath
+  ) {
+    if (Array.isArray(pathSegments) && pathSegments.length > 0) {
+      var builtNamePath = await this.buildCellNamePath(
+        connectionName,
+        sid,
+        client,
+        name_database,
+        name_cube,
+        pathSegments
+      );
+      return client.cellValue(sid, name_database, name_cube, builtNamePath);
+    }
+    return client.cellValue(sid, name_database, name_cube, namePath);
+  };
+
   PaloConnectionManager.prototype.requestCellValueBatched = function requestCellValueBatched(
     connectionName,
     sid,
@@ -1194,19 +1280,15 @@
   ) {
     var manager = this;
     if (cellBatchDelayMs() === 0) {
-      if (Array.isArray(pathSegments) && pathSegments.length > 0) {
-        return this.buildCellIdPathsListFromSegments(
-          connectionName,
-          sid,
-          client,
-          name_database,
-          name_cube,
-          [pathSegments]
-        ).then(function (list) {
-          return client.cellValueByIds(sid, name_database, name_cube, list[0]);
-        });
-      }
-      return client.cellValue(sid, name_database, name_cube, namePath);
+      return this._resolveCellValueByNameSegments(
+        connectionName,
+        sid,
+        client,
+        name_database,
+        name_cube,
+        pathSegments,
+        namePath
+      );
     }
     return new Promise(function (resolve, reject) {
       var key = cellBatchKey(connectionName, sid, name_database, name_cube);
@@ -1268,21 +1350,32 @@
     var name_database = q.name_database;
     var name_cube = q.name_cube;
     try {
-      if (items.length === 1) {
-        var single;
-        if (Array.isArray(items[0].pathSegments) && items[0].pathSegments.length > 0) {
-          var singleIdPathList = await this.buildCellIdPathsListFromSegments(
+      if (paloInCustomFunctionsRuntime()) {
+        var cfIdx;
+        for (cfIdx = 0; cfIdx < items.length; cfIdx += 1) {
+          var cfVal = await this._resolveCellValueByNameSegments(
             q.connectionName,
             sid,
             client,
             name_database,
             name_cube,
-            [items[0].pathSegments]
+            items[cfIdx].pathSegments,
+            items[cfIdx].namePath
           );
-          single = await client.cellValueByIds(sid, name_database, name_cube, singleIdPathList[0]);
-        } else {
-          single = await client.cellValue(sid, name_database, name_cube, items[0].namePath);
+          items[cfIdx].resolve(cfVal);
         }
+        return;
+      }
+      if (items.length === 1) {
+        var single = await this._resolveCellValueByNameSegments(
+          q.connectionName,
+          sid,
+          client,
+          name_database,
+          name_cube,
+          items[0].pathSegments,
+          items[0].namePath
+        );
         items[0].resolve(single);
         if (paloBulkTraceEnabled()) {
           paloTrace("cell-values-single-resolve", {
@@ -1679,13 +1772,28 @@
     cubeName,
     pathSegments
   ) {
-    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     var input = normalizePaloPathSegmentsInput(pathSegments);
     var normalized = [];
     var i;
     for (i = 0; i < input.length; i += 1) {
       normalized.push(String(normalizePaloPathSegment(input[i], { segmentIndex: i, pathLength: input.length })).trim());
     }
+    if (!normalized.length) {
+      throw new Error("Aucune coordonnee fournie pour le cube " + cubeName + ".");
+    }
+    for (i = 0; i < normalized.length; i += 1) {
+      if (!normalized[i]) {
+        throw new Error("Coordonnee vide (index " + i + ").");
+      }
+    }
+    if (paloInCustomFunctionsRuntime()) {
+      var safe = paloBuildNamePathSafe(pathSegments, cubeName);
+      if (!safe.ok) {
+        throw new Error(safe.error);
+      }
+      return safe.path;
+    }
+    var dimNames = await this.getCubeDimensionNamesOrdered(connectionName, sid, client, database, cubeName);
     if (normalized.length !== dimNames.length) {
       throw new Error(
         "Nombre de coordonnees (" + normalized.length + ") different du nombre de dimensions du cube (" + dimNames.length + ")."
@@ -1693,9 +1801,6 @@
     }
     for (i = 0; i < normalized.length; i += 1) {
       var seg = String(normalized[i]).trim();
-      if (!seg) {
-        throw new Error("Coordonnee vide pour la dimension " + dimNames[i]);
-      }
       paloTrace("cell-name-path-segment", {
         connectionName: connectionName,
         database: database,
@@ -2044,6 +2149,7 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
