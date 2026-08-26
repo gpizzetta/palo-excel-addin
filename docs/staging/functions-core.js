@@ -1,9 +1,9 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.18";
-  /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
-  var PALO_CF_OPEN_GRACE_MS = 3500;
+var PALO_ASSET_VERSION = "1.0.2.19";
+/** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
+var PALO_CF_OPEN_GRACE_MS = 3500;
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -287,22 +287,27 @@ var PALO_ASSET_VERSION = "1.0.2.18";
 
   /** Diagnostic runtime Excel (ne depend pas de PaloOffice). */
   function RUNTIME_DIAG() {
-    var g = paloGlobalRef();
-    var parts = [
-      "v=" + PALO_ASSET_VERSION,
-      "globalThis=" + (typeof globalThis !== "undefined" ? "oui" : "non"),
-      "self=" + (typeof self !== "undefined" ? "oui" : "non"),
-      "window=" + (typeof window !== "undefined" ? "oui" : "non"),
-      "document=" + (typeof document !== "undefined" ? "oui" : "non"),
-      "importScripts=" + (typeof importScripts === "function" ? "oui" : "non"),
-      "CustomFunctions=" + (typeof CustomFunctions !== "undefined" ? "oui" : "non"),
-      "Office=" + (typeof Office !== "undefined" ? "oui" : "non"),
-      "paloApi=" + (g.__PALO_API_LOADED__ ? "oui" : "non"),
-      "PaloOffice=" + (g.PaloOffice ? "oui" : "non"),
-      "createCM=" + (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function" ? "oui" : "non"),
-      "bundleFile=functions.js"
-    ];
-    return parts.join(" ");
+    try {
+      var g = paloGlobalRef();
+      var parts = [
+        "v=" + PALO_ASSET_VERSION,
+        "cfReg=" + (g.__PALO_CF_REGISTERED__ ? "oui" : "non"),
+        "globalThis=" + (typeof globalThis !== "undefined" ? "oui" : "non"),
+        "self=" + (typeof self !== "undefined" ? "oui" : "non"),
+        "window=" + (typeof window !== "undefined" ? "oui" : "non"),
+        "document=" + (typeof document !== "undefined" ? "oui" : "non"),
+        "importScripts=" + (typeof importScripts === "function" ? "oui" : "non"),
+        "CustomFunctions=" + (typeof CustomFunctions !== "undefined" ? "oui" : "non"),
+        "Office=" + (typeof Office !== "undefined" ? "oui" : "non"),
+        "paloApi=" + (g.__PALO_API_LOADED__ ? "oui" : "non"),
+        "PaloOffice=" + (g.PaloOffice ? "oui" : "non"),
+        "createCM=" + (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function" ? "oui" : "non"),
+        "bundleFile=functions.js"
+      ];
+      return parts.join(" ");
+    } catch (err) {
+      return "RUNTIME_DIAG_ERROR " + (err && err.message ? err.message : String(err));
+    }
   }
 
   /**
@@ -874,7 +879,7 @@ var PALO_ASSET_VERSION = "1.0.2.18";
     }
   }
 
-  /** Wrapper BETA (v1.0.2.18+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.19+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -1463,12 +1468,13 @@ var PALO_ASSET_VERSION = "1.0.2.18";
 
   gBoot.__paloScheduleRegisterCustomFunctions = scheduleRegisterCustomFunctions;
 
+  // Associer immediatement : attendre Office.onReady provoque #VALEUR! sur Excel Online
+  // (formules evaluees avant la fin de onReady / associate trop tardif).
+  scheduleRegisterCustomFunctions();
   if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
     Office.onReady(function () {
       scheduleRegisterCustomFunctions();
     });
-  } else {
-    scheduleRegisterCustomFunctions();
   }
 })();
 
