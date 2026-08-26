@@ -5,112 +5,869 @@
     {
       "id": "DATAC",
       "name": "DATAC",
-      "description": "Lit une valeur dans un cube Palo.",
-      "result": { "type": "any", "dimensionality": "scalar" },
+      "description": "Lit une valeur dans un cube Palo (servdb; cube; coord1..coordN).",
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
       "volatile": false,
       "parameters": [
-        { "name": "servdb", "type": "string" },
-        { "name": "cube", "type": "string" },
-        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "cube",
+          "type": "any"
+        },
+        {
+          "name": "coord1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord3",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord4",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord5",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord6",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord7",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord8",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord9",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord10",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord11",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord12",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord13",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord14",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord15",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord16",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord17",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord18",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord19",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord20",
+          "type": "any",
+          "optional": true
+        }
       ]
     },
     {
       "id": "DATAN",
       "name": "DATAN",
       "description": "BETA uniquement — wrapper DATAC (v1.0.2.9+). Lit via name_path (stable Excel Online).",
-      "result": { "type": "any", "dimensionality": "scalar" },
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
       "volatile": false,
       "parameters": [
-        { "name": "servdb", "type": "string" },
-        { "name": "cube", "type": "string" },
-        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "cube",
+          "type": "any"
+        },
+        {
+          "name": "coord1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord3",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord4",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord5",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord6",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord7",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord8",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord9",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord10",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord11",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord12",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord13",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord14",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord15",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord16",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord17",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord18",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord19",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord20",
+          "type": "any",
+          "optional": true
+        }
       ]
     },
     {
       "id": "DATAP",
       "name": "DATAP",
       "description": "BETA Excel Online — lit une cellule via name_path (1 seule chaine, coords separees par des virgules).",
-      "result": { "type": "any", "dimensionality": "scalar" },
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
       "volatile": false,
       "parameters": [
-        { "name": "servdb", "type": "string" },
-        { "name": "cube", "type": "string" },
-        { "name": "name_path", "type": "string" }
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "cube",
+          "type": "string"
+        },
+        {
+          "name": "name_path",
+          "type": "string"
+        }
       ]
     },
     {
       "id": "DATAN_STEP",
       "name": "DATAN_STEP",
       "description": "BETA diagnostic: 32=raw/user/meta args, 34-39=coords separees, 40-41=multi.",
-      "result": { "type": "string", "dimensionality": "scalar" },
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
       "parameters": [
-        { "name": "step", "type": "number" },
-        { "name": "servdb", "type": "string", "optional": true },
-        { "name": "cube", "type": "string", "optional": true },
-        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+        {
+          "name": "step",
+          "type": "number"
+        },
+        {
+          "name": "servdb",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "cube",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord3",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord4",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord5",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord6",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord7",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord8",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord9",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord10",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord11",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord12",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord13",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord14",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord15",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord16",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord17",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord18",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord19",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord20",
+          "type": "any",
+          "optional": true
+        }
       ]
     },
     {
       "id": "DATAC_TEST",
       "name": "DATAC_TEST",
       "description": "Diagnostic DATAC: retourne URL appelee et valeur lue.",
-      "result": { "type": "string", "dimensionality": "scalar" },
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
       "parameters": []
     },
     {
       "id": "PALO_SETDATA",
       "name": "PALO_SETDATA",
       "description": "Ecrit une valeur dans un cube Palo.",
-      "result": { "type": "any", "dimensionality": "scalar" },
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
       "parameters": [
-        { "name": "value", "type": "any" },
-        { "name": "splash", "type": "number" },
-        { "name": "servdb", "type": "string" },
-        { "name": "cube", "type": "string" },
-        { "name": "coord1", "type": "string", "optional": true, "repeating": true }
+        {
+          "name": "value",
+          "type": "any"
+        },
+        {
+          "name": "splash",
+          "type": "number"
+        },
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "cube",
+          "type": "any"
+        },
+        {
+          "name": "coord1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord3",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord4",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord5",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord6",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord7",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord8",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord9",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord10",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord11",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord12",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord13",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord14",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord15",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord16",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord17",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord18",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord19",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord20",
+          "type": "any",
+          "optional": true
+        }
       ]
     },
     {
       "id": "ADD",
       "name": "ADD",
       "description": "Addition de deux valeurs ou cellules (test).",
-      "result": { "type": "number", "dimensionality": "scalar" },
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
       "parameters": [
-        { "name": "cellule1", "type": "any" },
-        { "name": "cellule2", "type": "any" }
+        {
+          "name": "cellule1",
+          "type": "any"
+        },
+        {
+          "name": "cellule2",
+          "type": "any"
+        }
       ]
     },
     {
       "id": "RUNTIME_DIAG",
       "name": "RUNTIME_DIAG",
       "description": "Diagnostic du runtime Excel (globals, PaloOffice, importScripts).",
-      "result": { "type": "string", "dimensionality": "scalar" },
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
       "parameters": []
     },
     {
       "id": "ENAME",
       "name": "ENAME",
       "description": "Nom d'affichage d'un element (API element/info et dimensions par nom). Exactement 3 arguments utiles: servdb; dimension; elementName. Arguments supplementaires ignores.",
-      "result": { "type": "string", "dimensionality": "scalar" },
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
       "parameters": [
-        { "name": "servdb", "type": "string" },
-        { "name": "dimension", "type": "string" },
-        { "name": "elementName", "type": "any" },
-        { "name": "argumentsSupplementairesIgnores", "type": "any", "optional": true, "repeating": true }
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "dimension",
+          "type": "any"
+        },
+        {
+          "name": "elementName",
+          "type": "any"
+        },
+        {
+          "name": "ignored1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "ignored2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "ignored3",
+          "type": "any",
+          "optional": true
+        }
       ]
     },
-    { "id": "PALO_ECOUNT", "name": "PALO_ECOUNT", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" } ] },
-    { "id": "PALO_ECHILDCOUNT", "name": "PALO_ECHILDCOUNT", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" } ] },
-    { "id": "PALO_ECHILD", "name": "PALO_ECHILD", "result": { "type": "string", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" }, { "name": "childIndex", "type": "number" } ] },
-    { "id": "PALO_EPARENTCOUNT", "name": "PALO_EPARENTCOUNT", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" } ] },
-    { "id": "PALO_EPARENT", "name": "PALO_EPARENT", "result": { "type": "string", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" }, { "name": "parentIndex", "type": "number" } ] },
-    { "id": "PALO_ELEVEL", "name": "PALO_ELEVEL", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" } ] },
-    { "id": "PALO_EINDENT", "name": "PALO_EINDENT", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" } ] },
-    { "id": "PALO_ETYPE", "name": "PALO_ETYPE", "result": { "type": "string", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "element", "type": "string" } ] },
-    { "id": "PALO_EWEIGHT", "name": "PALO_EWEIGHT", "result": { "type": "number", "dimensionality": "scalar" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" }, { "name": "parent", "type": "string" }, { "name": "child", "type": "string" } ] },
-    { "id": "PALO_DATABASE_LIST_DIMENSIONS", "name": "PALO_DATABASE_LIST_DIMENSIONS", "result": { "type": "string", "dimensionality": "matrix" }, "parameters": [ { "name": "servdb", "type": "string" } ] },
-    { "id": "PALO_CUBE_LIST_DIMENSIONS", "name": "PALO_CUBE_LIST_DIMENSIONS", "result": { "type": "string", "dimensionality": "matrix" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "cube", "type": "string" } ] },
-    { "id": "PALO_DIMENSION_LIST_CUBES", "name": "PALO_DIMENSION_LIST_CUBES", "result": { "type": "string", "dimensionality": "matrix" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" } ] },
-    { "id": "PALO_DIMENSION_LIST_ELEMENTS", "name": "PALO_DIMENSION_LIST_ELEMENTS", "result": { "type": "string", "dimensionality": "matrix" }, "parameters": [ { "name": "servdb", "type": "string" }, { "name": "dimension", "type": "string" } ] }
+    {
+      "id": "PALO_ECOUNT",
+      "name": "PALO_ECOUNT",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_ECHILDCOUNT",
+      "name": "PALO_ECHILDCOUNT",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_ECHILD",
+      "name": "PALO_ECHILD",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        },
+        {
+          "name": "childIndex",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "PALO_EPARENTCOUNT",
+      "name": "PALO_EPARENTCOUNT",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_EPARENT",
+      "name": "PALO_EPARENT",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        },
+        {
+          "name": "parentIndex",
+          "type": "number"
+        }
+      ]
+    },
+    {
+      "id": "PALO_ELEVEL",
+      "name": "PALO_ELEVEL",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_EINDENT",
+      "name": "PALO_EINDENT",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_ETYPE",
+      "name": "PALO_ETYPE",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "element",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_EWEIGHT",
+      "name": "PALO_EWEIGHT",
+      "result": {
+        "type": "number",
+        "dimensionality": "scalar"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        },
+        {
+          "name": "parent",
+          "type": "string"
+        },
+        {
+          "name": "child",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_DATABASE_LIST_DIMENSIONS",
+      "name": "PALO_DATABASE_LIST_DIMENSIONS",
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_CUBE_LIST_DIMENSIONS",
+      "name": "PALO_CUBE_LIST_DIMENSIONS",
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "cube",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_DIMENSION_LIST_CUBES",
+      "name": "PALO_DIMENSION_LIST_CUBES",
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "id": "PALO_DIMENSION_LIST_ELEMENTS",
+      "name": "PALO_DIMENSION_LIST_ELEMENTS",
+      "result": {
+        "type": "string",
+        "dimensionality": "matrix"
+      },
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "string"
+        },
+        {
+          "name": "dimension",
+          "type": "string"
+        }
+      ]
+    }
   ]
 }
