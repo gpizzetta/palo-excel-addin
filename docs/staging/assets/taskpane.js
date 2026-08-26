@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.23";
+  var PLUGIN_VERSION = "1.0.2.24";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
   var manager = null;
 
@@ -224,8 +224,17 @@
   }
 
   function refreshVersionFromServer() {
-    var url = PALO_CDN_BASE + "/version.json?_=" + String(Date.now());
-    fetch(url, { cache: "no-store" })
+    var assetsEl = document.getElementById("plugin-version");
+    var manifestEl = document.getElementById("manifest-version");
+    if (assetsEl) {
+      assetsEl.textContent = PLUGIN_VERSION;
+    }
+    if (manifestEl) {
+      manifestEl.textContent = "…";
+    }
+
+    var versionUrl = PALO_CDN_BASE + "/version.json?_=" + String(Date.now());
+    fetch(versionUrl, { cache: "no-store" })
       .then(function (res) {
         if (!res.ok) {
           throw new Error("HTTP " + res.status);
@@ -234,26 +243,57 @@
       })
       .then(function (data) {
         var live = data && data.version ? String(data.version) : "";
-        if (!live) {
-          return;
-        }
-        var el = document.getElementById("plugin-version");
-        if (!el) {
+        if (!live || !assetsEl) {
           return;
         }
         if (live === PLUGIN_VERSION) {
-          el.textContent = live;
+          assetsEl.textContent = live;
           return;
         }
-        el.textContent = live + " (fichiers locaux " + PLUGIN_VERSION + " — recharger le complement)";
+        assetsEl.textContent = live + " (charges " + PLUGIN_VERSION + " — recharger)";
       })
       .catch(function () {
-        setText("plugin-version", PLUGIN_VERSION);
+        if (assetsEl) {
+          assetsEl.textContent = PLUGIN_VERSION;
+        }
+      });
+
+    // Version declaree dans le manifeste GitHub Pages (pas le cache admin M365).
+    var manifestUrl = PALO_CDN_BASE + "/manifest.xml?_=" + String(Date.now());
+    fetch(manifestUrl, { cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) {
+          throw new Error("HTTP " + res.status);
+        }
+        return res.text();
+      })
+      .then(function (xml) {
+        if (!manifestEl) {
+          return;
+        }
+        var match = String(xml || "").match(/<Version>\s*([^<]+?)\s*<\/Version>/i);
+        var ver = match ? String(match[1]).trim() : "";
+        if (!ver) {
+          manifestEl.textContent = "?";
+          return;
+        }
+        if (ver === PLUGIN_VERSION) {
+          manifestEl.textContent = ver;
+          return;
+        }
+        manifestEl.textContent = ver + " (≠ assets)";
+        manifestEl.title = "Le manifeste Pages et les assets charges different. "
+          + "Pour ruban / raccourcis : republier le manifeste cote admin M365. "
+          + "Les formules suivent surtout les assets charges.";
+      })
+      .catch(function () {
+        if (manifestEl) {
+          manifestEl.textContent = "?";
+        }
       });
   }
 
   function bindUi() {
-    setText("plugin-version", PLUGIN_VERSION);
     refreshVersionFromServer();
     try {
       var po = window.PaloOffice;
