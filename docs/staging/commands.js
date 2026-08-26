@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.2.21";
+  var PALO_PLUGIN_VERSION = "1.0.2.22";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -720,7 +720,8 @@
     return context.application.workbooks.getItem(workbookId);
   }
 
-  function paloConfirmSnapshotDialog() {
+  function paloConfirmSnapshotDialog(mode) {
+    var dialogMode = mode === "inplace" ? "inplace" : "copy";
     return new Promise(function (resolve) {
       if (!Office.context || !Office.context.ui || typeof Office.context.ui.displayDialogAsync !== "function") {
         resolve(false);
@@ -729,12 +730,13 @@
       var confirmHref;
       try {
         confirmHref = new URL("palo-snapshot-confirm.html", window.location.href).href;
+        confirmHref += (confirmHref.indexOf("?") >= 0 ? "&" : "?") + "mode=" + dialogMode;
       } catch (_urlErr) {
-        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-snapshot-confirm.html";
+        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-snapshot-confirm.html?mode=" + dialogMode;
       }
       Office.context.ui.displayDialogAsync(
         confirmHref,
-        { height: 48, width: 52, displayInIframe: true },
+        { height: 52, width: 52, displayInIframe: true },
         function (asyncResult) {
           if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
             resolve(false);
@@ -763,6 +765,43 @@
         }
       );
     });
+  }
+
+  async function snapshotSupportsSeparateWorkbook() {
+    var supported = false;
+    await Excel.run(async function (context) {
+      supported = Boolean(
+        context.application
+        && context.application.workbooks
+        && typeof context.application.workbooks.add === "function"
+      );
+    });
+    return supported;
+  }
+
+  async function applySnapshotValuesInPlace() {
+    await Excel.run(async function (context) {
+      if (context.application && typeof context.application.suspendScreenUpdatingUntilNextSync === "function") {
+        context.application.suspendScreenUpdatingUntilNextSync();
+      }
+      await convertAllSheetsToValues(context, context.workbook);
+    });
+    try {
+      await Excel.run(async function (context) {
+        if (
+          context.workbook
+          && context.workbook.application
+          && typeof context.workbook.application.calculate === "function"
+          && typeof Excel !== "undefined"
+          && Excel.CalculationType
+        ) {
+          context.workbook.application.calculate(Excel.CalculationType.recalculate);
+          await context.sync();
+        }
+      });
+    } catch (_recalc) {
+      // ignore
+    }
   }
 
   async function convertAllSheetsToValues(context, workbook) {
@@ -910,9 +949,25 @@
         throw new Error("Excel JavaScript API indisponible.");
       }
 
-      var confirmed = await paloConfirmSnapshotDialog();
+      var canCopy = await snapshotSupportsSeparateWorkbook();
+      var confirmed = await paloConfirmSnapshotDialog(canCopy ? "copy" : "inplace");
       if (!confirmed) {
         await paloUserNotify("Snapshot annule.", "neutral", "Snapshot");
+        complete(event);
+        return;
+      }
+
+      if (!canCopy) {
+        await paloUserNotify("Conversion en valeurs du classeur ouvert (Excel Online)…", "neutral", "Snapshot");
+        await applySnapshotValuesInPlace();
+        await paloUserNotify(
+          "Formules remplacees par les valeurs affichees dans ce classeur. "
+          + "Sur Excel Online, aucune copie automatique n'est possible — "
+          + "utilisez Fichier > Enregistrer une copie avant Snapshot si vous devez garder les formules. "
+          + "Sur Excel Desktop, Snapshot cree un fichier " + fileName + " separe.",
+          "ok",
+          "Snapshot"
+        );
         complete(event);
         return;
       }
