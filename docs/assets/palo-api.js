@@ -112,12 +112,27 @@
     }
   }
 
+  function paloPromiseWithTimeout(promise, timeoutMs, label) {
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise(function (_resolve, reject) {
+        setTimeout(function () {
+          reject(new Error((label || "Operation") + " timeout (" + timeoutMs + " ms)"));
+        }, timeoutMs);
+      })
+    ]);
+  }
+
   function paloEnsureStorageReady() {
     if (paloStorageReadyPromise) {
       return paloStorageReadyPromise;
     }
     paloStorageReadyPromise = new Promise(function (resolve) {
       var keys = [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
+      var storageTimeoutMs = 8000;
+      function finish() {
+        resolve();
+      }
       if (paloHasLocalStorage()) {
         var ort = paloOfficeRuntimeStorage();
         var syncTasks = keys.map(function (k) {
@@ -126,16 +141,20 @@
             if (v != null) {
               paloStorageMem[k] = v;
               if (ort && typeof ort.setItem === "function") {
-                return Promise.resolve(ort.setItem(k, v)).catch(function () {});
+                return paloPromiseWithTimeout(
+                  Promise.resolve(ort.setItem(k, v)).catch(function () {}),
+                  storageTimeoutMs,
+                  "OfficeRuntime.storage.setItem"
+                ).catch(function () {});
               }
             }
           } catch (_e) {
           }
           return Promise.resolve();
         });
-        Promise.all(syncTasks).then(function () {
-          resolve();
-        });
+        paloPromiseWithTimeout(Promise.all(syncTasks), storageTimeoutMs, "OfficeRuntime.storage sync")
+          .then(finish)
+          .catch(finish);
         return;
       }
       var ort = paloOfficeRuntimeStorage();
@@ -143,15 +162,17 @@
         resolve();
         return;
       }
-      Promise.all(keys.map(function (k) {
-        return Promise.resolve(ort.getItem(k)).then(function (v) {
-          if (v != null && v !== "") {
-            paloStorageMem[k] = v;
-          }
-        }).catch(function () {});
-      })).then(function () {
-        resolve();
-      });
+      paloPromiseWithTimeout(
+        Promise.all(keys.map(function (k) {
+          return Promise.resolve(ort.getItem(k)).then(function (v) {
+            if (v != null && v !== "") {
+              paloStorageMem[k] = v;
+            }
+          }).catch(function () {});
+        })),
+        storageTimeoutMs,
+        "OfficeRuntime.storage.getItem"
+      ).then(finish).catch(finish);
     });
     return paloStorageReadyPromise;
   }
@@ -846,6 +867,40 @@
     throw lastErr;
   };
 
+  function paloFetchGetWithTimeout(url, timeoutMs, logUrl) {
+    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timeoutId = null;
+    var fetchPromise;
+    if (controller) {
+      timeoutId = setTimeout(function () {
+        try {
+          controller.abort();
+        } catch (_abortErr) {
+          // ignore
+        }
+      }, timeoutMs);
+      fetchPromise = fetch(url, {
+        method: "GET",
+        signal: controller.signal
+      });
+    } else {
+      fetchPromise = fetch(url, { method: "GET" });
+      fetchPromise = Promise.race([
+        fetchPromise,
+        new Promise(function (_resolve, reject) {
+          setTimeout(function () {
+            reject(new Error("Timeout HTTP (" + timeoutMs + " ms) sur " + logUrl));
+          }, timeoutMs);
+        })
+      ]);
+    }
+    return fetchPromise.finally(function () {
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
+  }
+
   PaloApiClient.prototype.callOnce = async function callOnce(path, params) {
     var url = this.buildUrl(path, params);
     var logUrl = paloRedactUrlForLog(url);
@@ -853,34 +908,16 @@
     paloTrace("api-call", { path: path, url: logUrl });
     var response;
     var timeoutMs = paloRequestTimeoutMs();
-    var controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-    var timeoutId = null;
     try {
-      if (controller) {
-        timeoutId = setTimeout(function () {
-          try {
-            controller.abort();
-          } catch (_abortErr) {
-            // ignore
-          }
-        }, timeoutMs);
-      }
-      response = await fetch(url, {
-        method: "GET",
-        signal: controller ? controller.signal : undefined
-      });
+      response = await paloFetchGetWithTimeout(url, timeoutMs, logUrl);
     } catch (error) {
-      if (controller && controller.signal && controller.signal.aborted) {
-        throw new Error("Timeout HTTP (" + timeoutMs + " ms) sur " + logUrl);
+      if (error && error.message && error.message.indexOf("Timeout HTTP") === 0) {
+        throw error;
       }
       throw new Error(
         "Impossible de joindre " + logUrl + ". CORS, URL Palo, certificat HTTPS ou reseau. Detail: "
         + (error && error.message ? error.message : String(error))
       );
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
     }
     if (!response.ok) {
       throw new Error("HTTP " + response.status + " sur " + logUrl);
