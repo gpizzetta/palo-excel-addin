@@ -155,6 +155,17 @@
     }
   }
 
+  /** Volet taskpane uniquement : le runtime CF Desktop a souvent window mais pas document. */
+  function paloHasTaskpaneLocalStorage() {
+    try {
+      return typeof document !== "undefined"
+        && document
+        && paloHasLocalStorage();
+    } catch (_e) {
+      return false;
+    }
+  }
+
   function paloOfficeRuntimeStorage() {
     try {
       if (typeof OfficeRuntime !== "undefined" && OfficeRuntime && OfficeRuntime.storage) {
@@ -166,7 +177,7 @@
   }
 
   function paloStorageGetItem(key) {
-    if (paloHasLocalStorage()) {
+    if (paloHasTaskpaneLocalStorage()) {
       try {
         var fromLs = window.localStorage.getItem(key);
         if (fromLs != null) {
@@ -223,58 +234,112 @@
     ]);
   }
 
-  function paloEnsureStorageReady() {
+  function paloStorageKeysList() {
+    return [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
+  }
+
+  function paloPullOfficeRuntimeStorageIntoMem() {
+    var ort = paloOfficeRuntimeStorage();
+    if (!ort || typeof ort.getItem !== "function") {
+      return Promise.resolve(false);
+    }
+    return Promise.all(paloStorageKeysList().map(function (k) {
+      return Promise.resolve(ort.getItem(k)).then(function (v) {
+        if (v != null && v !== "") {
+          paloStorageMem[k] = v;
+        }
+      }).catch(function () {});
+    })).then(function () {
+      return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+    });
+  }
+
+  function paloPushTaskpaneLocalStorageToOfficeRuntime() {
+    var ort = paloOfficeRuntimeStorage();
+    if (!paloHasTaskpaneLocalStorage() || !ort || typeof ort.setItem !== "function") {
+      return Promise.resolve(0);
+    }
+    var storageTimeoutMs = 8000;
+    var pushed = 0;
+    var syncTasks = paloStorageKeysList().map(function (k) {
+      try {
+        var v = window.localStorage.getItem(k);
+        if (v != null) {
+          paloStorageMem[k] = v;
+          pushed += 1;
+          return paloPromiseWithTimeout(
+            Promise.resolve(ort.setItem(k, v)).catch(function () {}),
+            storageTimeoutMs,
+            "OfficeRuntime.storage.setItem"
+          ).catch(function () {});
+        }
+      } catch (_e) {
+      }
+      return Promise.resolve();
+    });
+    return paloPromiseWithTimeout(Promise.all(syncTasks), storageTimeoutMs, "OfficeRuntime.storage sync")
+      .then(function () {
+        return pushed;
+      })
+      .catch(function () {
+        return pushed;
+      });
+  }
+
+  function paloEnsureStorageReady(forceReload) {
+    if (forceReload) {
+      paloStorageReadyPromise = null;
+    }
     if (paloStorageReadyPromise) {
       return paloStorageReadyPromise;
     }
     paloStorageReadyPromise = new Promise(function (resolve) {
-      var keys = [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
       var storageTimeoutMs = 8000;
       function finish() {
         resolve();
       }
-      if (paloHasLocalStorage()) {
-        var ort = paloOfficeRuntimeStorage();
-        var syncTasks = keys.map(function (k) {
-          try {
-            var v = window.localStorage.getItem(k);
-            if (v != null) {
-              paloStorageMem[k] = v;
-              if (ort && typeof ort.setItem === "function") {
-                return paloPromiseWithTimeout(
-                  Promise.resolve(ort.setItem(k, v)).catch(function () {}),
-                  storageTimeoutMs,
-                  "OfficeRuntime.storage.setItem"
-                ).catch(function () {});
-              }
-            }
-          } catch (_e) {
-          }
-          return Promise.resolve();
-        });
-        paloPromiseWithTimeout(Promise.all(syncTasks), storageTimeoutMs, "OfficeRuntime.storage sync")
-          .then(finish)
-          .catch(finish);
-        return;
-      }
-      var ort = paloOfficeRuntimeStorage();
-      if (!ort || typeof ort.getItem !== "function") {
-        resolve();
-        return;
-      }
-      paloPromiseWithTimeout(
-        Promise.all(keys.map(function (k) {
-          return Promise.resolve(ort.getItem(k)).then(function (v) {
-            if (v != null && v !== "") {
-              paloStorageMem[k] = v;
-            }
-          }).catch(function () {});
-        })),
-        storageTimeoutMs,
-        "OfficeRuntime.storage.getItem"
-      ).then(finish).catch(finish);
+      var pushTask = paloPushTaskpaneLocalStorageToOfficeRuntime();
+      var pullTask = pushTask.then(function () {
+        return paloPullOfficeRuntimeStorageIntoMem();
+      });
+      paloPromiseWithTimeout(pullTask, storageTimeoutMs, "OfficeRuntime.storage load")
+        .then(finish)
+        .catch(finish);
     });
     return paloStorageReadyPromise;
+  }
+
+  function paloReloadOfficeRuntimeStorage() {
+    paloStorageReadyPromise = null;
+    return paloEnsureStorageReady(true);
+  }
+
+  function paloFlushStorageToOfficeRuntime() {
+    return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
+      return paloPullOfficeRuntimeStorageIntoMem();
+    });
+  }
+
+  function paloStorageDiagSync() {
+    var ort = paloOfficeRuntimeStorage();
+    var connRaw = paloStorageGetItem(PALO_CONNECTIONS_STORAGE_KEY);
+    var active = paloStorageGetItem(PALO_ACTIVE_STORAGE_KEY) || "(aucune)";
+    var connCount = 0;
+    try {
+      if (connRaw) {
+        var parsed = JSON.parse(connRaw);
+        if (Array.isArray(parsed)) {
+          connCount = parsed.length;
+        }
+      }
+    } catch (_parse) {
+    }
+    return [
+      "taskpaneLs=" + (paloHasTaskpaneLocalStorage() ? "oui" : "non"),
+      "ort=" + (ort ? "oui" : "non"),
+      "conn=" + String(connCount),
+      "active=" + String(active)
+    ].join(" ");
   }
 
   function paloTraceConsole() {
@@ -2286,6 +2351,9 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
+  paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
+  paloGlobal.PaloOffice.paloStorageDiagSync = paloStorageDiagSync;
   paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
@@ -2301,8 +2369,8 @@
 
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
-var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
-var PALO_ASSET_VERSION = "1.0.2.25";
+var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
+var PALO_ASSET_VERSION = "1.0.2.26";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2530,6 +2598,16 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     if (!connectionManager) {
       connectionManager = paloGlobalRef().PaloOffice.createConnectionManager();
     }
+    var po = paloGlobalRef().PaloOffice;
+    if (connectionManager.listConnections().length === 0
+      && po
+      && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+      try {
+        await po.paloReloadOfficeRuntimeStorage();
+      } catch (_reload) {
+        // ignore
+      }
+    }
     return connectionManager;
   }
 
@@ -2605,6 +2683,9 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         "createCM=" + (g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function" ? "oui" : "non"),
         "bundleFile=functions.js"
       ];
+      if (g.PaloOffice && typeof g.PaloOffice.paloStorageDiagSync === "function") {
+        parts.push(g.PaloOffice.paloStorageDiagSync());
+      }
       return parts.join(" ");
     } catch (err) {
       return "RUNTIME_DIAG_ERROR " + (err && err.message ? err.message : String(err));
@@ -3181,7 +3262,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.25+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.26+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {

@@ -1,6 +1,6 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.25";
-  var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin/staging";
+  var PLUGIN_VERSION = "1.0.2.26";
+  var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
   function setText(id, message) {
@@ -161,6 +161,17 @@
     return "";
   }
 
+  function flushStorageToOfficeRuntime() {
+    try {
+      var po = window.PaloOffice;
+      if (po && typeof po.paloFlushStorageToOfficeRuntime === "function") {
+        return po.paloFlushStorageToOfficeRuntime();
+      }
+    } catch (_flush) {
+    }
+    return Promise.resolve();
+  }
+
   function saveConnection() {
     status("Enregistrement connexion...");
     try {
@@ -191,7 +202,11 @@
       getManager().setActiveConnectionName(name);
       refreshConnectionList();
       syncDebugCheckboxFromSelection();
-      status("Connexion " + name + " enregistree.");
+      flushStorageToOfficeRuntime().then(function () {
+        status("Connexion " + name + " enregistree (formules synchronisees).");
+      }).catch(function () {
+        status("Connexion " + name + " enregistree.");
+      });
     } catch (error) {
       status(error && error.message ? error.message : String(error));
     }
@@ -332,7 +347,11 @@
             status(e && e.message ? e.message : String(e));
           }
           syncDebugCheckboxFromSelection();
-          status("Connexion active: " + value);
+          flushStorageToOfficeRuntime().then(function () {
+            status("Connexion active: " + value + " (formules synchronisees).");
+          }).catch(function () {
+            status("Connexion active: " + value);
+          });
         } else {
           setChecked("conn-debug", false);
         }
@@ -343,6 +362,8 @@
     syncDebugCheckboxFromSelection();
     if (!autoSelected) {
       status("Aucune connexion configuree. Cree une connexion pour utiliser PALO.DATAC / PALO.ENAME.");
+    } else {
+      flushStorageToOfficeRuntime().catch(function () {});
     }
   }
 
