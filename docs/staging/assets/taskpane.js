@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.27";
+  var PLUGIN_VERSION = "1.0.2.28";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -203,7 +203,7 @@
       refreshConnectionList();
       syncDebugCheckboxFromSelection();
       flushStorageToOfficeRuntime().then(function () {
-        status("Connexion " + name + " enregistree (formules synchronisees).");
+        status("Connexion " + name + " enregistree. Enregistrez le classeur (Ctrl+S) puis recalculez.");
       }).catch(function () {
         status("Connexion " + name + " enregistree.");
       });
@@ -348,7 +348,7 @@
           }
           syncDebugCheckboxFromSelection();
           flushStorageToOfficeRuntime().then(function () {
-            status("Connexion active: " + value + " (formules synchronisees).");
+            status("Connexion active: " + value + ". Enregistrez le classeur (Ctrl+S) puis recalculez.");
           }).catch(function () {
             status("Connexion active: " + value);
           });

@@ -139,6 +139,7 @@
   var PALO_TRACE_STORAGE_KEY = "palo.office365.trace.v1";
   var PALO_CONNECTIONS_STORAGE_KEY = "palo.office365.connections.v1";
   var PALO_ACTIVE_STORAGE_KEY = "palo.office365.active.v1";
+  var PALO_WORKBOOK_SHEET = "_PaloOffice";
   var PALO_TRACE_MAX_ENTRIES = 300;
   var paloStorageMem = Object.create(null);
   var paloStorageReadyPromise = null;
@@ -311,6 +312,96 @@
     });
   }
 
+  function paloExcelApiAvailable() {
+    try {
+      return typeof Excel !== "undefined" && Excel && typeof Excel.run === "function";
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function paloApplyWorkbookConfigToMem(connectionsJson, activeName) {
+    var loaded = false;
+    if (connectionsJson != null && connectionsJson !== "") {
+      paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY] = String(connectionsJson);
+      loaded = true;
+    }
+    if (activeName != null && activeName !== "") {
+      paloStorageMem[PALO_ACTIVE_STORAGE_KEY] = String(activeName);
+    }
+    return loaded && Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+  }
+
+  /** Pont Desktop CF : feuille tres masquee du classeur (Excel.run partage volet + formules). */
+  function paloPullWorkbookConfigIntoMemAsync() {
+    if (!paloExcelApiAvailable()) {
+      return Promise.resolve(false);
+    }
+    return Excel.run(function (context) {
+      var sheet = context.workbook.worksheets.getItemOrNullObject(PALO_WORKBOOK_SHEET);
+      sheet.load("isNullObject");
+      return context.sync().then(function () {
+        if (sheet.isNullObject) {
+          return { connections: null, active: null };
+        }
+        var r1 = sheet.getRange("A1");
+        var r2 = sheet.getRange("A2");
+        r1.load("values");
+        r2.load("values");
+        return context.sync().then(function () {
+          var c = r1.values && r1.values[0] ? r1.values[0][0] : null;
+          var a = r2.values && r2.values[0] ? r2.values[0][0] : null;
+          return { connections: c, active: a };
+        });
+      });
+    }).then(function (cfg) {
+      return paloApplyWorkbookConfigToMem(cfg.connections, cfg.active);
+    }).catch(function () {
+      return false;
+    });
+  }
+
+  function paloPushMemToWorkbookConfigAsync() {
+    if (!paloExcelApiAvailable()) {
+      return Promise.resolve(false);
+    }
+    var connectionsJson = paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY];
+    if (!connectionsJson) {
+      connectionsJson = paloStorageGetItem(PALO_CONNECTIONS_STORAGE_KEY);
+    }
+    if (!connectionsJson) {
+      return Promise.resolve(false);
+    }
+    var activeName = paloStorageMem[PALO_ACTIVE_STORAGE_KEY];
+    if (!activeName) {
+      activeName = paloStorageGetItem(PALO_ACTIVE_STORAGE_KEY) || "";
+    }
+    return Excel.run(function (context) {
+      var sheet = context.workbook.worksheets.getItemOrNullObject(PALO_WORKBOOK_SHEET);
+      sheet.load("isNullObject");
+      return context.sync().then(function () {
+        if (sheet.isNullObject) {
+          sheet = context.workbook.worksheets.add(PALO_WORKBOOK_SHEET);
+        }
+        try {
+          if (Excel.SheetVisibility && Excel.SheetVisibility.veryHidden) {
+            sheet.visibility = Excel.SheetVisibility.veryHidden;
+          } else if (Excel.SheetVisibility && Excel.SheetVisibility.hidden) {
+            sheet.visibility = Excel.SheetVisibility.hidden;
+          }
+        } catch (_vis) {
+        }
+        sheet.getRange("A1").values = [[String(connectionsJson)]];
+        sheet.getRange("A2").values = [[String(activeName)]];
+        return context.sync();
+      });
+    }).then(function () {
+      return true;
+    }).catch(function () {
+      return false;
+    });
+  }
+
   function paloPullOfficeRuntimeStorageIntoMem() {
     var ort = paloOfficeRuntimeStorage();
     if (!ort || typeof ort.getItem !== "function") {
@@ -376,16 +467,26 @@
         finish();
         return;
       }
-      var loadTask = paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-        return paloPullOfficeRuntimeStorageIntoMem();
+      var loadTask = paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
+        if (hasConn) {
+          return true;
+        }
+        return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
+          return paloPullOfficeRuntimeStorageIntoMem();
+        });
       }).then(function (hasConn) {
         if (hasConn) {
           return true;
         }
-        return paloPullDocumentSettingsIntoMemSync();
+        if (paloPullDocumentSettingsIntoMemSync()) {
+          return true;
+        }
+        return paloPullWorkbookConfigIntoMemAsync();
       }).then(function (hasConn) {
         if (hasConn && paloHasTaskpaneLocalStorage()) {
           return paloPushMemToDocumentSettingsAsync().then(function () {
+            return paloPushMemToWorkbookConfigAsync();
+          }).then(function () {
             return true;
           });
         }
@@ -407,6 +508,8 @@
     paloHydrateMemFromTaskpaneLocalStorage();
     return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
       return paloPushMemToDocumentSettingsAsync();
+    }).then(function () {
+      return paloPushMemToWorkbookConfigAsync();
     });
   }
 
@@ -431,6 +534,7 @@
       "taskpaneLs=" + (paloHasTaskpaneLocalStorage() ? "oui" : "non"),
       "ort=" + (ort ? "oui" : "non"),
       "docSet=" + (paloDocumentSettingsAvailable() ? "oui" : "non"),
+      "excelApi=" + (paloExcelApiAvailable() ? "oui" : "non"),
       "conn=" + String(connCount),
       "active=" + String(active)
     ].join(" ");
@@ -2448,6 +2552,9 @@
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
   paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
+  paloGlobal.PaloOffice.paloPullWorkbookConfigIntoMemAsync = paloPullWorkbookConfigIntoMemAsync;
+  paloGlobal.PaloOffice.paloPushMemToWorkbookConfigAsync = paloPushMemToWorkbookConfigAsync;
+  paloGlobal.PaloOffice.paloExcelApiAvailable = paloExcelApiAvailable;
   paloGlobal.PaloOffice.paloStorageDiagSync = paloStorageDiagSync;
   paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
@@ -2465,7 +2572,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.27";
+var PALO_ASSET_VERSION = "1.0.2.28";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2695,7 +2802,15 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
     var po = paloGlobalRef().PaloOffice;
     if (connectionManager.listConnections().length === 0 && po) {
-      if (typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
+      if (typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
+        try {
+          await po.paloPullWorkbookConfigIntoMemAsync();
+        } catch (_wb) {
+          // ignore
+        }
+      }
+      if (connectionManager.listConnections().length === 0
+        && typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
         po.paloPullDocumentSettingsIntoMemSync();
       }
       if (connectionManager.listConnections().length === 0
@@ -2705,8 +2820,12 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         } catch (_reload) {
           // ignore
         }
-        if (typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
-          po.paloPullDocumentSettingsIntoMemSync();
+        if (typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
+          try {
+            await po.paloPullWorkbookConfigIntoMemAsync();
+          } catch (_wb2) {
+            // ignore
+          }
         }
       }
     }
@@ -2792,6 +2911,26 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     } catch (err) {
       return "RUNTIME_DIAG_ERROR " + (err && err.message ? err.message : String(err));
     }
+  }
+
+  /** Diagnostic stockage async (lit la feuille _PaloOffice si Excel.run disponible). */
+  async function STORAGE_DIAG() {
+    var g = paloGlobalRef();
+    var po = g.PaloOffice;
+    var parts = [RUNTIME_DIAG()];
+    if (po && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
+      var wbOk = false;
+      try {
+        wbOk = await po.paloPullWorkbookConfigIntoMemAsync();
+      } catch (_wb) {
+        wbOk = false;
+      }
+      parts.push("wbPull=" + (wbOk ? "oui" : "non"));
+    }
+    if (po && typeof po.paloStorageDiagSync === "function") {
+      parts.push(po.paloStorageDiagSync());
+    }
+    return parts.join(" ");
   }
 
   /**
@@ -3364,7 +3503,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.27+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.28+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
@@ -3908,6 +4047,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
     CustomFunctions.associate("ADD", ADD);
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
+    CustomFunctions.associate("STORAGE_DIAG", STORAGE_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
     CustomFunctions.associate("DATAN", DATAN);
     CustomFunctions.associate("DATAP", DATAP);

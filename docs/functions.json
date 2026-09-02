@@ -558,6 +558,16 @@
       "parameters": []
     },
     {
+      "id": "STORAGE_DIAG",
+      "name": "STORAGE_DIAG",
+      "description": "Diagnostic stockage connexions Palo (document.settings, feuille _PaloOffice, OfficeRuntime.storage).",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "parameters": []
+    },
+    {
       "id": "ENAME",
       "name": "ENAME",
       "description": "Nom d'affichage d'un element (API element/info et dimensions par nom). Exactement 3 arguments utiles: servdb; dimension; elementName. Arguments supplementaires ignores.",
