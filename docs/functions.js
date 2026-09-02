@@ -241,6 +241,93 @@
     ]);
   }
 
+  function paloAwaitOfficeReadyAsync() {
+    return new Promise(function (resolve) {
+      try {
+        if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
+          Office.onReady(function () {
+            resolve();
+          });
+          return;
+        }
+      } catch (_ready) {
+      }
+      resolve();
+    });
+  }
+
+  function paloStorageHasConnectionsInMem() {
+    return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+  }
+
+  function paloLoadStorageIntoMemAsync() {
+    var storageTimeoutMs = 8000;
+    paloHydrateMemFromBrowsingContexts();
+    if (paloPullDocumentSettingsIntoMemSync()) {
+      return Promise.resolve(true);
+    }
+    return paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
+        return paloPullOfficeRuntimeStorageIntoMem();
+      });
+    }).then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      if (paloPullDocumentSettingsIntoMemSync()) {
+        return true;
+      }
+      return paloPullWorkbookConfigIntoMemAsync();
+    }).then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      paloHydrateMemFromBrowsingContexts();
+      return paloStorageHasConnectionsInMem();
+    }).then(function (hasConn) {
+      if (hasConn && paloHasTaskpaneLocalStorage()) {
+        return paloPushMemToDocumentSettingsAsync().then(function () {
+          return paloPushMemToWorkbookConfigAsync();
+        }).then(function () {
+          return true;
+        });
+      }
+      return hasConn;
+    }).then(function (hasConn) {
+      return paloPromiseWithTimeout(
+        Promise.resolve(hasConn),
+        storageTimeoutMs,
+        "Palo storage load"
+      ).catch(function () {
+        return paloStorageHasConnectionsInMem();
+      });
+    });
+  }
+
+  function paloEnsureStorageReady(forceReload) {
+    if (forceReload) {
+      paloStorageReadyPromise = null;
+    }
+    if (paloStorageReadyPromise) {
+      return paloStorageReadyPromise;
+    }
+    paloStorageReadyPromise = paloAwaitOfficeReadyAsync().then(function () {
+      return paloLoadStorageIntoMemAsync();
+    }).then(function (hasConn) {
+      if (!hasConn) {
+        paloStorageReadyPromise = null;
+      }
+      return hasConn;
+    }).catch(function () {
+      paloStorageReadyPromise = null;
+      return false;
+    });
+    return paloStorageReadyPromise;
+  }
+
   function paloStorageKeysList() {
     return [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
   }
@@ -513,55 +600,6 @@
       .catch(function () {
         return pushed;
       });
-  }
-
-  function paloEnsureStorageReady(forceReload) {
-    if (forceReload) {
-      paloStorageReadyPromise = null;
-    }
-    if (paloStorageReadyPromise) {
-      return paloStorageReadyPromise;
-    }
-    paloStorageReadyPromise = new Promise(function (resolve) {
-      var storageTimeoutMs = 8000;
-      function finish() {
-        resolve();
-      }
-      paloHydrateMemFromBrowsingContexts();
-      if (paloPullDocumentSettingsIntoMemSync()) {
-        finish();
-        return;
-      }
-      var loadTask = paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
-        if (hasConn) {
-          return true;
-        }
-        return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-          return paloPullOfficeRuntimeStorageIntoMem();
-        });
-      }).then(function (hasConn) {
-        if (hasConn) {
-          return true;
-        }
-        if (paloPullDocumentSettingsIntoMemSync()) {
-          return true;
-        }
-        return paloPullWorkbookConfigIntoMemAsync();
-      }).then(function (hasConn) {
-        if (hasConn && paloHasTaskpaneLocalStorage()) {
-          return paloPushMemToDocumentSettingsAsync().then(function () {
-            return paloPushMemToWorkbookConfigAsync();
-          }).then(function () {
-            return true;
-          });
-        }
-        return hasConn;
-      });
-      paloPromiseWithTimeout(loadTask, storageTimeoutMs, "Palo storage load")
-        .then(finish)
-        .catch(finish);
-    });
-    return paloStorageReadyPromise;
   }
 
   function paloReloadOfficeRuntimeStorage() {
@@ -2616,6 +2654,7 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloAwaitOfficeReadyAsync = paloAwaitOfficeReadyAsync;
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
   paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
@@ -2640,7 +2679,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.30";
+var PALO_ASSET_VERSION = "1.0.2.31";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -2758,12 +2797,23 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       return;
     }
     var po = paloGlobalRef().PaloOffice;
-    if (po && typeof po.paloEnsureStorageReady === "function") {
-      po.paloEnsureStorageReady().catch(function () {
-        // ignore
-      });
+    function warmAfterReady() {
+      if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+        po.paloReloadOfficeRuntimeStorage().catch(function () {
+          // ignore
+        });
+      } else if (po && typeof po.paloEnsureStorageReady === "function") {
+        po.paloEnsureStorageReady(true).catch(function () {
+          // ignore
+        });
+      }
+      paloWarmActiveSessionAfterGrace();
     }
-    paloWarmActiveSessionAfterGrace();
+    if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
+      Office.onReady(warmAfterReady);
+    } else {
+      warmAfterReady();
+    }
   }
 
   function resolveAfterStorageReady(resolve) {
@@ -2990,6 +3040,27 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     var g = paloGlobalRef();
     var po = g.PaloOffice;
     var parts = [RUNTIME_DIAG()];
+    if (po && typeof po.paloAwaitOfficeReadyAsync === "function") {
+      try {
+        await po.paloAwaitOfficeReadyAsync();
+        parts.push("onReady=oui");
+      } catch (_ready) {
+        parts.push("onReady=err");
+      }
+    }
+    if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+      try {
+        await po.paloReloadOfficeRuntimeStorage();
+      } catch (_reload) {
+        // ignore
+      }
+    } else if (po && typeof po.paloEnsureStorageReady === "function") {
+      try {
+        await po.paloEnsureStorageReady(true);
+      } catch (_ensure) {
+        // ignore
+      }
+    }
     if (po && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
       var wbOk = false;
       try {

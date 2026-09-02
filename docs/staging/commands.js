@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.2.30";
+  var PALO_PLUGIN_VERSION = "1.0.2.31";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {
@@ -46,7 +46,7 @@
         notifyUrl.searchParams.set("m", text);
         notifyHref = notifyUrl.href;
       } catch (_urlErr) {
-        notifyHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-action-notify.html?t="
+        notifyHref = "https://gpizzetta.github.io/palo-excel-addin/palo-action-notify.html?t="
           + encodeURIComponent(heading) + "&m=" + encodeURIComponent(text);
       }
       Office.context.ui.displayDialogAsync(
@@ -785,7 +785,7 @@
         confirmHref = new URL("palo-snapshot-confirm.html", window.location.href).href;
         confirmHref += (confirmHref.indexOf("?") >= 0 ? "&" : "?") + "mode=" + dialogMode;
       } catch (_urlErr) {
-        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/staging/palo-snapshot-confirm.html?mode=" + dialogMode;
+        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/palo-snapshot-confirm.html?mode=" + dialogMode;
       }
       Office.context.ui.displayDialogAsync(
         confirmHref,

@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.30";
+var PALO_ASSET_VERSION = "1.0.2.31";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -119,12 +119,23 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       return;
     }
     var po = paloGlobalRef().PaloOffice;
-    if (po && typeof po.paloEnsureStorageReady === "function") {
-      po.paloEnsureStorageReady().catch(function () {
-        // ignore
-      });
+    function warmAfterReady() {
+      if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+        po.paloReloadOfficeRuntimeStorage().catch(function () {
+          // ignore
+        });
+      } else if (po && typeof po.paloEnsureStorageReady === "function") {
+        po.paloEnsureStorageReady(true).catch(function () {
+          // ignore
+        });
+      }
+      paloWarmActiveSessionAfterGrace();
     }
-    paloWarmActiveSessionAfterGrace();
+    if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
+      Office.onReady(warmAfterReady);
+    } else {
+      warmAfterReady();
+    }
   }
 
   function resolveAfterStorageReady(resolve) {
@@ -351,6 +362,27 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     var g = paloGlobalRef();
     var po = g.PaloOffice;
     var parts = [RUNTIME_DIAG()];
+    if (po && typeof po.paloAwaitOfficeReadyAsync === "function") {
+      try {
+        await po.paloAwaitOfficeReadyAsync();
+        parts.push("onReady=oui");
+      } catch (_ready) {
+        parts.push("onReady=err");
+      }
+    }
+    if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+      try {
+        await po.paloReloadOfficeRuntimeStorage();
+      } catch (_reload) {
+        // ignore
+      }
+    } else if (po && typeof po.paloEnsureStorageReady === "function") {
+      try {
+        await po.paloEnsureStorageReady(true);
+      } catch (_ensure) {
+        // ignore
+      }
+    }
     if (po && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
       var wbOk = false;
       try {

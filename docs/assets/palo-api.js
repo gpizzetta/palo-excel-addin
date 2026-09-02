@@ -141,6 +141,93 @@
     ]);
   }
 
+  function paloAwaitOfficeReadyAsync() {
+    return new Promise(function (resolve) {
+      try {
+        if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
+          Office.onReady(function () {
+            resolve();
+          });
+          return;
+        }
+      } catch (_ready) {
+      }
+      resolve();
+    });
+  }
+
+  function paloStorageHasConnectionsInMem() {
+    return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+  }
+
+  function paloLoadStorageIntoMemAsync() {
+    var storageTimeoutMs = 8000;
+    paloHydrateMemFromBrowsingContexts();
+    if (paloPullDocumentSettingsIntoMemSync()) {
+      return Promise.resolve(true);
+    }
+    return paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
+        return paloPullOfficeRuntimeStorageIntoMem();
+      });
+    }).then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      if (paloPullDocumentSettingsIntoMemSync()) {
+        return true;
+      }
+      return paloPullWorkbookConfigIntoMemAsync();
+    }).then(function (hasConn) {
+      if (hasConn) {
+        return true;
+      }
+      paloHydrateMemFromBrowsingContexts();
+      return paloStorageHasConnectionsInMem();
+    }).then(function (hasConn) {
+      if (hasConn && paloHasTaskpaneLocalStorage()) {
+        return paloPushMemToDocumentSettingsAsync().then(function () {
+          return paloPushMemToWorkbookConfigAsync();
+        }).then(function () {
+          return true;
+        });
+      }
+      return hasConn;
+    }).then(function (hasConn) {
+      return paloPromiseWithTimeout(
+        Promise.resolve(hasConn),
+        storageTimeoutMs,
+        "Palo storage load"
+      ).catch(function () {
+        return paloStorageHasConnectionsInMem();
+      });
+    });
+  }
+
+  function paloEnsureStorageReady(forceReload) {
+    if (forceReload) {
+      paloStorageReadyPromise = null;
+    }
+    if (paloStorageReadyPromise) {
+      return paloStorageReadyPromise;
+    }
+    paloStorageReadyPromise = paloAwaitOfficeReadyAsync().then(function () {
+      return paloLoadStorageIntoMemAsync();
+    }).then(function (hasConn) {
+      if (!hasConn) {
+        paloStorageReadyPromise = null;
+      }
+      return hasConn;
+    }).catch(function () {
+      paloStorageReadyPromise = null;
+      return false;
+    });
+    return paloStorageReadyPromise;
+  }
+
   function paloStorageKeysList() {
     return [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
   }
@@ -413,55 +500,6 @@
       .catch(function () {
         return pushed;
       });
-  }
-
-  function paloEnsureStorageReady(forceReload) {
-    if (forceReload) {
-      paloStorageReadyPromise = null;
-    }
-    if (paloStorageReadyPromise) {
-      return paloStorageReadyPromise;
-    }
-    paloStorageReadyPromise = new Promise(function (resolve) {
-      var storageTimeoutMs = 8000;
-      function finish() {
-        resolve();
-      }
-      paloHydrateMemFromBrowsingContexts();
-      if (paloPullDocumentSettingsIntoMemSync()) {
-        finish();
-        return;
-      }
-      var loadTask = paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
-        if (hasConn) {
-          return true;
-        }
-        return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-          return paloPullOfficeRuntimeStorageIntoMem();
-        });
-      }).then(function (hasConn) {
-        if (hasConn) {
-          return true;
-        }
-        if (paloPullDocumentSettingsIntoMemSync()) {
-          return true;
-        }
-        return paloPullWorkbookConfigIntoMemAsync();
-      }).then(function (hasConn) {
-        if (hasConn && paloHasTaskpaneLocalStorage()) {
-          return paloPushMemToDocumentSettingsAsync().then(function () {
-            return paloPushMemToWorkbookConfigAsync();
-          }).then(function () {
-            return true;
-          });
-        }
-        return hasConn;
-      });
-      paloPromiseWithTimeout(loadTask, storageTimeoutMs, "Palo storage load")
-        .then(finish)
-        .catch(finish);
-    });
-    return paloStorageReadyPromise;
   }
 
   function paloReloadOfficeRuntimeStorage() {
@@ -2516,6 +2554,7 @@
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
   paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
+  paloGlobal.PaloOffice.paloAwaitOfficeReadyAsync = paloAwaitOfficeReadyAsync;
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
   paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
