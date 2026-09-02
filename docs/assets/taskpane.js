@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.28";
+  var PLUGIN_VERSION = "1.0.2.29";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 

@@ -2572,7 +2572,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.28";
+var PALO_ASSET_VERSION = "1.0.2.29";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -3503,7 +3503,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.28+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.29+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
