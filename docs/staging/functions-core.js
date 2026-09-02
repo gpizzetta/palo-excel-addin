@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.26";
+var PALO_ASSET_VERSION = "1.0.2.27";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -230,13 +230,20 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       connectionManager = paloGlobalRef().PaloOffice.createConnectionManager();
     }
     var po = paloGlobalRef().PaloOffice;
-    if (connectionManager.listConnections().length === 0
-      && po
-      && typeof po.paloReloadOfficeRuntimeStorage === "function") {
-      try {
-        await po.paloReloadOfficeRuntimeStorage();
-      } catch (_reload) {
-        // ignore
+    if (connectionManager.listConnections().length === 0 && po) {
+      if (typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
+        po.paloPullDocumentSettingsIntoMemSync();
+      }
+      if (connectionManager.listConnections().length === 0
+        && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+        try {
+          await po.paloReloadOfficeRuntimeStorage();
+        } catch (_reload) {
+          // ignore
+        }
+        if (typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
+          po.paloPullDocumentSettingsIntoMemSync();
+        }
       }
     }
     return connectionManager;
@@ -893,7 +900,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.26+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.27+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {

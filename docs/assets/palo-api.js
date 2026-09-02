@@ -138,6 +138,79 @@
     return [PALO_CONNECTIONS_STORAGE_KEY, PALO_ACTIVE_STORAGE_KEY, PALO_TRACE_STORAGE_KEY];
   }
 
+  function paloDocumentSettingsAvailable() {
+    try {
+      return typeof Office !== "undefined"
+        && Office.context
+        && Office.context.document
+        && Office.context.document.settings
+        && typeof Office.context.document.settings.get === "function";
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  function paloHydrateMemFromTaskpaneLocalStorage() {
+    if (!paloHasTaskpaneLocalStorage()) {
+      return;
+    }
+    paloStorageKeysList().forEach(function (k) {
+      try {
+        var v = window.localStorage.getItem(k);
+        if (v != null) {
+          paloStorageMem[k] = v;
+        }
+      } catch (_e) {
+      }
+    });
+  }
+
+  /** Pont Desktop : OfficeRuntime.storage n'est pas partage entre volet et formules. */
+  function paloPullDocumentSettingsIntoMemSync() {
+    if (!paloDocumentSettingsAvailable()) {
+      return false;
+    }
+    paloStorageKeysList().forEach(function (k) {
+      try {
+        var v = Office.context.document.settings.get(k);
+        if (v != null && v !== "") {
+          paloStorageMem[k] = v;
+        }
+      } catch (_e) {
+      }
+    });
+    return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+  }
+
+  function paloPushMemToDocumentSettingsAsync() {
+    if (!paloDocumentSettingsAvailable()) {
+      return Promise.resolve(false);
+    }
+    var settings = Office.context.document.settings;
+    var wrote = false;
+    paloStorageKeysList().forEach(function (k) {
+      if (Object.prototype.hasOwnProperty.call(paloStorageMem, k) && paloStorageMem[k] != null && paloStorageMem[k] !== "") {
+        try {
+          settings.set(k, paloStorageMem[k]);
+          wrote = true;
+        } catch (_e) {
+        }
+      }
+    });
+    if (!wrote) {
+      return Promise.resolve(false);
+    }
+    return new Promise(function (resolve) {
+      try {
+        settings.saveAsync(function (result) {
+          resolve(Boolean(result && result.status === Office.AsyncResultStatus.Succeeded));
+        });
+      } catch (_e) {
+        resolve(false);
+      }
+    });
+  }
+
   function paloPullOfficeRuntimeStorageIntoMem() {
     var ort = paloOfficeRuntimeStorage();
     if (!ort || typeof ort.getItem !== "function") {
@@ -198,11 +271,27 @@
       function finish() {
         resolve();
       }
-      var pushTask = paloPushTaskpaneLocalStorageToOfficeRuntime();
-      var pullTask = pushTask.then(function () {
+      paloHydrateMemFromTaskpaneLocalStorage();
+      if (paloPullDocumentSettingsIntoMemSync()) {
+        finish();
+        return;
+      }
+      var loadTask = paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
         return paloPullOfficeRuntimeStorageIntoMem();
+      }).then(function (hasConn) {
+        if (hasConn) {
+          return true;
+        }
+        return paloPullDocumentSettingsIntoMemSync();
+      }).then(function (hasConn) {
+        if (hasConn && paloHasTaskpaneLocalStorage()) {
+          return paloPushMemToDocumentSettingsAsync().then(function () {
+            return true;
+          });
+        }
+        return hasConn;
       });
-      paloPromiseWithTimeout(pullTask, storageTimeoutMs, "OfficeRuntime.storage load")
+      paloPromiseWithTimeout(loadTask, storageTimeoutMs, "Palo storage load")
         .then(finish)
         .catch(finish);
     });
@@ -215,12 +304,16 @@
   }
 
   function paloFlushStorageToOfficeRuntime() {
+    paloHydrateMemFromTaskpaneLocalStorage();
     return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-      return paloPullOfficeRuntimeStorageIntoMem();
+      return paloPushMemToDocumentSettingsAsync();
     });
   }
 
   function paloStorageDiagSync() {
+    if (!paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]) {
+      paloPullDocumentSettingsIntoMemSync();
+    }
     var ort = paloOfficeRuntimeStorage();
     var connRaw = paloStorageGetItem(PALO_CONNECTIONS_STORAGE_KEY);
     var active = paloStorageGetItem(PALO_ACTIVE_STORAGE_KEY) || "(aucune)";
@@ -237,6 +330,7 @@
     return [
       "taskpaneLs=" + (paloHasTaskpaneLocalStorage() ? "oui" : "non"),
       "ort=" + (ort ? "oui" : "non"),
+      "docSet=" + (paloDocumentSettingsAvailable() ? "oui" : "non"),
       "conn=" + String(connCount),
       "active=" + String(active)
     ].join(" ");
@@ -2253,6 +2347,7 @@
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
+  paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
   paloGlobal.PaloOffice.paloStorageDiagSync = paloStorageDiagSync;
   paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
