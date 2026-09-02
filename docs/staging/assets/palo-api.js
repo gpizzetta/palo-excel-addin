@@ -87,6 +87,12 @@
         }
       } catch (_e) {
       }
+    } else {
+      var fromTop = paloReadLocalStorageFromBrowsingContexts(key);
+      if (fromTop != null) {
+        paloStorageMem[key] = fromTop;
+        return fromTop;
+      }
     }
     if (Object.prototype.hasOwnProperty.call(paloStorageMem, key)) {
       return paloStorageMem[key];
@@ -152,18 +158,77 @@
   }
 
   function paloHydrateMemFromTaskpaneLocalStorage() {
-    if (!paloHasTaskpaneLocalStorage()) {
-      return;
+    if (paloHasTaskpaneLocalStorage()) {
+      paloStorageKeysList().forEach(function (k) {
+        try {
+          var v = window.localStorage.getItem(k);
+          if (v != null) {
+            paloStorageMem[k] = v;
+          }
+        } catch (_e) {
+        }
+      });
     }
-    paloStorageKeysList().forEach(function (k) {
+  }
+
+  /** Runtime CF Desktop (document=non) : lire localStorage du volet parent (shared runtime). */
+  function paloReadLocalStorageFromBrowsingContexts(key) {
+    var seen = [];
+    function tryWindow(w) {
+      if (!w || seen.indexOf(w) >= 0) {
+        return null;
+      }
+      seen.push(w);
       try {
-        var v = window.localStorage.getItem(k);
-        if (v != null) {
-          paloStorageMem[k] = v;
+        var ls = w.localStorage;
+        if (ls && typeof ls.getItem === "function") {
+          var v = ls.getItem(key);
+          if (v != null) {
+            return v;
+          }
         }
       } catch (_e) {
       }
+      return null;
+    }
+    var v = null;
+    try {
+      if (typeof window !== "undefined") {
+        if (window.top) {
+          v = tryWindow(window.top);
+        }
+        if (v == null && window.parent) {
+          v = tryWindow(window.parent);
+        }
+        if (v == null) {
+          v = tryWindow(window);
+        }
+      }
+    } catch (_browse) {
+    }
+    return v;
+  }
+
+  function paloHydrateMemFromBrowsingContexts() {
+    paloHydrateMemFromTaskpaneLocalStorage();
+    if (paloHasTaskpaneLocalStorage()) {
+      return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+    }
+    var loaded = false;
+    paloStorageKeysList().forEach(function (k) {
+      var v = paloReadLocalStorageFromBrowsingContexts(k);
+      if (v != null) {
+        paloStorageMem[k] = v;
+        if (k === PALO_CONNECTIONS_STORAGE_KEY) {
+          loaded = true;
+        }
+      }
     });
+    return loaded;
+  }
+
+  function paloTopLocalStorageHasConnections() {
+    return Boolean(paloReadLocalStorageFromBrowsingContexts(PALO_CONNECTIONS_STORAGE_KEY));
   }
 
   /** Pont Desktop : OfficeRuntime.storage n'est pas partage entre volet et formules. */
@@ -362,7 +427,7 @@
       function finish() {
         resolve();
       }
-      paloHydrateMemFromTaskpaneLocalStorage();
+      paloHydrateMemFromBrowsingContexts();
       if (paloPullDocumentSettingsIntoMemSync()) {
         finish();
         return;
@@ -405,7 +470,7 @@
   }
 
   function paloFlushStorageToOfficeRuntime() {
-    paloHydrateMemFromTaskpaneLocalStorage();
+    paloHydrateMemFromBrowsingContexts();
     return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
       return paloPushMemToDocumentSettingsAsync();
     }).then(function () {
@@ -415,6 +480,7 @@
 
   function paloStorageDiagSync() {
     if (!paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]) {
+      paloHydrateMemFromBrowsingContexts();
       paloPullDocumentSettingsIntoMemSync();
     }
     var ort = paloOfficeRuntimeStorage();
@@ -432,6 +498,7 @@
     }
     return [
       "taskpaneLs=" + (paloHasTaskpaneLocalStorage() ? "oui" : "non"),
+      "topLs=" + (paloTopLocalStorageHasConnections() ? "oui" : "non"),
       "ort=" + (ort ? "oui" : "non"),
       "docSet=" + (paloDocumentSettingsAvailable() ? "oui" : "non"),
       "excelApi=" + (paloExcelApiAvailable() ? "oui" : "non"),
@@ -2452,6 +2519,7 @@
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
   paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
+  paloGlobal.PaloOffice.paloHydrateMemFromBrowsingContexts = paloHydrateMemFromBrowsingContexts;
   paloGlobal.PaloOffice.paloPullWorkbookConfigIntoMemAsync = paloPullWorkbookConfigIntoMemAsync;
   paloGlobal.PaloOffice.paloPushMemToWorkbookConfigAsync = paloPushMemToWorkbookConfigAsync;
   paloGlobal.PaloOffice.paloExcelApiAvailable = paloExcelApiAvailable;

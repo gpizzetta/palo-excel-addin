@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.29";
+var PALO_ASSET_VERSION = "1.0.2.30";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -231,7 +231,11 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
     var po = paloGlobalRef().PaloOffice;
     if (connectionManager.listConnections().length === 0 && po) {
-      if (typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
+      if (typeof po.paloHydrateMemFromBrowsingContexts === "function") {
+        po.paloHydrateMemFromBrowsingContexts();
+      }
+      if (connectionManager.listConnections().length === 0
+        && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
         try {
           await po.paloPullWorkbookConfigIntoMemAsync();
         } catch (_wb) {
@@ -355,6 +359,9 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         wbOk = false;
       }
       parts.push("wbPull=" + (wbOk ? "oui" : "non"));
+    }
+    if (po && typeof po.paloHydrateMemFromBrowsingContexts === "function") {
+      po.paloHydrateMemFromBrowsingContexts();
     }
     if (po && typeof po.paloStorageDiagSync === "function") {
       parts.push(po.paloStorageDiagSync());
@@ -597,6 +604,21 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     } catch (_host) {
       return false;
     }
+  }
+
+  /** Excel Online : name_path. Excel Desktop CF (document=non) : chemin 1.0.2.6 (id + batch). */
+  function paloPreferNamePathDatac() {
+    try {
+      if (typeof Office !== "undefined" && Office.context && Office.context.platform != null) {
+        var platform = Office.context.platform;
+        if (typeof Office.PlatformType !== "undefined") {
+          return platform === Office.PlatformType.OfficeOnline;
+        }
+        return String(platform).toLowerCase().indexOf("online") !== -1;
+      }
+    } catch (_platform) {
+    }
+    return false;
   }
 
   function paloBuildNamePathFromCoords(coordinates, cubeName) {
@@ -851,10 +873,13 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         coordinates: coordinates.map(function (coord) {
           return String(coerceExcelScalarArg(coord));
         }),
-        mode: "name_path"
+        mode: paloPreferNamePathDatac() ? "name_path" : "id_path"
       });
       var value;
-      if (paloIsCfExcelHost()) {
+      var coordsScalar = coordinates.map(function (coord) {
+        return String(coerceExcelScalarArg(coord));
+      });
+      if (paloPreferNamePathDatac() && paloIsCfExcelHost()) {
         var pathResolved = paloResolveNamePathFromCfArgs(cfArgs, 2);
         if (!pathResolved.ok) {
           return "#PALO! " + pathResolved.error;
@@ -872,12 +897,10 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
           context.database,
           cubeName,
           "",
-          coordinates,
+          coordsScalar,
           {
             requestId: requestId,
-            coordinates: coordinates.map(function (coord) {
-              return String(coerceExcelScalarArg(coord));
-            })
+            coordinates: coordsScalar
           }
         );
       }
@@ -932,7 +955,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Wrapper BETA (v1.0.2.29+) : meme signature que DATAC, canal staging uniquement. */
+  /** Wrapper BETA (v1.0.2.30+) : meme signature que DATAC, canal staging uniquement. */
   async function DATAN(servdb, cubeName) {
     try {
       traceDatac("datan-beta", {
