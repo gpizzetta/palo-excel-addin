@@ -560,7 +560,7 @@
     {
       "id": "STORAGE_DIAG",
       "name": "STORAGE_DIAG",
-      "description": "Diagnostic stockage connexions Palo (document.settings, feuille _PaloOffice, OfficeRuntime.storage).",
+      "description": "Diagnostic stockage : Web=localStorage, Desktop CF=OfficeRuntime.storage (ortPull).",
       "result": {
         "type": "string",
         "dimensionality": "scalar"

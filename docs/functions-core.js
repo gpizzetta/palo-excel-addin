@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.34";
+var PALO_ASSET_VERSION = "1.0.2.35";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -119,15 +119,10 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       return;
     }
     var po = paloGlobalRef().PaloOffice;
+    // Desktop : charger ORT apres register (onReady peut timeout — gere dans palo-api).
     function warmAfterReady() {
-      if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
-        po.paloReloadOfficeRuntimeStorage().catch(function () {
-          // ignore
-        });
-      } else if (po && typeof po.paloEnsureStorageReady === "function") {
-        po.paloEnsureStorageReady(true).catch(function () {
-          // ignore
-        });
+      if (po && typeof po.paloEnsureStorageReady === "function") {
+        po.paloEnsureStorageReady(true).catch(function () {});
       }
       paloWarmActiveSessionAfterGrace();
     }
@@ -241,26 +236,13 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       connectionManager = paloGlobalRef().PaloOffice.createConnectionManager();
     }
     var po = paloGlobalRef().PaloOffice;
-    // Ponts Desktop (feuille / settings / reload lourd) : seulement si pas de LS
-    // local (runtime CF isole). Sur Excel Online, LS suffit — eviter Excel.run en masse.
-    if (connectionManager.listConnections().length === 0 && po) {
-      if (typeof po.paloHydrateMemFromBrowsingContexts === "function") {
-        po.paloHydrateMemFromBrowsingContexts();
-      }
-      var needsDesktopBridge = typeof document === "undefined" || !document;
-      if (connectionManager.listConnections().length === 0
-        && needsDesktopBridge
-        && typeof po.paloReloadOfficeRuntimeStorage === "function") {
-        try {
-          await po.paloReloadOfficeRuntimeStorage();
-        } catch (_reload) {
-          // ignore
-        }
-      }
-      if (connectionManager.listConnections().length === 0
-        && needsDesktopBridge
-        && typeof po.paloPullDocumentSettingsIntoMemSync === "function") {
-        po.paloPullDocumentSettingsIntoMemSync();
+    // Desktop CF : si LS vide, recharger depuis OfficeRuntime.storage.
+    if (connectionManager.listConnections().length === 0 && po
+      && typeof po.paloReloadOfficeRuntimeStorage === "function") {
+      try {
+        await po.paloReloadOfficeRuntimeStorage();
+      } catch (_reload) {
+        // ignore
       }
     }
     return connectionManager;
@@ -347,15 +329,18 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Diagnostic stockage async (test A : winLs / ortPull). Timeouts : evite #BUSY! Desktop. */
+  /**
+   * Diagnostic stockage.
+   * Desktop attendu : channel=desktop/ort ort=oui ortPull=oui conn>=1
+   * Web attendu : channel=web/ls ls=oui conn>=1
+   */
   async function STORAGE_DIAG() {
     var g = paloGlobalRef();
     var po = g.PaloOffice;
     var parts = [RUNTIME_DIAG()];
     if (po && typeof po.paloAwaitOfficeReadyAsync === "function") {
       try {
-        var readyFlag = await po.paloAwaitOfficeReadyAsync(1500);
-        parts.push("onReady=" + String(readyFlag || "oui"));
+        parts.push("onReady=" + String(await po.paloAwaitOfficeReadyAsync(1500)));
       } catch (_ready) {
         parts.push("onReady=err");
       }
@@ -368,24 +353,6 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         ortPull = false;
       }
       parts.push("ortPull=" + (ortPull ? "oui" : "non"));
-    }
-    if (po && typeof po.paloExcelApiAvailable === "function" && po.paloExcelApiAvailable()
-      && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
-      var wbOk = false;
-      try {
-        wbOk = await po.paloPullWorkbookConfigIntoMemAsync();
-      } catch (_wb) {
-        wbOk = false;
-      }
-      parts.push("wbPull=" + (wbOk ? "oui" : "non"));
-    } else {
-      parts.push("wbPull=skip");
-    }
-    if (po && typeof po.paloHydrateMemFromBrowsingContexts === "function") {
-      try {
-        po.paloHydrateMemFromBrowsingContexts();
-      } catch (_hyd) {
-      }
     }
     if (po && typeof po.paloStorageDiagSync === "function") {
       parts.push(po.paloStorageDiagSync());

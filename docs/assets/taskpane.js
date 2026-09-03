@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.2.34";
+  var PLUGIN_VERSION = "1.0.2.35";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -205,8 +205,7 @@
       flushStorageToOfficeRuntime().then(function (syncInfo) {
         var extra = "";
         if (syncInfo && typeof syncInfo === "object") {
-          extra = " [winLs=" + (syncInfo.winLs ? "oui" : "non")
-            + " ortPush=" + String(syncInfo.pushed || 0) + "]";
+          extra = " [ortPush=" + String(syncInfo.pushed || 0) + "]";
         }
         status("Connexion " + name + " enregistree." + extra + " Recalculez (Ctrl+Alt+F9).");
       }).catch(function () {
@@ -355,8 +354,7 @@
           flushStorageToOfficeRuntime().then(function (syncInfo) {
             var extra = "";
             if (syncInfo && typeof syncInfo === "object") {
-              extra = " [winLs=" + (syncInfo.winLs ? "oui" : "non")
-                + " ortPush=" + String(syncInfo.pushed || 0) + "]";
+              extra = " [ortPush=" + String(syncInfo.pushed || 0) + "]";
             }
             status("Connexion active: " + value + "." + extra + " Recalculez (Ctrl+Alt+F9).");
           }).catch(function () {
