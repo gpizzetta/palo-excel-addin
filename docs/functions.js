@@ -178,7 +178,8 @@
   }
 
   function paloStorageGetItem(key) {
-    if (paloHasTaskpaneLocalStorage()) {
+    // Pre-.26 / test A : lire window.localStorage meme sans document (CF Desktop).
+    if (paloHasLocalStorage()) {
       try {
         var fromLs = window.localStorage.getItem(key);
         if (fromLs != null) {
@@ -187,12 +188,11 @@
         }
       } catch (_e) {
       }
-    } else {
-      var fromTop = paloReadLocalStorageFromBrowsingContexts(key);
-      if (fromTop != null) {
-        paloStorageMem[key] = fromTop;
-        return fromTop;
-      }
+    }
+    var fromBrowse = paloReadLocalStorageFromBrowsingContexts(key);
+    if (fromBrowse != null) {
+      paloStorageMem[key] = fromBrowse;
+      return fromBrowse;
     }
     if (Object.prototype.hasOwnProperty.call(paloStorageMem, key)) {
       return paloStorageMem[key];
@@ -260,19 +260,59 @@
     return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
   }
 
+  function paloWindowLocalStorageHasConnections() {
+    if (!paloHasLocalStorage()) {
+      return false;
+    }
+    try {
+      return Boolean(window.localStorage.getItem(PALO_CONNECTIONS_STORAGE_KEY));
+    } catch (_e) {
+      return false;
+    }
+  }
+
+  /**
+   * Test A / modele pre-.26 :
+   * 1) window.localStorage (meme sans document) → mem + push ORT
+   * 2) si encore vide → pull OfficeRuntime.storage
+   * 3) secours : settings / feuille (no-op si APIs absentes)
+   */
   function paloLoadStorageIntoMemAsync() {
     var storageTimeoutMs = 8000;
-    paloHydrateMemFromBrowsingContexts();
-    if (paloPullDocumentSettingsIntoMemSync()) {
-      return Promise.resolve(true);
+    var keys = paloStorageKeysList();
+
+    function hydrateFromWindowLocalStorageAndPushOrt() {
+      if (!paloHasLocalStorage()) {
+        return Promise.resolve(false);
+      }
+      var ort = paloOfficeRuntimeStorage();
+      var syncTasks = keys.map(function (k) {
+        try {
+          var v = window.localStorage.getItem(k);
+          if (v != null) {
+            paloStorageMem[k] = v;
+            if (ort && typeof ort.setItem === "function") {
+              return Promise.resolve(ort.setItem(k, v)).catch(function () {});
+            }
+          }
+        } catch (_e) {
+        }
+        return Promise.resolve();
+      });
+      return Promise.all(syncTasks).then(function () {
+        return paloStorageHasConnectionsInMem();
+      });
     }
-    return paloPullWorkbookConfigIntoMemAsync().then(function (hasConn) {
+
+    var loadTask = hydrateFromWindowLocalStorageAndPushOrt().then(function (hasConn) {
       if (hasConn) {
         return true;
       }
-      return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-        return paloPullOfficeRuntimeStorageIntoMem();
-      });
+      paloHydrateMemFromBrowsingContexts();
+      if (paloStorageHasConnectionsInMem()) {
+        return true;
+      }
+      return paloPullOfficeRuntimeStorageIntoMem();
     }).then(function (hasConn) {
       if (hasConn) {
         return true;
@@ -282,12 +322,6 @@
       }
       return paloPullWorkbookConfigIntoMemAsync();
     }).then(function (hasConn) {
-      if (hasConn) {
-        return true;
-      }
-      paloHydrateMemFromBrowsingContexts();
-      return paloStorageHasConnectionsInMem();
-    }).then(function (hasConn) {
       if (hasConn && paloHasTaskpaneLocalStorage()) {
         return paloPushMemToDocumentSettingsAsync().then(function () {
           return paloPushMemToWorkbookConfigAsync();
@@ -296,15 +330,12 @@
         });
       }
       return hasConn;
-    }).then(function (hasConn) {
-      return paloPromiseWithTimeout(
-        Promise.resolve(hasConn),
-        storageTimeoutMs,
-        "Palo storage load"
-      ).catch(function () {
+    });
+
+    return paloPromiseWithTimeout(loadTask, storageTimeoutMs, "Palo storage load")
+      .catch(function () {
         return paloStorageHasConnectionsInMem();
       });
-    });
   }
 
   function paloEnsureStorageReady(forceReload) {
@@ -344,18 +375,24 @@
     }
   }
 
-  function paloHydrateMemFromTaskpaneLocalStorage() {
-    if (paloHasTaskpaneLocalStorage()) {
-      paloStorageKeysList().forEach(function (k) {
-        try {
-          var v = window.localStorage.getItem(k);
-          if (v != null) {
-            paloStorageMem[k] = v;
-          }
-        } catch (_e) {
-        }
-      });
+  function paloHydrateMemFromWindowLocalStorage() {
+    if (!paloHasLocalStorage()) {
+      return false;
     }
+    var loaded = false;
+    paloStorageKeysList().forEach(function (k) {
+      try {
+        var v = window.localStorage.getItem(k);
+        if (v != null) {
+          paloStorageMem[k] = v;
+          if (k === PALO_CONNECTIONS_STORAGE_KEY) {
+            loaded = true;
+          }
+        }
+      } catch (_e) {
+      }
+    });
+    return loaded;
   }
 
   /** Runtime CF Desktop (document=non) : lire localStorage du volet parent (shared runtime). */
@@ -397,9 +434,8 @@
   }
 
   function paloHydrateMemFromBrowsingContexts() {
-    paloHydrateMemFromTaskpaneLocalStorage();
-    if (paloHasTaskpaneLocalStorage()) {
-      return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+    if (paloHydrateMemFromWindowLocalStorage()) {
+      return true;
     }
     var loaded = false;
     paloStorageKeysList().forEach(function (k) {
@@ -572,7 +608,8 @@
 
   function paloPushTaskpaneLocalStorageToOfficeRuntime() {
     var ort = paloOfficeRuntimeStorage();
-    if (!paloHasTaskpaneLocalStorage() || !ort || typeof ort.setItem !== "function") {
+    // Test A : pousser des que window.localStorage existe (volet), sans exiger document.
+    if (!paloHasLocalStorage() || !ort || typeof ort.setItem !== "function") {
       return Promise.resolve(0);
     }
     var storageTimeoutMs = 8000;
@@ -609,10 +646,19 @@
 
   function paloFlushStorageToOfficeRuntime() {
     paloHydrateMemFromBrowsingContexts();
-    return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function () {
-      return paloPushMemToDocumentSettingsAsync();
-    }).then(function () {
-      return paloPushMemToWorkbookConfigAsync();
+    return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function (pushed) {
+      return paloPushMemToDocumentSettingsAsync().then(function (docOk) {
+        return paloPushMemToWorkbookConfigAsync().then(function (wbOk) {
+          return {
+            winLs: paloHasLocalStorage(),
+            winLsConn: paloWindowLocalStorageHasConnections(),
+            ort: Boolean(paloOfficeRuntimeStorage()),
+            pushed: pushed,
+            docSet: Boolean(docOk),
+            wb: Boolean(wbOk)
+          };
+        });
+      });
     });
   }
 
@@ -635,6 +681,8 @@
     } catch (_parse) {
     }
     return [
+      "winLs=" + (paloHasLocalStorage() ? "oui" : "non"),
+      "winLsConn=" + (paloWindowLocalStorageHasConnections() ? "oui" : "non"),
       "taskpaneLs=" + (paloHasTaskpaneLocalStorage() ? "oui" : "non"),
       "topLs=" + (paloTopLocalStorageHasConnections() ? "oui" : "non"),
       "ort=" + (ort ? "oui" : "non"),
@@ -2657,6 +2705,7 @@
   paloGlobal.PaloOffice.paloAwaitOfficeReadyAsync = paloAwaitOfficeReadyAsync;
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
   paloGlobal.PaloOffice.paloFlushStorageToOfficeRuntime = paloFlushStorageToOfficeRuntime;
+  paloGlobal.PaloOffice.paloPullOfficeRuntimeStorageIntoMem = paloPullOfficeRuntimeStorageIntoMem;
   paloGlobal.PaloOffice.paloPullDocumentSettingsIntoMemSync = paloPullDocumentSettingsIntoMemSync;
   paloGlobal.PaloOffice.paloHydrateMemFromBrowsingContexts = paloHydrateMemFromBrowsingContexts;
   paloGlobal.PaloOffice.paloPullWorkbookConfigIntoMemAsync = paloPullWorkbookConfigIntoMemAsync;
@@ -2679,7 +2728,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.31";
+var PALO_ASSET_VERSION = "1.0.2.32";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -3035,7 +3084,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Diagnostic stockage async (lit la feuille _PaloOffice si Excel.run disponible). */
+  /** Diagnostic stockage async (test A : winLs / ortPull). */
   async function STORAGE_DIAG() {
     var g = paloGlobalRef();
     var po = g.PaloOffice;
@@ -3060,6 +3109,15 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       } catch (_ensure) {
         // ignore
       }
+    }
+    if (po && typeof po.paloPullOfficeRuntimeStorageIntoMem === "function") {
+      var ortPull = false;
+      try {
+        ortPull = await po.paloPullOfficeRuntimeStorageIntoMem();
+      } catch (_ort) {
+        ortPull = false;
+      }
+      parts.push("ortPull=" + (ortPull ? "oui" : "non"));
     }
     if (po && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
       var wbOk = false;
