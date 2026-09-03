@@ -141,18 +141,30 @@
     ]);
   }
 
-  function paloAwaitOfficeReadyAsync() {
+  function paloAwaitOfficeReadyAsync(timeoutMs) {
+    var waitMs = timeoutMs == null ? 2000 : timeoutMs;
     return new Promise(function (resolve) {
+      var settled = false;
+      function done(flag) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(flag || "ready");
+      }
       try {
         if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
           Office.onReady(function () {
-            resolve();
+            done("oui");
           });
+          setTimeout(function () {
+            done("timeout");
+          }, waitMs);
           return;
         }
       } catch (_ready) {
       }
-      resolve();
+      done("skip");
     });
   }
 
@@ -495,13 +507,24 @@
     if (!ort || typeof ort.getItem !== "function") {
       return Promise.resolve(false);
     }
-    return Promise.all(paloStorageKeysList().map(function (k) {
-      return Promise.resolve(ort.getItem(k)).then(function (v) {
-        if (v != null && v !== "") {
-          paloStorageMem[k] = v;
-        }
-      }).catch(function () {});
-    })).then(function () {
+    var storageTimeoutMs = 3000;
+    return paloPromiseWithTimeout(
+      Promise.all(paloStorageKeysList().map(function (k) {
+        return paloPromiseWithTimeout(
+          Promise.resolve(ort.getItem(k)).then(function (v) {
+            if (v != null && v !== "") {
+              paloStorageMem[k] = v;
+            }
+          }).catch(function () {}),
+          storageTimeoutMs,
+          "OfficeRuntime.storage.getItem"
+        ).catch(function () {});
+      })),
+      storageTimeoutMs + 1000,
+      "OfficeRuntime.storage pull"
+    ).then(function () {
+      return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+    }).catch(function () {
       return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
     });
   }

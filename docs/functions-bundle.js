@@ -241,18 +241,30 @@
     ]);
   }
 
-  function paloAwaitOfficeReadyAsync() {
+  function paloAwaitOfficeReadyAsync(timeoutMs) {
+    var waitMs = timeoutMs == null ? 2000 : timeoutMs;
     return new Promise(function (resolve) {
+      var settled = false;
+      function done(flag) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(flag || "ready");
+      }
       try {
         if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
           Office.onReady(function () {
-            resolve();
+            done("oui");
           });
+          setTimeout(function () {
+            done("timeout");
+          }, waitMs);
           return;
         }
       } catch (_ready) {
       }
-      resolve();
+      done("skip");
     });
   }
 
@@ -595,13 +607,24 @@
     if (!ort || typeof ort.getItem !== "function") {
       return Promise.resolve(false);
     }
-    return Promise.all(paloStorageKeysList().map(function (k) {
-      return Promise.resolve(ort.getItem(k)).then(function (v) {
-        if (v != null && v !== "") {
-          paloStorageMem[k] = v;
-        }
-      }).catch(function () {});
-    })).then(function () {
+    var storageTimeoutMs = 3000;
+    return paloPromiseWithTimeout(
+      Promise.all(paloStorageKeysList().map(function (k) {
+        return paloPromiseWithTimeout(
+          Promise.resolve(ort.getItem(k)).then(function (v) {
+            if (v != null && v !== "") {
+              paloStorageMem[k] = v;
+            }
+          }).catch(function () {}),
+          storageTimeoutMs,
+          "OfficeRuntime.storage.getItem"
+        ).catch(function () {});
+      })),
+      storageTimeoutMs + 1000,
+      "OfficeRuntime.storage pull"
+    ).then(function () {
+      return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
+    }).catch(function () {
       return Boolean(paloStorageMem[PALO_CONNECTIONS_STORAGE_KEY]);
     });
   }
@@ -2728,7 +2751,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.2.32";
+var PALO_ASSET_VERSION = "1.0.2.33";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -3084,30 +3107,17 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
   }
 
-  /** Diagnostic stockage async (test A : winLs / ortPull). */
+  /** Diagnostic stockage async (test A : winLs / ortPull). Timeouts : evite #BUSY! Desktop. */
   async function STORAGE_DIAG() {
     var g = paloGlobalRef();
     var po = g.PaloOffice;
     var parts = [RUNTIME_DIAG()];
     if (po && typeof po.paloAwaitOfficeReadyAsync === "function") {
       try {
-        await po.paloAwaitOfficeReadyAsync();
-        parts.push("onReady=oui");
+        var readyFlag = await po.paloAwaitOfficeReadyAsync(1500);
+        parts.push("onReady=" + String(readyFlag || "oui"));
       } catch (_ready) {
         parts.push("onReady=err");
-      }
-    }
-    if (po && typeof po.paloReloadOfficeRuntimeStorage === "function") {
-      try {
-        await po.paloReloadOfficeRuntimeStorage();
-      } catch (_reload) {
-        // ignore
-      }
-    } else if (po && typeof po.paloEnsureStorageReady === "function") {
-      try {
-        await po.paloEnsureStorageReady(true);
-      } catch (_ensure) {
-        // ignore
       }
     }
     if (po && typeof po.paloPullOfficeRuntimeStorageIntoMem === "function") {
@@ -3119,7 +3129,8 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       }
       parts.push("ortPull=" + (ortPull ? "oui" : "non"));
     }
-    if (po && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
+    if (po && typeof po.paloExcelApiAvailable === "function" && po.paloExcelApiAvailable()
+      && typeof po.paloPullWorkbookConfigIntoMemAsync === "function") {
       var wbOk = false;
       try {
         wbOk = await po.paloPullWorkbookConfigIntoMemAsync();
@@ -3127,9 +3138,14 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         wbOk = false;
       }
       parts.push("wbPull=" + (wbOk ? "oui" : "non"));
+    } else {
+      parts.push("wbPull=skip");
     }
     if (po && typeof po.paloHydrateMemFromBrowsingContexts === "function") {
-      po.paloHydrateMemFromBrowsingContexts();
+      try {
+        po.paloHydrateMemFromBrowsingContexts();
+      } catch (_hyd) {
+      }
     }
     if (po && typeof po.paloStorageDiagSync === "function") {
       parts.push(po.paloStorageDiagSync());
