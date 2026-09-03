@@ -232,15 +232,8 @@
       if (paloPullDocumentSettingsIntoMemSync()) {
         return true;
       }
-      return paloPullWorkbookConfigIntoMemAsync();
-    }).then(function (hasConn) {
-      if (hasConn && paloHasTaskpaneLocalStorage()) {
-        return paloPushMemToDocumentSettingsAsync().then(function () {
-          return paloPushMemToWorkbookConfigAsync();
-        }).then(function () {
-          return true;
-        });
-      }
+      // Ne pas appeler Excel.run ici : sur Excel Online l'ouverture du volet
+      // peut planter le host ("Sorry, something went wrong").
       return hasConn;
     });
 
@@ -569,19 +562,17 @@
 
   function paloFlushStorageToOfficeRuntime() {
     paloHydrateMemFromBrowsingContexts();
+    // Excel Online : ORT (+ LS) suffisent. Eviter Excel.run / settings a l'ouverture
+    // du volet (crash host observe). Desktop CF lit ORT (test A valide).
     return paloPushTaskpaneLocalStorageToOfficeRuntime().then(function (pushed) {
-      return paloPushMemToDocumentSettingsAsync().then(function (docOk) {
-        return paloPushMemToWorkbookConfigAsync().then(function (wbOk) {
-          return {
-            winLs: paloHasLocalStorage(),
-            winLsConn: paloWindowLocalStorageHasConnections(),
-            ort: Boolean(paloOfficeRuntimeStorage()),
-            pushed: pushed,
-            docSet: Boolean(docOk),
-            wb: Boolean(wbOk)
-          };
-        });
-      });
+      return {
+        winLs: paloHasLocalStorage(),
+        winLsConn: paloWindowLocalStorageHasConnections(),
+        ort: Boolean(paloOfficeRuntimeStorage()),
+        pushed: pushed,
+        docSet: false,
+        wb: false
+      };
     });
   }
 
