@@ -731,6 +731,10 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     if (!parts.length) {
       return { ok: false, path: "", error: "Aucune coordonnee." };
     }
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.paloJoinNamePath === "function") {
+      return { ok: true, path: po.paloJoinNamePath(parts), error: "" };
+    }
     return { ok: true, path: parts.join(","), error: "" };
   }
 

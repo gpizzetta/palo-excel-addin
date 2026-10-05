@@ -892,6 +892,77 @@
     return false;
   }
 
+  /**
+   * Jedox name_path : liste de noms separes par des virgules.
+   * Un nom sans virgule est renvoye tel quel (aucun changement d'URL).
+   * Un nom qui contient une virgule est entoure de guillemets ; un guillemet
+   * dans ce nom est double. Ex. Dupont, Jean -> "Dupont, Jean".
+   */
+  function paloQuoteNamePathSegment(segment) {
+    var s = String(segment);
+    if (s.indexOf(",") === -1) {
+      return s;
+    }
+    return "\"" + s.replace(/"/g, "\"\"") + "\"";
+  }
+
+  function paloJoinNamePath(segments) {
+    var parts = [];
+    var i;
+    var list = segments || [];
+    for (i = 0; i < list.length; i += 1) {
+      parts.push(paloQuoteNamePathSegment(list[i]));
+    }
+    return parts.join(",");
+  }
+
+  /**
+   * Inverse de paloJoinNamePath.
+   * Sans guillemet en debut de segment, meme resultat que split(",").trim() :
+   * un guillemet au milieu d'un nom reste un caractere du nom.
+   */
+  function paloSplitNamePath(pathStr) {
+    var s = String(pathStr == null ? "" : pathStr);
+    var out = [];
+    var buf = "";
+    var inQuotes = false;
+    var quoted = false;
+    var segmentStart = true;
+    var i;
+    for (i = 0; i < s.length; i += 1) {
+      var ch = s.charAt(i);
+      if (inQuotes) {
+        if (ch === "\"") {
+          if (s.charAt(i + 1) === "\"") {
+            buf += "\"";
+            i += 1;
+          } else {
+            inQuotes = false;
+          }
+        } else {
+          buf += ch;
+        }
+      } else if (ch === "\"" && segmentStart) {
+        inQuotes = true;
+        quoted = true;
+        segmentStart = false;
+      } else if (ch === ",") {
+        out.push(quoted ? buf : buf.trim());
+        buf = "";
+        inQuotes = false;
+        quoted = false;
+        segmentStart = true;
+      } else {
+        buf += ch;
+        if (ch !== " " && ch !== "\t") {
+          segmentStart = false;
+        }
+      }
+    }
+    out.push(quoted ? buf : buf.trim());
+    return out;
+  }
+
   /** Construit name_path sans lever d'exception (Excel Online CF : throw = plantage). */
   function paloBuildNamePathSafe(pathSegments, cubeName) {
     try {
@@ -915,7 +986,7 @@
           error: "Aucune coordonnee pour " + String(cubeName || "cube") + "."
         };
       }
-      return { ok: true, path: normalized.join(","), error: "" };
+      return { ok: true, path: paloJoinNamePath(normalized), error: "" };
     } catch (err) {
       return {
         ok: false,
@@ -1282,9 +1353,9 @@
     if (typeof path === "string") {
       pathStr = path;
     } else if (Array.isArray(path)) {
-      pathStr = path.map(function (seg) { return String(seg).trim(); }).join(",");
+      pathStr = paloJoinNamePath(path.map(function (seg) { return String(seg).trim(); }));
     } else {
-      pathStr = normalizePaloCellPath(path).join(",");
+      pathStr = paloJoinNamePath(normalizePaloCellPath(path));
     }
     var text = await this.call("/cell/value", {
       sid: sid,
@@ -1344,9 +1415,9 @@
     if (typeof path === "string") {
       pathStr = path;
     } else if (Array.isArray(path)) {
-      pathStr = path.map(function (seg) { return String(seg).trim(); }).join(",");
+      pathStr = paloJoinNamePath(path.map(function (seg) { return String(seg).trim(); }));
     } else {
-      pathStr = normalizePaloCellPath(path).join(",");
+      pathStr = paloJoinNamePath(normalizePaloCellPath(path));
     }
     var text = await this.call("/cell/replace", {
       sid: sid,
@@ -2022,7 +2093,7 @@
         element: seg
       });
     }
-    return normalized.join(",");
+    return paloJoinNamePath(normalized);
   };
 
   /**
@@ -2053,9 +2124,7 @@
     var parsed = [];
     var p;
     for (p = 0; p < namePathStrings.length; p += 1) {
-      var segs = String(namePathStrings[p]).split(",").map(function (s) {
-        return s.trim();
-      });
+      var segs = paloSplitNamePath(namePathStrings[p]);
       if (segs.length !== dimCount) {
         throw new Error(
           "cell/values: chemin " + (p + 1) + " a " + segs.length + " segments, " + dimCount + " attendus (dimensions du cube)."
@@ -2368,6 +2437,8 @@
   paloGlobal.PaloOffice.paloPullOfficeRuntimeStorageIntoMem = paloPullOfficeRuntimeStorageIntoMem;
   paloGlobal.PaloOffice.paloStorageDiagSync = paloStorageDiagSync;
   paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
+  paloGlobal.PaloOffice.paloJoinNamePath = paloJoinNamePath;
+  paloGlobal.PaloOffice.paloSplitNamePath = paloSplitNamePath;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();
   };
