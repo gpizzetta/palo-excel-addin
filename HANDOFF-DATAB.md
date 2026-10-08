@@ -1,6 +1,10 @@
 # Handoff — PALO.DATAB (lecture groupée)
 
-État au 2026-10-08. Version locale du complément : **1.0.3.2**. Pas encore en ligne tant que `docs/` n’est pas poussé sur GitHub Pages et que le manifeste n’est pas republié dans Microsoft 365.
+État au 2026-10-08. Version locale du complément : **1.0.3.3**. Pas encore en ligne tant que `docs/` n’est pas poussé sur GitHub Pages et que le manifeste n’est pas republié dans Microsoft 365.
+
+## Ruban en double (1.0.3.3)
+
+Excel Desktop affichait deux groupes « Palo » parce que le ruban était déclaré dans `VersionOverrides` 1.0 (`commands.html`) et dans le 1.1 (`shared-runtime.html`). Le 1.0 n’a plus de `DesktopFormFactor` : plus de ruban, plus de menu contextuel, plus de `FunctionFile` vers `commands.html`. Le seul ruban restant est celui du bloc 1.1 : volet, actions et formules passent par `shared-runtime.html`. Le bloc 1.0 garde uniquement les fonctions personnalisées, pour un Excel qui ne lirait pas le 1.1.
 
 ## Où on en est
 
