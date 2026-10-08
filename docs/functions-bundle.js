@@ -1585,6 +1585,9 @@
     this._dimElementMapInflight = new Map();
     this._cellBatchQueues = new Map();
     this._cellBatchTimers = new Map();
+    // File réservée à PALO.DATAB. PALO.DATAC ne la consulte pas.
+    this._databBatchQueues = new Map();
+    this._databBatchTimers = new Map();
   }
 
   /** Cle de file : une file = une requete /cell/values homogene (meme connexion, sid, base, cube). */
@@ -1608,6 +1611,20 @@
       var n = Number(window.PALO_CELL_BATCH_MS);
       if (!Number.isNaN(n) && n >= 0) {
         return n;
+      }
+    }
+    return 24;
+  }
+
+  /** Délai de regroupement PALO.DATAB. Indépendant du verrou « formules Excel = pas de bulk ». */
+  function databBatchDelayMs() {
+    if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH) {
+      return 0;
+    }
+    if (typeof window !== "undefined" && window.PALO_DATAB_BATCH_MS != null) {
+      var n = Number(window.PALO_DATAB_BATCH_MS);
+      if (!Number.isNaN(n) && n >= 0) {
+        return Math.floor(n);
       }
     }
     return 24;
@@ -1916,6 +1933,235 @@
       var j;
       for (j = 0; j < items.length; j += 1) {
         items[j].reject(err);
+      }
+    }
+  };
+
+  /**
+   * PALO.DATAB uniquement. Même regroupement /cell/values que la file hors formules,
+   * y compris dans le runtime Excel. PALO.DATAC continue d'appeler requestCellValueBatched.
+   * Délai 0 (PALO_DISABLE_BATCH ou PALO_DATAB_BATCH_MS=0) : lecture unitaire name_path.
+   */
+  PaloConnectionManager.prototype.requestDatabCellValue = function requestDatabCellValue(
+    connectionName,
+    sid,
+    client,
+    name_database,
+    name_cube,
+    namePath,
+    pathSegments,
+    debugMeta
+  ) {
+    var manager = this;
+    if (databBatchDelayMs() === 0) {
+      return this._resolveCellValueByNameSegments(
+        connectionName,
+        sid,
+        client,
+        name_database,
+        name_cube,
+        pathSegments,
+        namePath
+      );
+    }
+    return new Promise(function (resolve, reject) {
+      var key = cellBatchKey(connectionName, sid, name_database, name_cube);
+      var q = manager._databBatchQueues.get(key);
+      if (!q) {
+        q = {
+          connectionName: connectionName,
+          sid: sid,
+          client: client,
+          name_database: name_database,
+          name_cube: name_cube,
+          items: []
+        };
+        manager._databBatchQueues.set(key, q);
+      }
+      q.items.push({
+        namePath: namePath,
+        pathSegments: pathSegments,
+        debugMeta: debugMeta || null,
+        done: false,
+        resolve: resolve,
+        reject: reject
+      });
+      var prev = manager._databBatchTimers.get(key);
+      if (prev) {
+        clearTimeout(prev);
+      }
+      manager._databBatchTimers.set(
+        key,
+        setTimeout(function () {
+          manager._databBatchTimers.delete(key);
+          manager._flushDatabBatch(key);
+        }, databBatchDelayMs())
+      );
+    });
+  };
+
+  PaloConnectionManager.prototype._flushDatabBatch = async function _flushDatabBatch(key) {
+    var q = this._databBatchQueues.get(key);
+    if (!q) {
+      return;
+    }
+    this._databBatchQueues.delete(key);
+    var items = q.items;
+    if (!items || !items.length) {
+      return;
+    }
+    var client = q.client;
+    var sid = q.sid;
+    var name_database = q.name_database;
+    var name_cube = q.name_cube;
+    var self = this;
+
+    function markResolved(item, value) {
+      if (item.done) {
+        return;
+      }
+      item.done = true;
+      item.resolve(value);
+    }
+
+    async function fallbackItemToNamePath(item) {
+      if (item.done) {
+        return;
+      }
+      try {
+        var value = await self._resolveCellValueByNameSegments(
+          q.connectionName,
+          sid,
+          client,
+          name_database,
+          name_cube,
+          item.pathSegments,
+          item.namePath
+        );
+        markResolved(item, value);
+      } catch (fallbackErr) {
+        if (!item.done) {
+          item.done = true;
+          item.reject(fallbackErr);
+        }
+      }
+    }
+
+    try {
+      if (items.length === 1) {
+        await fallbackItemToNamePath(items[0]);
+        return;
+      }
+      var allHaveSegments = items.every(function (it) {
+        return Array.isArray(it.pathSegments) && it.pathSegments.length > 0;
+      });
+      var idPaths;
+      if (allHaveSegments) {
+        idPaths = await this.buildCellIdPathsListFromSegments(
+          q.connectionName,
+          sid,
+          client,
+          name_database,
+          name_cube,
+          items.map(function (it) { return it.pathSegments; })
+        );
+      } else {
+        idPaths = await this.buildCellIdPathsList(
+          q.connectionName,
+          sid,
+          client,
+          name_database,
+          name_cube,
+          items.map(function (it) { return it.namePath; })
+        );
+      }
+      paloTrace("datab-cell-values-batch", {
+        connectionName: q.connectionName,
+        name_database: name_database,
+        name_cube: name_cube,
+        count: items.length,
+        pathsQueryLen: idPaths.join(":").length
+      });
+      var maxUrlChars = cellValuesMaxUrlChars();
+      var start = 0;
+      while (start < idPaths.length) {
+        var end = start;
+        var joined = "";
+        while (end < idPaths.length) {
+          var candidate = joined ? (joined + ":" + idPaths[end]) : idPaths[end];
+          if (end > start) {
+            var candidateUrl = client.buildUrl("/cell/values", {
+              sid: sid,
+              name_database: name_database,
+              name_cube: name_cube,
+              paths: candidate
+            });
+            if (candidateUrl.length > maxUrlChars) {
+              break;
+            }
+          }
+          joined = candidate;
+          end += 1;
+        }
+        if (!joined) {
+          joined = idPaths[start];
+          end = start + 1;
+        }
+        var arr;
+        try {
+          arr = await client.cellValues(sid, name_database, name_cube, joined);
+          if (arr.length !== (end - start)) {
+            throw new Error(
+              "cell/values: " + (end - start) + " chemin(s) envoyes, " + arr.length + " ligne(s) recues."
+            );
+          }
+          var allEmpty = arr.length > 0 && arr.every(function (v) {
+            return v === null || v === "";
+          });
+          if (allEmpty) {
+            paloTrace("datab-cell-values-chunk-all-empty-fallback-single", {
+              connectionName: q.connectionName,
+              name_database: name_database,
+              name_cube: name_cube,
+              start: start,
+              end: end
+            });
+            arr = [];
+            var s;
+            for (s = start; s < end; s += 1) {
+              arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[s]));
+            }
+          }
+        } catch (chunkErr) {
+          paloTrace("datab-cell-values-chunk-fallback-single", {
+            connectionName: q.connectionName,
+            name_database: name_database,
+            name_cube: name_cube,
+            start: start,
+            end: end,
+            reason: chunkErr && chunkErr.message ? chunkErr.message : String(chunkErr)
+          });
+          arr = [];
+          var f;
+          for (f = start; f < end; f += 1) {
+            arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[f]));
+          }
+        }
+        var i;
+        for (i = start; i < end; i += 1) {
+          markResolved(items[i], arr[i - start]);
+        }
+        start = end;
+      }
+    } catch (err) {
+      paloTrace("datab-cell-values-batch-error", {
+        key: key,
+        count: items.length,
+        reason: err && err.message ? err.message : String(err)
+      });
+      var j;
+      for (j = 0; j < items.length; j += 1) {
+        await fallbackItemToNamePath(items[j]);
       }
     }
   };
@@ -2554,7 +2800,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.1";
+var PALO_ASSET_VERSION = "1.0.3.2";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -3482,6 +3728,88 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
   }
 
   /**
+   * Même signature que DATAC. Regroupe les cellules du même cube dans /cell/values.
+   * DATAC n'emprunte pas ce chemin. Une seule cellule, ou un échec du paquet,
+   * retombe sur /cell/value en name_path.
+   */
+  async function DATAB(servdb, cubeName) {
+    var cfArgs = arguments;
+    var coordinates = paloCollectCoordinateArgs(cfArgs, 2);
+    servdb = paloCoerceCfArgSafe(servdb);
+    cubeName = paloCoerceCfArgSafe(cubeName);
+    var requestId = nextDatacRequestId();
+    var blockedEarly = shouldBlockPaloDatacArg(servdb)
+      || shouldBlockPaloDatacArg(cubeName)
+      || coordinates.some(function (coord) {
+        return shouldBlockPaloDatacArg(coord);
+      });
+    if (blockedEarly) {
+      traceDatac("datab-skip-upstream-blocked", {
+        requestId: requestId,
+        servdb: String(servdb || ""),
+        cubeName: String(cubeName || ""),
+        coordinatesCount: coordinates.length
+      });
+      return "";
+    }
+
+    try {
+      var manager = await getConnectionManager();
+      if (!manager) {
+        return "";
+      }
+      var context = await manager.getClientAndContext(servdb);
+      traceDatac("datab-start", {
+        requestId: requestId,
+        servdb: String(servdb || ""),
+        connectionName: context.connectionName,
+        database: context.database,
+        cubeName: String(cubeName || ""),
+        coordinates: coordinates.map(function (coord) {
+          return String(coerceExcelScalarArg(coord));
+        }),
+        mode: "datab_bulk"
+      });
+      var coordsScalar = coordinates.map(function (coord) {
+        return String(coerceExcelScalarArg(coord));
+      });
+      var value = await manager.requestDatabCellValue(
+        context.connectionName,
+        context.sid,
+        context.client,
+        context.database,
+        cubeName,
+        "",
+        coordsScalar,
+        {
+          requestId: requestId,
+          coordinates: coordsScalar
+        }
+      );
+      traceDatac("datab-end", {
+        requestId: requestId,
+        value: value
+      });
+      return paloCfDatacReturn(value);
+    } catch (error) {
+      var msg = error && error.message ? String(error.message) : String(error);
+      traceDatac("datab-error", {
+        requestId: requestId,
+        message: msg
+      });
+      if (
+        await isDebugEnabledForServdb(servdb)
+        || msg.indexOf("Timeout HTTP") !== -1
+        || msg.indexOf("HTTP ") !== -1
+        || msg.indexOf("Impossible de joindre") !== -1
+      ) {
+        return toError(error);
+      }
+      return "";
+    }
+  }
+
+  /**
    * BETA Excel Online : 3 arguments seulement (servdb, cube, name_path avec virgules).
    * Evite le plantage quand plusieurs coords sont passees en arguments separes.
    */
@@ -4049,6 +4377,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("STORAGE_DIAG", STORAGE_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
+    CustomFunctions.associate("DATAB", DATAB);
     CustomFunctions.associate("DATAN", DATAN);
     CustomFunctions.associate("DATAP", DATAP);
     CustomFunctions.associate("DATAN_STEP", DATAN_STEP);

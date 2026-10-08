@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.1";
+  var PALO_PLUGIN_VERSION = "1.0.3.2";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
 
   function complete(event) {

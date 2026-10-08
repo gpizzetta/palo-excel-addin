@@ -123,6 +123,126 @@
       ]
     },
     {
+      "id": "DATAB",
+      "name": "DATAB",
+      "description": "Comme DATAC, mais regroupe les lectures du même cube (test /cell/values). Ne remplace pas DATAC.",
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "cube",
+          "type": "any"
+        },
+        {
+          "name": "coord1",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord2",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord3",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord4",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord5",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord6",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord7",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord8",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord9",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord10",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord11",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord12",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord13",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord14",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord15",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord16",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord17",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord18",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord19",
+          "type": "any",
+          "optional": true
+        },
+        {
+          "name": "coord20",
+          "type": "any",
+          "optional": true
+        }
+      ]
+    },
+    {
       "id": "DATAN",
       "name": "DATAN",
       "description": "BETA uniquement — wrapper DATAC (v1.0.2.9+). Lit via name_path (stable Excel Online).",

@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.1";
+var PALO_ASSET_VERSION = "1.0.3.2";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -929,6 +929,88 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
   }
 
   /**
+   * Même signature que DATAC. Regroupe les cellules du même cube dans /cell/values.
+   * DATAC n'emprunte pas ce chemin. Une seule cellule, ou un échec du paquet,
+   * retombe sur /cell/value en name_path.
+   */
+  async function DATAB(servdb, cubeName) {
+    var cfArgs = arguments;
+    var coordinates = paloCollectCoordinateArgs(cfArgs, 2);
+    servdb = paloCoerceCfArgSafe(servdb);
+    cubeName = paloCoerceCfArgSafe(cubeName);
+    var requestId = nextDatacRequestId();
+    var blockedEarly = shouldBlockPaloDatacArg(servdb)
+      || shouldBlockPaloDatacArg(cubeName)
+      || coordinates.some(function (coord) {
+        return shouldBlockPaloDatacArg(coord);
+      });
+    if (blockedEarly) {
+      traceDatac("datab-skip-upstream-blocked", {
+        requestId: requestId,
+        servdb: String(servdb || ""),
+        cubeName: String(cubeName || ""),
+        coordinatesCount: coordinates.length
+      });
+      return "";
+    }
+
+    try {
+      var manager = await getConnectionManager();
+      if (!manager) {
+        return "";
+      }
+      var context = await manager.getClientAndContext(servdb);
+      traceDatac("datab-start", {
+        requestId: requestId,
+        servdb: String(servdb || ""),
+        connectionName: context.connectionName,
+        database: context.database,
+        cubeName: String(cubeName || ""),
+        coordinates: coordinates.map(function (coord) {
+          return String(coerceExcelScalarArg(coord));
+        }),
+        mode: "datab_bulk"
+      });
+      var coordsScalar = coordinates.map(function (coord) {
+        return String(coerceExcelScalarArg(coord));
+      });
+      var value = await manager.requestDatabCellValue(
+        context.connectionName,
+        context.sid,
+        context.client,
+        context.database,
+        cubeName,
+        "",
+        coordsScalar,
+        {
+          requestId: requestId,
+          coordinates: coordsScalar
+        }
+      );
+      traceDatac("datab-end", {
+        requestId: requestId,
+        value: value
+      });
+      return paloCfDatacReturn(value);
+    } catch (error) {
+      var msg = error && error.message ? String(error.message) : String(error);
+      traceDatac("datab-error", {
+        requestId: requestId,
+        message: msg
+      });
+      if (
+        await isDebugEnabledForServdb(servdb)
+        || msg.indexOf("Timeout HTTP") !== -1
+        || msg.indexOf("HTTP ") !== -1
+        || msg.indexOf("Impossible de joindre") !== -1
+      ) {
+        return toError(error);
+      }
+      return "";
+    }
+  }
+
+  /**
    * BETA Excel Online : 3 arguments seulement (servdb, cube, name_path avec virgules).
    * Evite le plantage quand plusieurs coords sont passees en arguments separes.
    */
@@ -1496,6 +1578,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("STORAGE_DIAG", STORAGE_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
+    CustomFunctions.associate("DATAB", DATAB);
     CustomFunctions.associate("DATAN", DATAN);
     CustomFunctions.associate("DATAP", DATAP);
     CustomFunctions.associate("DATAN_STEP", DATAN_STEP);
