@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Ecriture PALO.DATAC</title>
+  <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    :root {
+      --palo-bg: #f3f2f1;
+      --palo-surface: #ffffff;
+      --palo-border: #edebe9;
+      --palo-text: #323130;
+      --palo-text-secondary: #605e5c;
+      --palo-input-bg: #ffffff;
+      --palo-input-border: #8a8886;
+      --palo-focus: #0078d4;
+      --palo-button: #0078d4;
+      --palo-button-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --palo-bg: #1f1f1f;
+        --palo-surface: #292827;
+        --palo-border: #3b3a39;
+        --palo-text: #ffffff;
+        --palo-text-secondary: #c8c6c4;
+        --palo-input-bg: #292827;
+        --palo-input-border: #8a8886;
+        --palo-focus: #2899f5;
+        --palo-button: #0078d4;
+        --palo-button-text: #ffffff;
+      }
+    }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      color: var(--palo-text);
+      background: var(--palo-bg);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface);
+    }
+    main {
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+    p { margin: 0; }
+    .hint { color: var(--palo-text-secondary); font-size: 12px; line-height: 1.4; }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--palo-text-secondary);
+      margin-bottom: 4px;
+    }
+    input, select {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px 8px;
+      font: inherit;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-input-border);
+      border-radius: 2px;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: var(--palo-focus);
+      box-shadow: 0 0 0 1px var(--palo-focus) inset;
+    }
+    .actions { display: flex; flex-direction: column; gap: 8px; }
+    button {
+      font: inherit;
+      padding: 8px 10px;
+      border: 1px solid var(--palo-button);
+      border-radius: 2px;
+      background: var(--palo-button);
+      color: var(--palo-button-text);
+      cursor: pointer;
+      text-align: left;
+    }
+    button.secondary {
+      background: var(--palo-surface);
+      color: var(--palo-text);
+      border-color: var(--palo-input-border);
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    button small {
+      display: block;
+      font-weight: 400;
+      opacity: 0.9;
+    }
+    #status { min-height: 1.2em; white-space: pre-wrap; }
+    #status.error { color: #a4262c; }
+    #status.ok { color: #107c10; }
+  </style>
+</head>
+<body>
+  <h1>Ecriture PALO.DATAC</h1>
+  <main>
+    <p id="summary" class="hint">Lecture de la selection...</p>
+    <div>
+      <label for="value">Valeur</label>
+      <input id="value" type="text" spellcheck="false" autocomplete="off" placeholder="Ex. 100">
+    </div>
+    <div>
+      <label for="splash">Splash</label>
+      <select id="splash">
+        <option value="1" selected>1 — Defaut (repartition)</option>
+        <option value="0">0 — Sans splash</option>
+        <option value="2">2 — Ajouter aux cellules de base</option>
+        <option value="3">3 — Ecrire sur les cellules de base</option>
+        <option value="4">4 — Ecrire sur les cellules de base peuplees</option>
+        <option value="5">5 — Ajouter aux cellules de base peuplees</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button type="button" id="btn-replace">Cell replace<small id="replace-hint">Cellule active, /cell/replace</small></button>
+      <button type="button" id="btn-bulk" class="secondary">Cell replace bulk<small id="bulk-hint">Selection PALO.DATAC, /cell/replace_bulk</small></button>
+    </div>
+    <p id="status" class="hint"></p>
+  </main>
+  <script>
+    var STORAGE_KEY = "palo_datac_write_v1";
+    var state = { cells: [], busy: false };
+
+    function applyOfficeTheme() {
+      var theme = Office.context && Office.context.officeTheme;
+      if (!theme) {
+        return;
+      }
+      var root = document.documentElement;
+      function setVar(name, value) {
+        if (value) {
+          root.style.setProperty(name, value);
+        }
+      }
+      setVar("--palo-bg", theme.bodyBackgroundColor);
+      setVar("--palo-text", theme.bodyForegroundColor);
+      setVar("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
+      setVar("--palo-input-bg", theme.controlBackgroundColor);
+    }
+
+    function setStatus(text, kind) {
+      var el = document.getElementById("status");
+      el.textContent = text || "";
+      el.className = kind === "error" ? "error" : kind === "ok" ? "ok" : "hint";
+    }
+
+    function pathLabel(cell) {
+      return (cell.coordinates || []).join(", ");
+    }
+
+    function render(payload) {
+      state.cells = payload && Array.isArray(payload.cells) ? payload.cells : [];
+      var summary = document.getElementById("summary");
+      var active = null;
+      var i;
+      var cubes = {};
+      for (i = 0; i < state.cells.length; i += 1) {
+        if (state.cells[i].active) {
+          active = state.cells[i];
+        }
+        cubes[String(state.cells[i].servdb || "") + " / " + String(state.cells[i].cube || "")] = true;
+      }
+      if (!active && state.cells.length) {
+        active = state.cells[0];
+      }
+      var cubeNames = Object.keys(cubes);
+      var lines = [];
+      if (active) {
+        lines.push("Cellule active : " + (active.address || "") + " — " + active.cube);
+        lines.push(pathLabel(active));
+      }
+      lines.push(state.cells.length + " cellule(s) PALO.DATAC.");
+      if (cubeNames.length > 1) {
+        lines.push(cubeNames.length + " cubes : le bulk est envoye par cube.");
+      }
+      if (payload && payload.truncated) {
+        lines.push("Selection tronquee a " + state.cells.length + " cellules.");
+      }
+      if (payload && payload.skipped) {
+        lines.push(payload.skipped + " formule(s) ignoree(s) (coordonnee vide ou illisible).");
+      }
+      summary.textContent = lines.join(" ");
+      document.getElementById("replace-hint").textContent = active
+        ? (active.address || "Cellule active") + " — /cell/replace"
+        : "Cellule active — /cell/replace";
+      document.getElementById("bulk-hint").textContent = state.cells.length + " cellule(s) — /cell/replace_bulk";
+      var valueInput = document.getElementById("value");
+      if (valueInput && typeof valueInput.focus === "function") {
+        try {
+          valueInput.focus();
+        } catch (_e) {
+          // ignore
+        }
+      }
+    }
+
+    function applyInit(payload) {
+      if (!payload || !Array.isArray(payload.cells)) {
+        return;
+      }
+      render(payload);
+    }
+
+    function tryReadLocalStorage() {
+      try {
+        var raw = window.localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          return false;
+        }
+        applyInit(JSON.parse(raw));
+        return true;
+      } catch (_e) {
+        return false;
+      }
+    }
+
+    function send(mode) {
+      if (state.busy) {
+        return;
+      }
+      if (!state.cells.length) {
+        setStatus("Aucune cellule PALO.DATAC.", "error");
+        return;
+      }
+      var value = document.getElementById("value").value;
+      var splash = Number(document.getElementById("splash").value);
+      if (!Number.isFinite(splash)) {
+        splash = 1;
+      }
+      state.busy = true;
+      document.getElementById("btn-replace").disabled = true;
+      document.getElementById("btn-bulk").disabled = true;
+      setStatus(mode === "bulk" ? "Ecriture bulk..." : "Ecriture...", "");
+      Office.context.ui.messageParent(JSON.stringify({
+        type: "write",
+        mode: mode,
+        value: value,
+        splash: splash
+      }), { targetOrigin: "*" });
+    }
+
+    function onResult(payload) {
+      state.busy = false;
+      document.getElementById("btn-replace").disabled = false;
+      document.getElementById("btn-bulk").disabled = false;
+      if (payload && payload.ok) {
+        setStatus(payload.message || "Valeur ecrite.", "ok");
+      } else {
+        setStatus(payload && payload.message ? payload.message : "Ecriture refusee.", "error");
+      }
+    }
+
+    Office.onReady(function () {
+      applyOfficeTheme();
+      tryReadLocalStorage();
+      document.getElementById("btn-replace").addEventListener("click", function () {
+        send("replace");
+      });
+      document.getElementById("btn-bulk").addEventListener("click", function () {
+        send("bulk");
+      });
+      document.getElementById("value").addEventListener("keydown", function (ev) {
+        if (ev.key === "Enter") {
+          send("replace");
+        }
+      });
+
+      function onParentMessage(arg) {
+        try {
+          var payload = JSON.parse(String(arg && arg.message ? arg.message : ""));
+          if (payload && payload.type === "init") {
+            applyInit(payload);
+            return;
+          }
+          if (payload && payload.type === "result") {
+            onResult(payload);
+          }
+        } catch (_e) {
+          // ignore
+        }
+      }
+
+      if (Office.context && Office.context.ui && typeof Office.context.ui.addHandlerAsync === "function") {
+        Office.context.ui.addHandlerAsync(
+          Office.EventType.DialogParentMessageReceived,
+          onParentMessage,
+          function (asyncResult) {
+            if (asyncResult.status === Office.AsyncResultStatus.Succeeded) {
+              try {
+                Office.context.ui.messageParent("palo-datac-write-ready", { targetOrigin: "*" });
+              } catch (_e) {
+                if (!state.cells.length && !tryReadLocalStorage()) {
+                  setStatus("Impossible de joindre Excel.", "error");
+                }
+              }
+            }
+          }
+        );
+      }
+    });
+  </script>
+</body>
+</html>

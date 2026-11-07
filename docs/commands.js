@@ -1,7 +1,9 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.4";
+  var PALO_PLUGIN_VERSION = "1.0.3.5";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
+  var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
+  var DATAC_WRITE_MAX_CELLS = 200;
 
   function complete(event) {
     if (event && typeof event.completed === "function") {
@@ -246,6 +248,356 @@
     }
   }
 
+  function normalizeExcelAddress(address) {
+    return String(address || "").replace(/\$/g, "").toUpperCase();
+  }
+
+  function prepareDatacArgument(context, workbook, worksheet, rawArgText) {
+    var trimmed = String(rawArgText || "").trim();
+    var lit = window.paloEnameRibbon.tryUnquoteStringLiteral(trimmed);
+    if (lit !== null) {
+      return { kind: "literal", value: lit };
+    }
+    if (!trimmed) {
+      return { kind: "literal", value: "" };
+    }
+    if (/^[-+]?\d+(?:[.,]\d+)?$/.test(trimmed)) {
+      var n = Number(trimmed.replace(",", "."));
+      return { kind: "literal", value: Number.isFinite(n) ? String(n) : trimmed };
+    }
+    try {
+      var range = trimmed.indexOf("!") === -1 ? worksheet.getRange(trimmed) : workbook.getRange(trimmed);
+      range.load(["values"]);
+      return { kind: "range", range: range };
+    } catch (_e) {
+      return { kind: "bad" };
+    }
+  }
+
+  function readDatacPrepared(prepared) {
+    if (!prepared || prepared.kind === "bad") {
+      return null;
+    }
+    if (prepared.kind === "literal") {
+      return prepared.value;
+    }
+    var vals = prepared.range.values;
+    if (!vals || !vals[0] || vals[0].length === 0) {
+      return "";
+    }
+    var v = vals[0][0];
+    if (v == null || v === "") {
+      return "";
+    }
+    if (typeof v === "number") {
+      return Number.isFinite(v) ? String(v) : null;
+    }
+    if (typeof v === "boolean") {
+      return v ? "TRUE" : "FALSE";
+    }
+    if (typeof v === "object") {
+      return null;
+    }
+    var text = String(v).trim();
+    if (text.charAt(0) === "#") {
+      return null;
+    }
+    return text;
+  }
+
+  /**
+   * Cellules PALO.DATAC de la selection, arguments resolus (litteraux ou references).
+   * Meme principe que l'ancien add-in : la formule reste en place, l'ecriture passe par le cube.
+   */
+  async function collectDatacWriteCells(context, workbook, sheet, activeCell, selection) {
+    var scan = window.paloEnameRibbon.scanRangeForPaloDatacHits(selection, 5000);
+    var hits = scan.hits.slice();
+    var truncated = scan.truncated;
+    if (hits.length > DATAC_WRITE_MAX_CELLS) {
+      hits = hits.slice(0, DATAC_WRITE_MAX_CELLS);
+      truncated = true;
+    }
+    var located = hits.map(function (hit) {
+      var range = selection.getCell(hit.row, hit.col);
+      range.load("address");
+      return { hit: hit, range: range };
+    });
+    activeCell.load("address");
+    await context.sync();
+
+    var activeAddr = normalizeExcelAddress(activeCell.address);
+    var hasActive = false;
+    located.forEach(function (item) {
+      item.address = item.range.address;
+      if (normalizeExcelAddress(item.address) === activeAddr) {
+        hasActive = true;
+      }
+    });
+    var activeFormula = window.paloEnameRibbon.readFormulaBestForPalo(activeCell);
+    if (!hasActive && window.paloEnameRibbon.mentionsPaloDatacInText(activeFormula)) {
+      located.unshift({
+        hit: { formula: activeFormula, row: 0, col: 0 },
+        address: activeCell.address,
+        range: activeCell
+      });
+    }
+
+    var preparedCells = [];
+    located.forEach(function (item) {
+      var parsed = window.paloEnameRibbon.parsePaloDatacCall(item.hit.formula);
+      if (!parsed || parsed.args.length < 2) {
+        preparedCells.push({ address: item.address, error: true });
+        return;
+      }
+      preparedCells.push({
+        address: item.address,
+        preps: parsed.args.map(function (arg) {
+          return prepareDatacArgument(context, workbook, sheet, arg.raw);
+        })
+      });
+    });
+    await context.sync();
+
+    var cells = [];
+    var skipped = 0;
+    preparedCells.forEach(function (item) {
+      if (item.error) {
+        skipped += 1;
+        return;
+      }
+      var values = item.preps.map(readDatacPrepared);
+      if (values.some(function (v) { return v == null; })) {
+        skipped += 1;
+        return;
+      }
+      var servdb = String(values[0] || "").trim();
+      var cube = String(values[1] || "").trim();
+      var coordinates = values.slice(2).map(function (v) { return String(v).trim(); });
+      if (!servdb || !cube || coordinates.some(function (c) { return !c; })) {
+        skipped += 1;
+        return;
+      }
+      cells.push({
+        address: item.address,
+        servdb: servdb,
+        cube: cube,
+        coordinates: coordinates,
+        active: normalizeExcelAddress(item.address) === activeAddr
+      });
+    });
+    if (cells.length && !cells.some(function (c) { return c.active; })) {
+      cells[0].active = true;
+    }
+    return {
+      found: located.length > 0,
+      cells: cells,
+      truncated: truncated,
+      skipped: skipped
+    };
+  }
+
+  async function executeDatacWrite(cells, mode, value, splash) {
+    var targets = cells;
+    if (mode !== "bulk") {
+      targets = cells.filter(function (c) { return c.active; });
+      if (!targets.length) {
+        targets = cells.slice(0, 1);
+      }
+    }
+    var groups = {};
+    targets.forEach(function (cell) {
+      var key = cell.servdb + "\0" + cell.cube;
+      if (!groups[key]) {
+        groups[key] = [];
+      }
+      groups[key].push(cell);
+    });
+    var manager = window.PaloOffice.createConnectionManager();
+    var keys = Object.keys(groups);
+    var written = 0;
+    var splashMode = splash == null || Number.isNaN(Number(splash)) ? 1 : Number(splash);
+    var i;
+    for (i = 0; i < keys.length; i += 1) {
+      var group = groups[keys[i]];
+      var ctx = await manager.getClientAndContext(group[0].servdb);
+      if (mode === "bulk") {
+        var idPaths = await manager.buildCellIdPathsListFromSegments(
+          ctx.connectionName,
+          ctx.sid,
+          ctx.client,
+          ctx.database,
+          group[0].cube,
+          group.map(function (c) { return c.coordinates; })
+        );
+        await ctx.client.cellReplaceBulk(
+          ctx.sid,
+          ctx.database,
+          group[0].cube,
+          idPaths,
+          idPaths.map(function () { return value; }),
+          splashMode
+        );
+        written += group.length;
+      } else {
+        var j;
+        for (j = 0; j < group.length; j += 1) {
+          var idPath = await manager.buildCellIdPathFromSegments(
+            ctx.connectionName,
+            ctx.sid,
+            ctx.client,
+            ctx.database,
+            group[j].cube,
+            group[j].coordinates
+          );
+          var ok = await ctx.client.cellReplaceByIds(
+            ctx.sid,
+            ctx.database,
+            group[j].cube,
+            idPath,
+            value,
+            splashMode
+          );
+          if (!ok) {
+            throw new Error("cell/replace a refuse l'ecriture (" + group[j].address + ").");
+          }
+          written += 1;
+        }
+      }
+    }
+    return {
+      written: written,
+      addresses: targets.map(function (c) { return c.address; })
+    };
+  }
+
+  async function recalculateDatacAddresses(addresses) {
+    if (!addresses || !addresses.length) {
+      return;
+    }
+    await Excel.run(async function (context) {
+      var i;
+      for (i = 0; i < addresses.length; i += 1) {
+        var range = context.workbook.getRange(addresses[i]);
+        if (typeof range.calculate === "function") {
+          range.calculate();
+        }
+      }
+      await context.sync();
+    });
+  }
+
+  function openDatacWriteDialog(event, pickContext) {
+    var payload = {
+      cells: pickContext.cells,
+      truncated: Boolean(pickContext.truncated),
+      skipped: pickContext.skipped || 0
+    };
+    return storageRemove(DATAC_WRITE_STORAGE_KEY).then(function () {
+      return storageSetJson(DATAC_WRITE_STORAGE_KEY, payload);
+    }).then(function () {
+      return new Promise(function (resolve) {
+        var dialogUrl = new URL("palo-datac-write.html", window.location.href);
+        dialogUrl.searchParams.set("v", PALO_PLUGIN_VERSION);
+        Office.context.ui.displayDialogAsync(
+          dialogUrl.href,
+          { height: 58, width: 34, displayInIframe: true },
+          function (asyncResult) {
+            if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+              paloUserNotify(
+                "Impossible d'ouvrir le menu d'ecriture PALO.DATAC."
+                  + (asyncResult.errorMessage ? " " + asyncResult.errorMessage : ""),
+                "error"
+              );
+              storageRemove(DATAC_WRITE_STORAGE_KEY);
+              complete(event);
+              resolve();
+              return;
+            }
+            var dlg = asyncResult.value;
+            var cleaned = false;
+            var ribbonEventCompleted = false;
+            function finishRibbonUiEvent() {
+              if (ribbonEventCompleted || !event) {
+                return;
+              }
+              ribbonEventCompleted = true;
+              complete(event);
+            }
+            setTimeout(finishRibbonUiEvent, 200);
+
+            function cleanup() {
+              if (cleaned) {
+                return;
+              }
+              cleaned = true;
+              storageRemove(DATAC_WRITE_STORAGE_KEY);
+            }
+
+            function postResult(ok, message) {
+              if (typeof dlg.messageChild !== "function") {
+                paloUserNotify(message, ok ? "ok" : "error");
+                return;
+              }
+              try {
+                dlg.messageChild(JSON.stringify({ type: "result", ok: ok, message: message }));
+              } catch (_e) {
+                paloUserNotify(message, ok ? "ok" : "error");
+              }
+            }
+
+            dlg.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+              var msg = String(arg.message || "");
+              if (msg === "palo-datac-write-ready") {
+                if (typeof dlg.messageChild === "function") {
+                  try {
+                    dlg.messageChild(JSON.stringify({
+                      type: "init",
+                      cells: payload.cells,
+                      truncated: payload.truncated,
+                      skipped: payload.skipped
+                    }));
+                  } catch (_e) {
+                    // Le dialogue relit le stockage.
+                  }
+                }
+                return;
+              }
+              var o = null;
+              try {
+                o = JSON.parse(msg);
+              } catch (_parse) {
+                o = null;
+              }
+              if (!o || o.type !== "write") {
+                return;
+              }
+              var mode = o.mode === "bulk" ? "bulk" : "replace";
+              executeDatacWrite(payload.cells, mode, o.value == null ? "" : String(o.value), Number(o.splash))
+                .then(function (result) {
+                  return recalculateDatacAddresses(result.addresses).catch(function () {
+                    return null;
+                  }).then(function () {
+                    var label = mode === "bulk" ? "Cell replace bulk" : "Cell replace";
+                    postResult(true, label + " : " + result.written + " cellule(s) ecrite(s). La formule PALO.DATAC est conservee.");
+                  });
+                })
+                .catch(function (err) {
+                  postResult(false, err && err.message ? err.message : String(err));
+                });
+            });
+
+            dlg.addEventHandler(Office.EventType.DialogEventReceived, function (ev) {
+              if (ev && (ev.error === 12004 || ev.error === 12006)) {
+                cleanup();
+              }
+            });
+            resolve();
+          }
+        );
+      });
+    });
+  }
+
   async function paloRibbonAction(event) {
     try {
       if (!window.paloEnameRibbon || !window.PaloOffice) {
@@ -285,19 +637,45 @@
             return { skip: false, p1: p1, p2: p2 };
           }
 
-          // Tentative 1: cellule active.
-          var fromActive = buildResultFromFormula(readFormula(cell));
-          // Tentative 2: cellule en haut-gauche de la selection.
-          var picked = fromActive.skip ? buildResultFromFormula(readFormula(sel)) : fromActive;
-          if (picked.skip) {
-            return picked;
+          // Cellule active PALO.ENAME : selecteur d'element (comportement inchange).
+          var activeFormula = readFormula(cell);
+          var fromActive = buildResultFromFormula(activeFormula);
+          if (!fromActive.skip) {
+            await context.sync();
+            return {
+              skip: false,
+              kind: "ename",
+              servdb: window.paloEnameRibbon.readPrepared(fromActive.p1).trim(),
+              dimension: window.paloEnameRibbon.readPrepared(fromActive.p2).trim()
+            };
           }
 
+          // Ecriture seulement si la cellule active est PALO.DATAC.
+          // Une selection mixte ne doit pas prendre la place du selecteur PALO.ENAME.
+          if (window.paloEnameRibbon.mentionsPaloDatacInText(activeFormula)) {
+            var datac = await collectDatacWriteCells(context, workbook, sheet, cell, sel);
+            if (datac.cells.length) {
+              return {
+                skip: false,
+                kind: "datac",
+                cells: datac.cells,
+                truncated: datac.truncated,
+                skipped: datac.skipped
+              };
+            }
+            return { skip: true, reason: "datac_unresolved" };
+          }
+
+          var fromSel = buildResultFromFormula(readFormula(sel));
+          if (fromSel.skip) {
+            return fromActive;
+          }
           await context.sync();
           return {
             skip: false,
-            servdb: window.paloEnameRibbon.readPrepared(picked.p1).trim(),
-            dimension: window.paloEnameRibbon.readPrepared(picked.p2).trim()
+            kind: "ename",
+            servdb: window.paloEnameRibbon.readPrepared(fromSel.p1).trim(),
+            dimension: window.paloEnameRibbon.readPrepared(fromSel.p2).trim()
           };
         });
       }
@@ -320,8 +698,18 @@
         }
       }
 
+      if (!pickContext.skip && pickContext.kind === "datac") {
+        await openDatacWriteDialog(event, pickContext);
+        return;
+      }
+
       if (pickContext.skip) {
-        await paloUserNotify("Palo action fonctionne sur une cellule contenant PALO.ENAME(...).", "error");
+        await paloUserNotify(
+          pickContext.reason === "datac_unresolved"
+            ? "PALO.DATAC trouvee, mais les coordonnees n'ont pas pu etre lues (reference vide ou formule illisible)."
+            : "Palo action fonctionne sur une cellule PALO.ENAME(...) ou PALO.DATAC(...).",
+          "error"
+        );
         complete(event);
         return;
       }

@@ -1449,6 +1449,69 @@
     return String(text).trim().indexOf("1") === 0;
   };
 
+  /** Valeur de /cell/replace_bulk : separateur ":", chaines speciales encodees en CSV. */
+  function encodePaloBulkValue(value) {
+    var s = normalizePaloPathSegment(value);
+    s = s == null ? "" : String(s);
+    if (/[",:\r\n]/.test(s) || /^\s|\s$/.test(s)) {
+      return "\"" + s.replace(/"/g, "\"\"") + "\"";
+    }
+    return s;
+  }
+
+  /**
+   * Ecrit plusieurs cellules d'un meme cube en un appel /cell/replace_bulk.
+   * idPaths : chemins d'identifiants ("id,id,id"), values : une valeur par chemin.
+   */
+  PaloApiClient.prototype.cellReplaceBulk = async function cellReplaceBulk(
+    sid,
+    name_database,
+    name_cube,
+    idPaths,
+    values,
+    splash
+  ) {
+    var paths = Array.isArray(idPaths) ? idPaths : [idPaths];
+    var valueList = Array.isArray(values) ? values : [values];
+    if (!paths.length || paths.length !== valueList.length) {
+      throw new Error(
+        "cell/replace_bulk: " + paths.length + " chemin(s) pour " + valueList.length + " valeur(s)."
+      );
+    }
+    var splashMode = splash == null || splash === "" ? 1 : splash;
+    var encoded = valueList.map(encodePaloBulkValue);
+    var start = 0;
+    while (start < paths.length) {
+      var pathPart = String(paths[start]);
+      var valuePart = encoded[start];
+      var end = start + 1;
+      while (end < paths.length) {
+        var nextPath = pathPart + ":" + String(paths[end]);
+        var nextValue = valuePart + ":" + encoded[end];
+        if (nextPath.length + nextValue.length > 4000) {
+          break;
+        }
+        pathPart = nextPath;
+        valuePart = nextValue;
+        end += 1;
+      }
+      var text = await this.call("/cell/replace_bulk", {
+        sid: sid,
+        name_database: name_database,
+        name_cube: name_cube,
+        paths: pathPart,
+        values: valuePart,
+        splash: splashMode
+      });
+      var trimmed = String(text == null ? "" : text).trim();
+      if (trimmed.indexOf("1") !== 0) {
+        throw new Error(trimmed ? "cell/replace_bulk: " + trimmed.slice(0, 300) : "cell/replace_bulk a refuse l'ecriture.");
+      }
+      start = end;
+    }
+    return true;
+  };
+
   function dimElementCacheTtlMs() {
     if (typeof window !== "undefined" && window.PALO_DIM_ELEMENT_CACHE_TTL_MS != null) {
       var n = Number(window.PALO_DIM_ELEMENT_CACHE_TTL_MS);

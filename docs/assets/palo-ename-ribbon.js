@@ -19,7 +19,13 @@
     if (s.indexOf("=@") === 0) {
       s = ("=" + s.slice(2)).trim();
     }
-    if (s.charAt(0) !== "=" && /(?:^|[^A-Z0-9_])PALO\s*\.\s*ENAME\s*\(/i.test(s)) {
+    if (
+      s.charAt(0) !== "="
+      && (
+        /(?:^|[^A-Z0-9_])PALO\s*\.\s*ENAME\s*\(/i.test(s)
+        || /(?:^|[^A-Z0-9_])PALO\s*\.\s*DATAC\s*\(/i.test(s)
+      )
+    ) {
       s = "=" + s;
     }
     // Guillemets typographiques / espaces insécables : sans ca le parseur de liste d'arguments casse (popup ruban silencieux).
@@ -36,6 +42,10 @@
 
   function mentionsPaloEnameInText(s) {
     return /PALO\s*\.\s*ENAME\s*\(/i.test(s) || /_XLFN\.PALO\.ENAME/i.test(s);
+  }
+
+  function mentionsPaloDatacInText(s) {
+    return /PALO\s*\.\s*DATAC\s*\(/i.test(s) || /_XLFN\.PALO\.DATAC/i.test(s);
   }
 
   /**
@@ -125,16 +135,21 @@
   }
 
   /**
-   * Position de l'appel PALO.ENAME( (supporte espaces autour du point et _xlfn.).
+   * Position de l'appel PALO.<FUNC>( (supporte espaces autour du point et _xlfn.).
    */
-  function findPaloEnameCallStart(formula) {
+  function findPaloFunctionCallStart(formula, funcName) {
+    var name = String(funcName || "").toUpperCase();
+    if (!/^[A-Z0-9_]+$/.test(name)) {
+      return null;
+    }
     var s = String(formula || "");
     var upper = s.toUpperCase();
-    var xlfn = "_XLFN.PALO.ENAME(";
+    var xlfn = "_XLFN.PALO." + name + "(";
     var ix = upper.indexOf(xlfn);
     if (ix !== -1) {
       return { idx: ix, needleLen: xlfn.length };
     }
+    var needle = new RegExp("^PALO\\s*\\.\\s*" + name + "\\s*\\(", "i");
     var pos = 0;
     while (pos < s.length) {
       var hit = upper.indexOf("PALO", pos);
@@ -142,7 +157,7 @@
         return null;
       }
       var rest = s.slice(hit);
-      var m = /^PALO\s*\.\s*ENAME\s*\(/i.exec(rest);
+      var m = needle.exec(rest);
       if (m) {
         return { idx: hit, needleLen: m[0].length };
       }
@@ -272,12 +287,12 @@
   /**
    * @returns {null | { formula: string, callStart: number, callEnd: number, args: Array<{raw:string,start:number,end:number}> }}
    */
-  function parsePaloEnameCall(formulaLocal) {
+  function parsePaloFunctionCall(formulaLocal, funcName, minArgs) {
     var formula = normalizeRibbonFormula(formulaLocal);
     if (!formula) {
       return null;
     }
-    var found = findPaloEnameCallStart(formula);
+    var found = findPaloFunctionCallStart(formula, funcName);
     if (!found) {
       return null;
     }
@@ -323,7 +338,8 @@
     var closingIdx = j;
     var listSep = detectListSeparator(formula, innerStart, closingIdx);
     var sliced = sliceTopLevelArgs(formula, innerStart, listSep);
-    if (!sliced || sliced.args.length < 3) {
+    var needed = minArgs == null ? 1 : minArgs;
+    if (!sliced || sliced.args.length < needed) {
       return null;
     }
     return {
@@ -332,6 +348,59 @@
       callEnd: closingIdx + 1,
       args: sliced.args
     };
+  }
+
+  function parsePaloEnameCall(formulaLocal) {
+    return parsePaloFunctionCall(formulaLocal, "ENAME", 3);
+  }
+
+  function parsePaloDatacCall(formulaLocal) {
+    return parsePaloFunctionCall(formulaLocal, "DATAC", 2);
+  }
+
+  /**
+   * Toutes les cellules de la plage dont la formule contient PALO.DATAC.
+   * formulasLocal est prioritaire sur formulas pour une meme position.
+   */
+  function scanRangeForPaloDatacHits(range, maxVisited) {
+    var limit = maxVisited == null ? 2000 : maxVisited;
+    var seen = {};
+    var hits = [];
+    var truncated = false;
+    function scan(matrix) {
+      if (!matrix || !Array.isArray(matrix) || truncated) {
+        return;
+      }
+      var visited = 0;
+      var r;
+      for (r = 0; r < matrix.length; r += 1) {
+        var row = matrix[r];
+        if (!Array.isArray(row)) {
+          continue;
+        }
+        var c;
+        for (c = 0; c < row.length; c += 1) {
+          visited += 1;
+          if (visited > limit) {
+            truncated = true;
+            return;
+          }
+          var key = r + ":" + c;
+          if (seen[key]) {
+            continue;
+          }
+          var cellF = String(row[c] || "").trim();
+          if (!cellF || !mentionsPaloDatacInText(cellF)) {
+            continue;
+          }
+          seen[key] = true;
+          hits.push({ formula: cellF, row: r, col: c });
+        }
+      }
+    }
+    scan(range.formulasLocal);
+    scan(range.formulas);
+    return { hits: hits, truncated: truncated };
   }
 
   function buildExcelStringLiteral(value) {
@@ -384,6 +453,9 @@
     readFormulaBestForPalo: readFormulaBestForPalo,
     readFormulaForPaloFromLoadedRange: readFormulaForPaloFromLoadedRange,
     parsePaloEnameCall: parsePaloEnameCall,
+    parsePaloDatacCall: parsePaloDatacCall,
+    mentionsPaloDatacInText: mentionsPaloDatacInText,
+    scanRangeForPaloDatacHits: scanRangeForPaloDatacHits,
     prepareResolveArgument: prepareResolveArgument,
     readPrepared: readPrepared,
     buildExcelStringLiteral: buildExcelStringLiteral,
