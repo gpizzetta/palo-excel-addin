@@ -368,6 +368,7 @@
   var paloDatacPerfRows = [];
   var paloDatacPerfTimer = null;
   var paloDatacPerfSeq = 0;
+  var paloDatacPerfDepth = 0;
 
   function paloDatacPerfStamp() {
     var d = new Date();
@@ -390,8 +391,23 @@
     }
   }
 
-  /** Une ligne par etape. Le tableau JSON est ecrit dans la console apres la rafale. */
+  /**
+   * Une ligne par etape, seulement pendant une formule PALO.DATAC.
+   * Le popup d'ecriture et le remplacement de cellule passent par le meme client HTTP :
+   * sans ce compteur, leur journal ressort comme un appel de formule.
+   */
   function paloDatacPerf(step, fields) {
+    var name = String(step || "");
+    if (name === "debut") {
+      paloDatacPerfDepth += 1;
+    }
+    var keep = paloDatacPerfDepth > 0;
+    if ((name === "fin" || name === "erreur" || name === "arret") && paloDatacPerfDepth > 0) {
+      paloDatacPerfDepth -= 1;
+    }
+    if (!keep) {
+      return;
+    }
     paloDatacPerfSeq += 1;
     var row = {
       n: paloDatacPerfSeq,
@@ -1792,18 +1808,32 @@
     return { byExact: byExact, byLower: byLower };
   }
 
+  var paloSharedSessions = new Map();
+  var paloSharedSidInflight = new Map();
+  var paloSharedDbListCache = new Map();
+  var paloSharedCubeListCache = new Map();
+  var paloSharedDimensionListCache = new Map();
+  var paloSharedDimensionListInflight = new Map();
+  var paloSharedDimOrderCache = new Map();
+  var paloSharedDimOrderInflight = new Map();
+  var paloSharedDimElementMapCache = new Map();
+  var paloSharedDimElementMapInflight = new Map();
+
   function PaloConnectionManager() {
     this.storageKey = "palo.office365.connections.v1";
     this.activeKey = "palo.office365.active.v1";
-    this.sessions = new Map();
-    this._dbListCache = new Map();
-    this._cubeListCache = new Map();
-    this._dimensionListCache = new Map();
-    this._dimensionListInflight = new Map();
-    this._dimOrderCache = new Map();
-    this._dimOrderInflight = new Map();
-    this._dimElementMapCache = new Map();
-    this._dimElementMapInflight = new Map();
+    // Partages : le ruban cree un manager par etape. Sans cela, chaque clic
+    // relance /server/login et relit le cube.
+    this.sessions = paloSharedSessions;
+    this._sidInflight = paloSharedSidInflight;
+    this._dbListCache = paloSharedDbListCache;
+    this._cubeListCache = paloSharedCubeListCache;
+    this._dimensionListCache = paloSharedDimensionListCache;
+    this._dimensionListInflight = paloSharedDimensionListInflight;
+    this._dimOrderCache = paloSharedDimOrderCache;
+    this._dimOrderInflight = paloSharedDimOrderInflight;
+    this._dimElementMapCache = paloSharedDimElementMapCache;
+    this._dimElementMapInflight = paloSharedDimElementMapInflight;
     this._cellBatchQueues = new Map();
     this._cellBatchTimers = new Map();
     // File réservée à PALO.DATAB. PALO.DATAC ne la consulte pas.
@@ -2577,6 +2607,55 @@
       self._dimElementMapInflight.delete(key);
     });
     return p;
+  };
+
+  PaloConnectionManager.prototype.rememberDimensionElements = function rememberDimensionElements(
+    connectionName,
+    database,
+    dimName,
+    elems
+  ) {
+    var key = this._getDimElementMapCacheKey(connectionName, database, dimName);
+    var maps = buildNameToIdMapsFromElements(elems);
+    var byElement = new Map();
+    var i;
+    for (i = 0; i < elems.length; i += 1) {
+      var el = elems[i];
+      var name = String(el && el.name || "").trim();
+      if (!name) {
+        continue;
+      }
+      byElement.set(name, el);
+      byElement.set(name.toLowerCase(), el);
+    }
+    this._dimElementMapCache.set(key, {
+      loadedAt: Date.now(),
+      byExact: maps.byExact,
+      byLower: maps.byLower,
+      byElement: byElement
+    });
+  };
+
+  PaloConnectionManager.prototype.cachedDimensionElement = function cachedDimensionElement(
+    connectionName,
+    database,
+    dimName,
+    elementName
+  ) {
+    var key = this._getDimElementMapCacheKey(connectionName, database, dimName);
+    var cached = this._dimElementMapCache.get(key);
+    if (!cached || !cached.byElement) {
+      return null;
+    }
+    var ttl = dimElementCacheTtlMs();
+    if ((Date.now() - cached.loadedAt) > ttl) {
+      return null;
+    }
+    var name = String(elementName || "").trim();
+    if (!name) {
+      return null;
+    }
+    return cached.byElement.get(name) || cached.byElement.get(name.toLowerCase()) || null;
   };
 
   PaloConnectionManager.prototype.resolveNameSetToIdMapCached = async function resolveNameSetToIdMapCached(

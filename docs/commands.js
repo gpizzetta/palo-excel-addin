@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.26";
+  var PALO_PLUGIN_VERSION = "1.0.3.29";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -414,9 +414,19 @@
     };
   }
 
-  async function elementTypeForWrite(ctx, dimensionName, elementName, cache) {
+  async function elementTypeForWrite(manager, ctx, dimensionName, elementName, cache) {
     var key = ctx.database + "\0" + dimensionName + "\0" + elementName;
     if (Object.prototype.hasOwnProperty.call(cache, key)) {
+      return cache[key];
+    }
+    var cachedElement = manager.cachedDimensionElement(
+      ctx.connectionName,
+      ctx.database,
+      dimensionName,
+      elementName
+    );
+    if (cachedElement && elementInfoIsUsable(cachedElement)) {
+      cache[key] = Number(cachedElement.type);
       return cache[key];
     }
     var info = null;
@@ -556,7 +566,7 @@
         }
         var types = [];
         for (k = 0; k < dimNames.length; k += 1) {
-          types.push(await elementTypeForWrite(ctx, dimNames[k], cell.coordinates[k], typeCache));
+          types.push(await elementTypeForWrite(manager, ctx, dimNames[k], cell.coordinates[k], typeCache));
         }
         var kind = window.PaloOffice.paloPathStorageKind(types);
         if (kind !== "numeric") {
@@ -777,10 +787,11 @@
   }
 
   /**
-   * Avant le popup : un element consolide (regroupement) sur le chemin de la cellule active
-   * selectionne cell/replace_bulk. Sinon, cell/replace uniquement.
+   * Avant le popup : une lecture des elements par dimension.
+   * Un element consolide sur la cellule active selectionne cell/replace_bulk.
+   * La meme liste alimente les listes du popup et le cache d'ids de l'ecriture.
    */
-  async function classifyDatacWriteMode(cells) {
+  async function prepareDatacWrite(cells) {
     var active = null;
     var i;
     for (i = 0; i < cells.length; i += 1) {
@@ -807,74 +818,20 @@
         + " (" + dimNames.length + ")."
       );
     }
+    var lists = await Promise.all(dimNames.map(function (dimensionName) {
+      return ctx.client.dimensionElements(ctx.sid, ctx.database, dimensionName);
+    }));
     var consolidated = [];
     var missing = [];
-    for (i = 0; i < dimNames.length; i += 1) {
-      var elementName = active.coordinates[i];
-      var dimensionName = dimNames[i];
-      var info = null;
-      try {
-        info = await ctx.client.elementInfo(
-          ctx.sid,
-          ctx.database,
-          dimensionName,
-          elementName
-        );
-      } catch (err) {
-        if (isTransportError(err)) {
-          throw err;
-        }
-        missing.push({
-          element: elementName,
-          dimension: dimensionName,
-          message: missingElementMessage(elementName, dimensionName)
-        });
-        continue;
-      }
-      if (!elementInfoIsUsable(info)) {
-        missing.push({
-          element: elementName,
-          dimension: dimensionName,
-          message: missingElementMessage(elementName, dimensionName)
-        });
-        continue;
-      }
-      if (isConsolidatedElement(info)) {
-        consolidated.push(dimensionName + " / " + String(info.name || elementName));
-      }
-    }
-    return {
-      mode: consolidated.length ? "bulk" : "replace",
-      consolidated: consolidated,
-      missing: missing
-    };
-  }
-
-  async function loadDatacLikeDimensions(cells) {
-    var active = null;
-    var i;
-    for (i = 0; i < cells.length; i += 1) {
-      if (cells[i].active) {
-        active = cells[i];
-      }
-    }
-    if (!active) {
-      active = cells[0];
-    }
-    var manager = window.PaloOffice.createConnectionManager();
-    var ctx = await manager.getClientAndContext(active.servdb);
-    var dimNames = await manager.getCubeDimensionNamesOrdered(
-      ctx.connectionName,
-      ctx.sid,
-      ctx.client,
-      ctx.database,
-      active.cube
-    );
     var dimensions = [];
     for (i = 0; i < dimNames.length; i += 1) {
-      var elems = await ctx.client.dimensionElements(ctx.sid, ctx.database, dimNames[i]);
+      var dimensionName = dimNames[i];
+      var elementName = String(active.coordinates[i] || "");
+      var elems = lists[i] || [];
+      manager.rememberDimensionElements(ctx.connectionName, ctx.database, dimensionName, elems);
       var names = [];
       var seen = {};
+      var found = null;
       var j;
       for (j = 0; j < elems.length; j += 1) {
         var name = String(elems[j].name || "").trim();
@@ -883,18 +840,34 @@
         }
         seen[name] = true;
         names.push(name);
+        if (!found && (name === elementName || name.toLowerCase() === elementName.toLowerCase())) {
+          found = elems[j];
+        }
       }
-      var current = String(active.coordinates[i] || "");
-      if (current && !seen[current]) {
-        names.unshift(current);
+      if (!elementInfoIsUsable(found)) {
+        missing.push({
+          element: elementName,
+          dimension: dimensionName,
+          message: missingElementMessage(elementName, dimensionName)
+        });
+      } else if (isConsolidatedElement(found)) {
+        consolidated.push(dimensionName + " / " + String(found.name || elementName));
+      }
+      if (elementName && !seen[elementName]) {
+        names.unshift(elementName);
       }
       dimensions.push({
-        name: dimNames[i],
-        current: current,
+        name: dimensionName,
+        current: elementName,
         elements: names
       });
     }
-    return dimensions;
+    return {
+      mode: consolidated.length ? "bulk" : "replace",
+      consolidated: consolidated,
+      missing: missing,
+      dimensions: missing.length ? [] : dimensions
+    };
   }
 
   function openDatacWriteDialog(event, pickContext) {
@@ -1139,14 +1112,11 @@
       }
 
       if (!pickContext.skip && pickContext.kind === "datac") {
-        var classified = await classifyDatacWriteMode(pickContext.cells);
-        pickContext.writeMode = classified.mode;
-        pickContext.consolidated = classified.consolidated;
-        pickContext.missing = classified.missing;
-        pickContext.dimensions = [];
-        if (!(classified.missing && classified.missing.length)) {
-          pickContext.dimensions = await loadDatacLikeDimensions(pickContext.cells);
-        }
+        var prepared = await prepareDatacWrite(pickContext.cells);
+        pickContext.writeMode = prepared.mode;
+        pickContext.consolidated = prepared.consolidated;
+        pickContext.missing = prepared.missing;
+        pickContext.dimensions = prepared.dimensions || [];
         await openDatacWriteDialog(event, pickContext);
         return;
       }
