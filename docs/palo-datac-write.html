@@ -107,8 +107,30 @@
       opacity: 0.9;
     }
     #status { min-height: 1.2em; white-space: pre-wrap; }
-    #status.error { color: #a4262c; }
-    #status.ok { color: #107c10; }
+    .alert {
+      margin-top: 4px;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 2px;
+      white-space: pre-wrap;
+    }
+    .alert-danger {
+      color: #842029;
+      background: #f8d7da;
+      border-color: #f5c2c7;
+    }
+    @media (prefers-color-scheme: dark) {
+      .alert-danger {
+        color: #f8d7da;
+        background: #58151c;
+        border-color: #842029;
+      }
+    }
+    html.theme-dark .alert-danger {
+      color: #f8d7da;
+      background: #58151c;
+      border-color: #842029;
+    }
   </style>
 </head>
 <body>
@@ -135,6 +157,7 @@
       <button type="button" id="btn-bulk" class="secondary">Cell replace bulk<small id="bulk-hint">Selection PALO.DATAC, /cell/replace_bulk</small></button>
     </div>
     <p id="status" class="hint"></p>
+    <div id="alert-danger" class="alert alert-danger" role="alert" hidden></div>
   </main>
   <script>
     var STORAGE_KEY = "palo_datac_write_v1";
@@ -155,12 +178,23 @@
       setVar("--palo-text", theme.bodyForegroundColor);
       setVar("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
       setVar("--palo-input-bg", theme.controlBackgroundColor);
+      if (theme.isDarkTheme) {
+        document.documentElement.classList.add("theme-dark");
+      }
     }
 
     function setStatus(text, kind) {
-      var el = document.getElementById("status");
-      el.textContent = text || "";
-      el.className = kind === "error" ? "error" : kind === "ok" ? "ok" : "hint";
+      var alertEl = document.getElementById("alert-danger");
+      var hint = document.getElementById("status");
+      if (kind === "error" && text) {
+        alertEl.hidden = false;
+        alertEl.textContent = text;
+        hint.textContent = "";
+        return;
+      }
+      alertEl.hidden = true;
+      alertEl.textContent = "";
+      hint.textContent = text || "";
     }
 
     function pathLabel(cell) {
@@ -289,11 +323,7 @@
       state.busy = false;
       document.getElementById("btn-replace").disabled = false;
       document.getElementById("btn-bulk").disabled = false;
-      if (payload && payload.ok) {
-        setStatus(payload.message || "Valeur ecrite.", "ok");
-      } else {
-        setStatus(payload && payload.message ? payload.message : "Ecriture refusee.", "error");
-      }
+      setStatus(payload && payload.message ? payload.message : "Ecriture refusee.", "error");
     }
 
     Office.onReady(function () {

@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.7";
+  var PALO_PLUGIN_VERSION = "1.0.3.8";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_MAX_CELLS = 200;
@@ -696,8 +696,12 @@
                   return recalculateDatacAddresses(result.addresses).catch(function () {
                     return null;
                   }).then(function () {
-                    var label = mode === "bulk" ? "Cell replace bulk" : "Cell replace";
-                    postResult(true, label + " : " + result.written + " cellule(s) ecrite(s). La formule PALO.DATAC est conservee.");
+                    cleanup();
+                    try {
+                      dlg.close();
+                    } catch (_closeOk) {
+                      // Le dialogue est deja ferme.
+                    }
                   });
                 })
                 .catch(function (err) {
