@@ -48,7 +48,7 @@
       margin: 0;
       padding: 10px 12px;
       border-bottom: 1px solid var(--palo-border);
-      background: var(--palo-bg);
+      background: var(--palo-surface);
       flex-shrink: 0;
     }
     main {
@@ -149,6 +149,9 @@
       var root = document.documentElement;
       if (theme.bodyBackgroundColor) {
         root.style.setProperty("--palo-bg", theme.bodyBackgroundColor);
+      }
+      if (theme.controlBackgroundColor || theme.bodyBackgroundColor) {
+        root.style.setProperty("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
       }
       if (theme.bodyForegroundColor) {
         root.style.setProperty("--palo-text", theme.bodyForegroundColor);

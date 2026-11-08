@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.18";
+  var PALO_PLUGIN_VERSION = "1.0.3.19";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -1710,7 +1710,7 @@
       }
       Office.context.ui.displayDialogAsync(
         confirmHref,
-        { height: 52, width: 52, displayInIframe: true },
+        { height: 52, width: 40, displayInIframe: true },
         function (asyncResult) {
           if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
             resolve(false);
