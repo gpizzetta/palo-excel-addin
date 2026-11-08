@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.5";
+  var PALO_PLUGIN_VERSION = "1.0.3.7";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_MAX_CELLS = 200;
@@ -470,6 +470,113 @@
     };
   }
 
+  function isConsolidatedElement(info) {
+    if (!info) {
+      return false;
+    }
+    if (Number(info.type) === 4) {
+      return true;
+    }
+    return Array.isArray(info.childIds) && info.childIds.length > 0;
+  }
+
+  function missingElementMessage(elementName, dimensionName) {
+    return "Element " + elementName + " introuvable dans la dimension " + dimensionName;
+  }
+
+  function isTransportError(err) {
+    var msg = err && err.message ? String(err.message) : String(err || "");
+    return msg.indexOf("Timeout HTTP") === 0
+      || msg.indexOf("Impossible de joindre") !== -1
+      || msg.indexOf("Failed to fetch") !== -1
+      || msg.indexOf("NetworkError") !== -1
+      || msg.indexOf("Load failed") !== -1;
+  }
+
+  function elementInfoIsUsable(info) {
+    if (!info) {
+      return false;
+    }
+    if (!/^\d+$/.test(String(info.id || "").trim())) {
+      return false;
+    }
+    return Boolean(String(info.name || "").trim());
+  }
+
+  /**
+   * Avant le popup : un element consolide (regroupement) sur le chemin de la cellule active
+   * selectionne cell/replace_bulk. Sinon, cell/replace uniquement.
+   */
+  async function classifyDatacWriteMode(cells) {
+    var active = null;
+    var i;
+    for (i = 0; i < cells.length; i += 1) {
+      if (cells[i].active) {
+        active = cells[i];
+      }
+    }
+    if (!active) {
+      active = cells[0];
+    }
+    var manager = window.PaloOffice.createConnectionManager();
+    var ctx = await manager.getClientAndContext(active.servdb);
+    var dimNames = await manager.getCubeDimensionNamesOrdered(
+      ctx.connectionName,
+      ctx.sid,
+      ctx.client,
+      ctx.database,
+      active.cube
+    );
+    if (active.coordinates.length !== dimNames.length) {
+      throw new Error(
+        "Nombre de coordonnees (" + active.coordinates.length
+        + ") different du nombre de dimensions du cube " + active.cube
+        + " (" + dimNames.length + ")."
+      );
+    }
+    var consolidated = [];
+    var missing = [];
+    for (i = 0; i < dimNames.length; i += 1) {
+      var elementName = active.coordinates[i];
+      var dimensionName = dimNames[i];
+      var info = null;
+      try {
+        info = await ctx.client.elementInfo(
+          ctx.sid,
+          ctx.database,
+          dimensionName,
+          elementName
+        );
+      } catch (err) {
+        if (isTransportError(err)) {
+          throw err;
+        }
+        missing.push({
+          element: elementName,
+          dimension: dimensionName,
+          message: missingElementMessage(elementName, dimensionName)
+        });
+        continue;
+      }
+      if (!elementInfoIsUsable(info)) {
+        missing.push({
+          element: elementName,
+          dimension: dimensionName,
+          message: missingElementMessage(elementName, dimensionName)
+        });
+        continue;
+      }
+      if (isConsolidatedElement(info)) {
+        consolidated.push(dimensionName + " / " + String(info.name || elementName));
+      }
+    }
+    return {
+      mode: consolidated.length ? "bulk" : "replace",
+      consolidated: consolidated,
+      missing: missing
+    };
+  }
+
   async function recalculateDatacAddresses(addresses) {
     if (!addresses || !addresses.length) {
       return;
@@ -490,7 +597,10 @@
     var payload = {
       cells: pickContext.cells,
       truncated: Boolean(pickContext.truncated),
-      skipped: pickContext.skipped || 0
+      skipped: pickContext.skipped || 0,
+      writeMode: pickContext.writeMode === "bulk" ? "bulk" : "replace",
+      consolidated: pickContext.consolidated || [],
+      missing: pickContext.missing || []
     };
     return storageRemove(DATAC_WRITE_STORAGE_KEY).then(function () {
       return storageSetJson(DATAC_WRITE_STORAGE_KEY, payload);
@@ -554,7 +664,10 @@
                       type: "init",
                       cells: payload.cells,
                       truncated: payload.truncated,
-                      skipped: payload.skipped
+                      skipped: payload.skipped,
+                      writeMode: payload.writeMode,
+                      consolidated: payload.consolidated,
+                      missing: payload.missing
                     }));
                   } catch (_e) {
                     // Le dialogue relit le stockage.
@@ -571,7 +684,13 @@
               if (!o || o.type !== "write") {
                 return;
               }
-              var mode = o.mode === "bulk" ? "bulk" : "replace";
+              if (payload.missing && payload.missing.length) {
+                postResult(false, payload.missing.map(function (item) {
+                  return item.message;
+                }).join("\n"));
+                return;
+              }
+              var mode = payload.writeMode === "bulk" ? "bulk" : "replace";
               executeDatacWrite(payload.cells, mode, o.value == null ? "" : String(o.value), Number(o.splash))
                 .then(function (result) {
                   return recalculateDatacAddresses(result.addresses).catch(function () {
@@ -699,6 +818,10 @@
       }
 
       if (!pickContext.skip && pickContext.kind === "datac") {
+        var classified = await classifyDatacWriteMode(pickContext.cells);
+        pickContext.writeMode = classified.mode;
+        pickContext.consolidated = classified.consolidated;
+        pickContext.missing = classified.missing;
         await openDatacWriteDialog(event, pickContext);
         return;
       }

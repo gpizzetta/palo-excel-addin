@@ -138,7 +138,7 @@
   </main>
   <script>
     var STORAGE_KEY = "palo_datac_write_v1";
-    var state = { cells: [], busy: false };
+    var state = { cells: [], busy: false, writeMode: "replace" };
 
     function applyOfficeTheme() {
       var theme = Office.context && Office.context.officeTheme;
@@ -189,7 +189,20 @@
         lines.push(pathLabel(active));
       }
       lines.push(state.cells.length + " cellule(s) PALO.DATAC.");
-      if (cubeNames.length > 1) {
+      var missing = payload && Array.isArray(payload.missing) ? payload.missing : [];
+      state.writeMode = payload && payload.writeMode === "bulk" ? "bulk" : "replace";
+      state.missing = missing;
+      if (missing.length) {
+        lines.push("Chemin incomplet.");
+      } else if (state.writeMode === "bulk") {
+        var groups = payload && Array.isArray(payload.consolidated) ? payload.consolidated : [];
+        lines.push(groups.length
+          ? "Regroupement : " + groups.join(", ") + "."
+          : "Element regroupe : cell replace bulk.");
+      } else {
+        lines.push("Aucun element regroupe : cell replace.");
+      }
+      if (!missing.length && state.writeMode === "bulk" && cubeNames.length > 1) {
         lines.push(cubeNames.length + " cubes : le bulk est envoye par cube.");
       }
       if (payload && payload.truncated) {
@@ -203,6 +216,20 @@
         ? (active.address || "Cellule active") + " — /cell/replace"
         : "Cellule active — /cell/replace";
       document.getElementById("bulk-hint").textContent = state.cells.length + " cellule(s) — /cell/replace_bulk";
+      var canWrite = !missing.length;
+      document.getElementById("btn-replace").style.display = canWrite && state.writeMode === "replace" ? "" : "none";
+      document.getElementById("btn-bulk").style.display = canWrite && state.writeMode === "bulk" ? "" : "none";
+      document.getElementById("value").disabled = !canWrite;
+      document.getElementById("splash").disabled = !canWrite;
+      if (missing.length) {
+        setStatus(missing.map(function (item) {
+          return item && item.message
+            ? item.message
+            : "Element " + (item && item.element ? item.element : "") + " introuvable dans la dimension " + (item && item.dimension ? item.dimension : "");
+        }).join("\n"), "error");
+      } else {
+        setStatus("", "");
+      }
       var valueInput = document.getElementById("value");
       if (valueInput && typeof valueInput.focus === "function") {
         try {
@@ -234,7 +261,7 @@
     }
 
     function send(mode) {
-      if (state.busy) {
+      if (state.busy || (state.missing && state.missing.length)) {
         return;
       }
       if (!state.cells.length) {
@@ -280,7 +307,7 @@
       });
       document.getElementById("value").addEventListener("keydown", function (ev) {
         if (ev.key === "Enter") {
-          send("replace");
+          send(state.writeMode === "bulk" ? "bulk" : "replace");
         }
       });
 
