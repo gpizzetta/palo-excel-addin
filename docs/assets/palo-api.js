@@ -364,31 +364,89 @@
     return console;
   }
 
-  var PALO_DATAC_PERF_MAX = 80;
-  var paloDatacPerfLines = [];
+  var PALO_DATAC_PERF_MAX = 800;
+  var paloDatacPerfRows = [];
+  var paloDatacPerfTimer = null;
+  var paloDatacPerfSeq = 0;
 
   function paloDatacPerfStamp() {
     var d = new Date();
     function two(n) {
       return n < 10 ? "0" + n : String(n);
     }
-    return two(d.getHours()) + ":" + two(d.getMinutes()) + ":" + two(d.getSeconds());
+    return two(d.getHours()) + ":" + two(d.getMinutes()) + ":" + two(d.getSeconds())
+      + "." + String(d.getMilliseconds() + 1000).slice(1);
   }
 
-  /** Journal de duree PALO.DATAC. Console + volet, sans ecriture disque. */
-  function paloDatacPerf(text) {
-    var line = paloDatacPerfStamp() + " " + String(text || "");
-    paloDatacPerfLines.push(line);
-    if (paloDatacPerfLines.length > PALO_DATAC_PERF_MAX) {
-      paloDatacPerfLines.splice(0, paloDatacPerfLines.length - PALO_DATAC_PERF_MAX);
+  function paloDatacPerfCopyFields(target, fields) {
+    if (!fields || typeof fields !== "object") {
+      return;
+    }
+    var key;
+    for (key in fields) {
+      if (Object.prototype.hasOwnProperty.call(fields, key) && fields[key] != null) {
+        target[key] = fields[key];
+      }
+    }
+  }
+
+  /** Une ligne par etape. Le tableau JSON est ecrit dans la console apres la rafale. */
+  function paloDatacPerf(step, fields) {
+    paloDatacPerfSeq += 1;
+    var row = {
+      n: paloDatacPerfSeq,
+      t: paloDatacPerfStamp(),
+      step: String(step || "")
+    };
+    paloDatacPerfCopyFields(row, fields);
+    paloDatacPerfRows.push(row);
+    if (paloDatacPerfRows.length > PALO_DATAC_PERF_MAX) {
+      paloDatacPerfRows.splice(0, paloDatacPerfRows.length - PALO_DATAC_PERF_MAX);
     }
     try {
-      var targetConsole = paloTraceConsole();
-      if (targetConsole && typeof targetConsole.info === "function") {
-        targetConsole.info("[Palo DATAC] " + line);
+      paloGlobal.PALO_DATAC_PERF = paloDatacPerfRows;
+    } catch (_bag) {
+      // ignore
+    }
+    if (paloDatacPerfTimer) {
+      clearTimeout(paloDatacPerfTimer);
+    }
+    paloDatacPerfTimer = setTimeout(paloDatacPerfDump, 1000);
+    paloDatacPerfRender();
+  }
+
+  function paloDatacPerfDump() {
+    paloDatacPerfTimer = null;
+    var json = "[]";
+    try {
+      json = JSON.stringify(paloDatacPerfRows, null, 2);
+    } catch (_json) {
+      json = "[]";
+    }
+    try {
+      paloGlobal.PALO_DATAC_PERF_JSON = json;
+    } catch (_store) {
+      // ignore
+    }
+    var consoles = [];
+    try {
+      consoles.push(paloTraceConsole());
+    } catch (_top) {
+      // ignore
+    }
+    try {
+      consoles.push(console);
+    } catch (_local) {
+      // ignore
+    }
+    var i;
+    for (i = 0; i < consoles.length; i += 1) {
+      if (!consoles[i] || consoles[i] === consoles[i - 1]) {
+        continue;
       }
-    } catch (_consoleError) {
-      // Le journal ne doit pas interrompre la lecture.
+      if (typeof consoles[i].log === "function") {
+        consoles[i].log("[Palo DATAC JSON]\n" + json);
+      }
     }
     paloDatacPerfRender();
   }
@@ -402,8 +460,8 @@
       if (!el) {
         return;
       }
-      el.textContent = paloDatacPerfLines.length
-        ? paloDatacPerfLines.join("\n")
+      el.textContent = paloDatacPerfRows.length
+        ? JSON.stringify(paloDatacPerfRows, null, 2)
         : "En attente d'un recalcul PALO.DATAC.";
       el.scrollTop = el.scrollHeight;
     } catch (_dom) {
@@ -1148,7 +1206,7 @@
         return await paloHttpGate(function () {
           var waitMs = Date.now() - queuedAt;
           if (waitMs >= 5) {
-            paloDatacPerf("file HTTP " + path + " attente=" + waitMs + "ms");
+            paloDatacPerf("http-wait", { path: path, ms: waitMs });
           }
           return self.callOnce(path, params);
         });
@@ -1211,6 +1269,11 @@
     try {
       response = await paloFetchGetWithTimeout(url, timeoutMs, logUrl);
     } catch (error) {
+      paloDatacPerf("http", {
+        path: path,
+        ms: Date.now() - httpStarted,
+        error: error && error.message ? String(error.message).slice(0, 180) : String(error)
+      });
       if (error && error.message && error.message.indexOf("Timeout HTTP") === 0) {
         throw error;
       }
@@ -1220,12 +1283,11 @@
       );
     }
     if (!response.ok) {
+      paloDatacPerf("http", { path: path, ms: Date.now() - httpStarted, error: "HTTP " + response.status });
       throw new Error("HTTP " + response.status + " sur " + logUrl);
     }
     var text = await response.text();
-    paloDatacPerf(
-      "http " + path + " " + (Date.now() - httpStarted) + "ms octets=" + text.length
-    );
+    paloDatacPerf("http", { path: path, ms: Date.now() - httpStarted, octets: text.length });
     if (paloDebugEnabled()) {
       console.info("[PaloOffice HTTP] corps", {
         path: path,
@@ -1919,11 +1981,13 @@
           );
           items[cfIdx].resolve(cfVal);
         }
-        paloDatacPerf(
-          "lot " + name_cube + " n=" + items.length
-          + " attente=" + queueWait + "ms mode=unitaire "
-          + (Date.now() - flushStarted) + "ms"
-        );
+        paloDatacPerf("lot", {
+          cube: name_cube,
+          n: items.length,
+          attenteMs: queueWait,
+          mode: "unitaire",
+          ms: Date.now() - flushStarted
+        });
         return;
       }
       if (items.length === 1) {
@@ -1937,10 +2001,13 @@
           items[0].namePath
         );
         items[0].resolve(single);
-        paloDatacPerf(
-          "lot " + name_cube + " n=1 attente=" + queueWait
-          + "ms mode=unitaire " + (Date.now() - flushStarted) + "ms"
-        );
+        paloDatacPerf("lot", {
+          cube: name_cube,
+          n: 1,
+          attenteMs: queueWait,
+          mode: "unitaire",
+          ms: Date.now() - flushStarted
+        });
         if (paloBulkTraceEnabled()) {
           paloTrace("cell-values-single-resolve", {
             key: key,
@@ -2084,11 +2151,13 @@
         }
         start = end;
       }
-      paloDatacPerf(
-        "lot " + name_cube + " n=" + items.length
-        + " attente=" + queueWait + "ms mode=cell/values "
-        + (Date.now() - flushStarted) + "ms"
-      );
+      paloDatacPerf("lot", {
+        cube: name_cube,
+        n: items.length,
+        attenteMs: queueWait,
+        mode: "cell/values",
+        ms: Date.now() - flushStarted
+      });
     } catch (err) {
       paloTrace("cell-values-batch-error", {
         key: key,
@@ -2450,7 +2519,7 @@
         names.push(dn);
       }
       self._dimOrderCache.set(key, names);
-      paloDatacPerf("dimensions " + cube + " " + (Date.now() - started) + "ms n=" + names.length);
+      paloDatacPerf("dimensions", { cube: cube, ms: Date.now() - started, n: names.length });
       return names;
     })();
     p.finally(function () {
@@ -2496,7 +2565,7 @@
         byLower: maps.byLower
       };
       self._dimElementMapCache.set(key, entry);
-      paloDatacPerf("elements " + dimName + " " + (Date.now() - started) + "ms n=" + elems.length);
+      paloDatacPerf("elements", { dimension: dimName, ms: Date.now() - started, n: elems.length });
       paloTrace("dim-element-map-cache-fill", {
         connectionName: connectionName,
         database: database,
@@ -2741,12 +2810,12 @@
         uniquePerDim[d]
       );
     }
-    paloDatacPerf(
-      "ids " + name_cube
-      + " cellules=" + pathSegmentsList.length
-      + " dimensions=" + dimsMs + "ms"
-      + " elements=" + (Date.now() - mapsStarted) + "ms"
-    );
+    paloDatacPerf("ids", {
+      cube: name_cube,
+      n: pathSegmentsList.length,
+      dimensionsMs: dimsMs,
+      elementsMs: Date.now() - mapsStarted
+    });
 
     var idPaths = [];
     for (p = 0; p < normalizedPaths.length; p += 1) {
@@ -2944,7 +3013,7 @@
     }
     var loginStarted = Date.now();
     var login = await client.login();
-    paloDatacPerf("login " + connectionName + " " + (Date.now() - loginStarted) + "ms");
+    paloDatacPerf("login", { connection: connectionName, ms: Date.now() - loginStarted });
     this.sessions.set(connectionName, {
       sid: login.sid,
       ttlSeconds: login.ttl,

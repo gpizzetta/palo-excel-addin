@@ -3,62 +3,193 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Palo — Snapshot</title>
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Snapshot</title>
   <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <style>
+    :root {
+      --palo-bg: #f3f2f1;
+      --palo-surface: #ffffff;
+      --palo-border: #edebe9;
+      --palo-text: #323130;
+      --palo-text-secondary: #605e5c;
+      --palo-input-border: #8a8886;
+      --palo-button: #0078d4;
+      --palo-button-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --palo-bg: #1f1f1f;
+        --palo-surface: #292827;
+        --palo-border: #3b3a39;
+        --palo-text: #ffffff;
+        --palo-text-secondary: #c8c6c4;
+        --palo-input-border: #8a8886;
+        --palo-button: #0078d4;
+        --palo-button-text: #ffffff;
+      }
+    }
+    html, body { height: 100%; margin: 0; }
     body {
       font-family: "Segoe UI", system-ui, sans-serif;
-      margin: 14px;
       font-size: 13px;
       line-height: 1.45;
-      color: #323130;
+      color: var(--palo-text);
+      background: var(--palo-bg);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
     }
-    h1 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
-    p { margin: 0 0 10px; }
-    .warn { color: #9a3412; }
-    .actions { margin-top: 16px; display: flex; gap: 10px; justify-content: flex-end; }
-    button { padding: 6px 16px; font-size: 13px; cursor: pointer; }
-    #yes { font-weight: 600; }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-bg);
+      flex-shrink: 0;
+    }
+    main {
+      flex: 1;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 0;
+    }
+    .fields {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #msg-copy[hidden],
+    #msg-inplace[hidden] { display: none; }
+    p { margin: 0; }
+    .hint { color: var(--palo-text-secondary); font-size: 12px; }
+    code { font-size: 12px; }
+    .actions {
+      margin-top: auto;
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
+    button {
+      font: inherit;
+      min-width: 96px;
+      padding: 6px 14px;
+      border: 1px solid var(--palo-button);
+      border-radius: 2px;
+      background: var(--palo-button);
+      color: var(--palo-button-text);
+      cursor: pointer;
+      text-align: center;
+    }
+    button.secondary {
+      background: #ffffff;
+      color: var(--palo-text);
+      border-color: var(--palo-input-border);
+    }
+    button:disabled {
+      background: #edebe9;
+      color: #a19f9d;
+      border-color: #c8c6c4;
+      cursor: not-allowed;
+    }
+    html.theme-dark button.secondary {
+      background: var(--palo-surface);
+    }
+    @media (prefers-color-scheme: dark) {
+      button.secondary {
+        background: var(--palo-surface);
+      }
+      button:disabled {
+        background: #3b3a39;
+        color: #8a8886;
+        border-color: #605e5c;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Snapshot valeurs</h1>
-  <div id="msg-copy">
-    <p>Le complement cree une <strong>copie</strong> dont le nom contient <code>snapshot</code> (<code>*_snapshot_*.xlsx</code>), puis remplace les formules <strong>uniquement dans cette copie</strong>.</p>
-    <p>Le classeur d'origine <strong>ne sera pas modifie</strong>.</p>
-  </div>
-  <div id="msg-inplace" hidden>
-    <p class="warn"><strong>Excel Online / client limite :</strong> creation automatique d'une copie impossible.</p>
-    <p>Le Snapshot remplace les formules <strong>uniquement</strong> si le nom du fichier contient <code>snapshot</code>.</p>
-    <p>Sinon : annulez, faites <strong>Fichier &gt; Enregistrer une copie</strong> (ex. <code>Budget_snapshot.xlsx</code>), ouvrez cette copie, puis relancez Snapshot.</p>
-  </div>
-  <div class="actions">
-    <button id="no" type="button">No / Non</button>
-    <button id="yes" type="button">Yes / Oui</button>
-  </div>
+  <h1>Snapshot</h1>
+  <main>
+    <div class="fields">
+      <div id="msg-copy">
+        <p>Le complement cree une copie nommee <strong id="copy-name"></strong>, puis remplace les formules uniquement dans cette copie.</p>
+        <p>Le classeur d'origine ne sera pas modifie.</p>
+      </div>
+      <div id="msg-inplace" hidden>
+        <p>Excel ne peut pas creer une copie separee. La conversion ne se fait que si le nom du fichier ouvert contient <code>snapshot</code>.</p>
+        <p id="open-name"></p>
+      </div>
+      <p id="status" class="hint"></p>
+    </div>
+    <div class="actions">
+      <button id="no" class="secondary" type="button">Annuler</button>
+      <button id="yes" type="button" disabled>Creer snapshot</button>
+    </div>
+  </main>
   <script>
+    function nameAllowsSnapshot(name) {
+      return String(name || "").toLowerCase().indexOf("snapshot") !== -1;
+    }
+
+    function applyOfficeTheme() {
+      var theme = Office.context && Office.context.officeTheme;
+      if (!theme) {
+        return;
+      }
+      var root = document.documentElement;
+      if (theme.bodyBackgroundColor) {
+        root.style.setProperty("--palo-bg", theme.bodyBackgroundColor);
+      }
+      if (theme.bodyForegroundColor) {
+        root.style.setProperty("--palo-text", theme.bodyForegroundColor);
+      }
+      if (theme.isDarkTheme) {
+        document.documentElement.classList.add("theme-dark");
+      }
+    }
+
     Office.onReady(function () {
-      var mode = "copy";
-      try {
-        var q = window.location.search || "";
-        if (q.indexOf("mode=inplace") !== -1) {
-          mode = "inplace";
-        }
-      } catch (_q) {
-      }
-      var copyEl = document.getElementById("msg-copy");
-      var inplaceEl = document.getElementById("msg-inplace");
+      applyOfficeTheme();
+      var params = new URLSearchParams(window.location.search || "");
+      var mode = params.get("mode") === "inplace" ? "inplace" : "copy";
+      var fileName = params.get("file") || "";
+      var yes = document.getElementById("yes");
+      var allowed = nameAllowsSnapshot(fileName);
       if (mode === "inplace") {
-        copyEl.hidden = true;
-        inplaceEl.hidden = false;
+        document.getElementById("msg-copy").hidden = true;
+        document.getElementById("msg-inplace").hidden = false;
+        document.getElementById("open-name").textContent = fileName
+          ? "Fichier ouvert : " + fileName
+          : "Nom du fichier inconnu.";
+      } else {
+        document.getElementById("copy-name").textContent = fileName || "une copie _snapshot_";
       }
+      yes.disabled = !allowed;
+      if (!allowed) {
+        document.getElementById("status").textContent = mode === "inplace"
+          ? "Creer snapshot est indisponible : le nom du fichier ne contient pas snapshot."
+          : "Creer snapshot est indisponible : le nom de la copie est incomplet.";
+      }
+
       function reply(code) {
+        if (code === "yes" && yes.disabled) {
+          return;
+        }
         if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
           Office.context.ui.messageParent(code, { targetOrigin: "*" });
         }
       }
-      document.getElementById("yes").onclick = function () { reply("yes"); };
+      yes.onclick = function () { reply("yes"); };
       document.getElementById("no").onclick = function () { reply("no"); };
     });
   </script>

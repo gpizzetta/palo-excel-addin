@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.16";
+var PALO_ASSET_VERSION = "1.0.3.18";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -276,14 +276,14 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     return "";
   }
 
-  function paloDatacPerf(text) {
+  function paloDatacPerf(step, fields) {
     var po = paloGlobalRef().PaloOffice;
     if (po && typeof po.datacPerf === "function") {
-      po.datacPerf(text);
+      po.datacPerf(step, fields || null);
       return;
     }
     try {
-      console.info("[Palo DATAC] " + text);
+      console.log("[Palo DATAC JSON]\n" + JSON.stringify([{ step: step, fields: fields || null }], null, 2));
     } catch (_log) {
       // ignore
     }
@@ -802,9 +802,10 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       cube,
       path
     );
-    paloDatacPerf(
-      "name_path contexte=" + contextMs + "ms cell/value=" + (Date.now() - valueStarted) + "ms"
-    );
+    paloDatacPerf("name_path", {
+      contexteMs: contextMs,
+      ms: Date.now() - valueStarted
+    });
     return {
       ok: true,
       error: "",
@@ -865,17 +866,23 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     try {
       var started = Date.now();
       var mode = paloPreferNamePathDatac() && paloIsCfExcelHost() ? "name_path" : "ids";
-      paloDatacPerf("#" + requestId + " debut cube=" + String(cubeName || "") + " mode=" + mode);
+      paloDatacPerf("debut", { id: requestId, cube: String(cubeName || ""), mode: mode });
       var stepAt = Date.now();
       var manager = await getConnectionManager();
       var managerMs = Date.now() - stepAt;
+      paloDatacPerf("manager", { id: requestId, ms: managerMs });
       if (!manager) {
-        paloDatacPerf("#" + requestId + " arret runtime pas pret " + (Date.now() - started) + "ms");
+        paloDatacPerf("arret", { id: requestId, ms: Date.now() - started, error: "runtime pas pret" });
         return "";
       }
       stepAt = Date.now();
       var context = await manager.getClientAndContext(servdb);
       var contextMs = Date.now() - stepAt;
+      paloDatacPerf("contexte", {
+        id: requestId,
+        ms: contextMs,
+        sid: context.sidFromCache ? "cache" : "login"
+      });
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] cell/value params", {
           requestId: requestId,
@@ -905,12 +912,12 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       if (paloPreferNamePathDatac() && paloIsCfExcelHost()) {
         var pathResolved = paloResolveNamePathFromCfArgs(cfArgs, 2);
         if (!pathResolved.ok) {
-          paloDatacPerf("#" + requestId + " chemin illisible " + (Date.now() - started) + "ms");
+          paloDatacPerf("chemin", { id: requestId, ms: Date.now() - started, error: pathResolved.error });
           return "#PALO! " + pathResolved.error;
         }
         var direct = await paloFetchCellByNamePathLiteral(servdb, cubeName, pathResolved.path);
         if (!direct.ok) {
-          paloDatacPerf("#" + requestId + " name_path refuse " + (Date.now() - started) + "ms");
+          paloDatacPerf("name_path", { id: requestId, ms: Date.now() - started, error: direct.error });
           return "#PALO! " + direct.error;
         }
         value = direct.value;
@@ -930,6 +937,17 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         );
       }
       var readMs = Date.now() - stepAt;
+      paloDatacPerf("lecture", { id: requestId, ms: readMs, mode: mode });
+      paloDatacPerf("fin", {
+        id: requestId,
+        ms: Date.now() - started,
+        managerMs: managerMs,
+        contexteMs: contextMs,
+        sid: context.sidFromCache ? "cache" : "login",
+        lectureMs: readMs,
+        mode: mode,
+        cube: String(cubeName || "")
+      });
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] fin OK", { requestId: requestId, value: value });
       }
@@ -937,19 +955,10 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         requestId: requestId,
         value: value
       });
-      paloDatacPerf(
-        "#" + requestId
-        + " fin total=" + (Date.now() - started) + "ms"
-        + " manager=" + managerMs + "ms"
-        + " contexte=" + contextMs + "ms"
-        + " sid=" + (context.sidFromCache ? "cache" : "login")
-        + " lecture=" + readMs + "ms"
-        + " mode=" + mode
-      );
       return paloCfDatacReturn(value);
     } catch (error) {
       var msg = error && error.message ? String(error.message) : String(error);
-      paloDatacPerf("#" + requestId + " erreur " + msg);
+      paloDatacPerf("erreur", { id: requestId, error: msg });
       if (paloFnTrace() || (typeof window !== "undefined" && window.PALO_LOG_HTTP)) {
         console.warn("[PaloOffice DATAC] erreur", { requestId: requestId, message: msg });
       }

@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.16";
+  var PALO_PLUGIN_VERSION = "1.0.3.18";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -268,10 +268,10 @@
     return name + "!" + raw;
   }
 
-  function logDatacPerf(text) {
+  function logDatacPerf(step, fields) {
     try {
       if (window.PaloOffice && typeof window.PaloOffice.datacPerf === "function") {
-        window.PaloOffice.datacPerf(text);
+        window.PaloOffice.datacPerf(step, fields || null);
       }
     } catch (_log) {
       // Le journal ne bloque pas le recalcul.
@@ -864,7 +864,7 @@
     if (!addresses || !addresses.length) {
       return;
     }
-    logDatacPerf("recalcul demande n=" + addresses.length);
+    logDatacPerf("recalcul", { phase: "demande", n: addresses.length });
     await Excel.run(async function (context) {
       var ranges = [];
       var i;
@@ -884,11 +884,11 @@
           ranges[i].calculate();
         }
         await context.sync();
-        logDatacPerf(
-          "recalcul "
-          + (canDirty ? "setDirty + " : "")
-          + "Range.calculate n=" + ranges.length
-        );
+        logDatacPerf("recalcul", {
+          phase: "ok",
+          api: (canDirty ? "setDirty+" : "") + "Range.calculate",
+          n: ranges.length
+        });
         return;
       }
       if (
@@ -900,7 +900,7 @@
       ) {
         context.workbook.application.calculate(Excel.CalculationType.recalculate);
         await context.sync();
-        logDatacPerf("recalcul setDirty + Application.calculate Recalculate n=" + ranges.length);
+        logDatacPerf("recalcul", { phase: "ok", api: "setDirty+Recalculate", n: ranges.length });
         return;
       }
       throw new Error("Excel ne propose pas Range.setDirty ni Range.calculate.");
@@ -1000,7 +1000,7 @@
               setTimeout(function () {
                 recalculateDatacAddresses(addresses).catch(function (err) {
                   var message = err && err.message ? err.message : String(err);
-                  logDatacPerf("recalcul echoue " + message);
+                  logDatacPerf("recalcul", { phase: "erreur", error: message });
                   paloUserNotify("La valeur est enregistree, mais Excel n'a pas relu la formule. " + message, "error");
                 });
               }, 150);
@@ -1686,7 +1686,7 @@
     return context.application.workbooks.getItem(workbookId);
   }
 
-  function paloConfirmSnapshotDialog(mode) {
+  function paloConfirmSnapshotDialog(mode, fileName) {
     var dialogMode = mode === "inplace" ? "inplace" : "copy";
     return new Promise(function (resolve) {
       if (!Office.context || !Office.context.ui || typeof Office.context.ui.displayDialogAsync !== "function") {
@@ -1695,10 +1695,18 @@
       }
       var confirmHref;
       try {
-        confirmHref = new URL("palo-snapshot-confirm.html", window.location.href).href;
-        confirmHref += (confirmHref.indexOf("?") >= 0 ? "&" : "?") + "mode=" + dialogMode;
+        var dialogUrl = new URL("palo-snapshot-confirm.html", window.location.href);
+        dialogUrl.searchParams.set("mode", dialogMode);
+        dialogUrl.searchParams.set("v", PALO_PLUGIN_VERSION);
+        if (fileName) {
+          dialogUrl.searchParams.set("file", fileName);
+        }
+        confirmHref = dialogUrl.href;
       } catch (_urlErr) {
-        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/palo-snapshot-confirm.html?mode=" + dialogMode;
+        confirmHref = "https://gpizzetta.github.io/palo-excel-addin/palo-snapshot-confirm.html?mode="
+          + dialogMode
+          + "&v=" + encodeURIComponent(PALO_PLUGIN_VERSION)
+          + (fileName ? "&file=" + encodeURIComponent(fileName) : "");
       }
       Office.context.ui.displayDialogAsync(
         confirmHref,
@@ -1916,7 +1924,8 @@
       }
 
       var canCopy = await snapshotSupportsSeparateWorkbook();
-      var confirmed = await paloConfirmSnapshotDialog(canCopy ? "copy" : "inplace");
+      var targetName = canCopy ? fileName : await getWorkbookDisplayName(null);
+      var confirmed = await paloConfirmSnapshotDialog(canCopy ? "copy" : "inplace", targetName);
       if (!confirmed) {
         await paloUserNotify("Snapshot annule.", "neutral", "Snapshot");
         complete(event);
