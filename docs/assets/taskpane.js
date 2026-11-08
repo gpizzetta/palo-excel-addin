@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.3.22";
+  var PLUGIN_VERSION = "1.0.3.24";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -67,32 +67,6 @@
   function getValue(id) {
     var node = document.getElementById(id);
     return node ? String(node.value || "") : "";
-  }
-
-  function getChecked(id) {
-    var node = document.getElementById(id);
-    return Boolean(node && node.checked);
-  }
-
-  function setChecked(id, checked) {
-    var node = document.getElementById(id);
-    if (node) {
-      node.checked = Boolean(checked);
-    }
-  }
-
-  function syncDebugCheckboxFromSelection() {
-    var name = getSelectedConnection();
-    if (!name) {
-      setChecked("conn-debug", false);
-      return;
-    }
-    try {
-      var profile = getManager().getConnection(name);
-      setChecked("conn-debug", Boolean(profile && profile.debug));
-    } catch (_e) {
-      setChecked("conn-debug", false);
-    }
   }
 
   function refreshConnectionList() {
@@ -179,7 +153,12 @@
       var baseUrl = getValue("conn-url").trim();
       var user = getValue("conn-user").trim();
       var password = getValue("conn-password");
-      var debug = getChecked("conn-debug");
+      var debug = false;
+      try {
+        var current = getManager().getConnection(name);
+        debug = Boolean(current && current.debug);
+      } catch (_keepDebug) {
+      }
       if (!name) {
         status("Nom de connexion requis.");
         return;
@@ -201,15 +180,10 @@
       });
       getManager().setActiveConnectionName(name);
       refreshConnectionList();
-      syncDebugCheckboxFromSelection();
-      flushStorageToOfficeRuntime().then(function (syncInfo) {
-        var extra = "";
-        if (syncInfo && typeof syncInfo === "object") {
-          extra = " [ortPush=" + String(syncInfo.pushed || 0) + "]";
-        }
-        status("Connexion " + name + " enregistree." + extra + " Recalculez (Ctrl+Alt+F9).");
+      flushStorageToOfficeRuntime().then(function () {
+        status("Connexion " + name + " enregistree.", "ok");
       }).catch(function () {
-        status("Connexion " + name + " enregistree.");
+        status("Connexion " + name + " enregistree.", "ok");
       });
     } catch (error) {
       status(error && error.message ? error.message : String(error));
@@ -244,12 +218,8 @@
 
   function refreshVersionFromServer() {
     var assetsEl = document.getElementById("plugin-version");
-    var manifestEl = document.getElementById("manifest-version");
     if (assetsEl) {
       assetsEl.textContent = PLUGIN_VERSION;
-    }
-    if (manifestEl) {
-      manifestEl.textContent = "…";
     }
 
     var versionUrl = PALO_CDN_BASE + "/version.json?_=" + String(Date.now());
@@ -274,40 +244,6 @@
       .catch(function () {
         if (assetsEl) {
           assetsEl.textContent = PLUGIN_VERSION;
-        }
-      });
-
-    // Version declaree dans le manifeste GitHub Pages (pas le cache admin M365).
-    var manifestUrl = PALO_CDN_BASE + "/manifest.xml?_=" + String(Date.now());
-    fetch(manifestUrl, { cache: "no-store" })
-      .then(function (res) {
-        if (!res.ok) {
-          throw new Error("HTTP " + res.status);
-        }
-        return res.text();
-      })
-      .then(function (xml) {
-        if (!manifestEl) {
-          return;
-        }
-        var match = String(xml || "").match(/<Version>\s*([^<]+?)\s*<\/Version>/i);
-        var ver = match ? String(match[1]).trim() : "";
-        if (!ver) {
-          manifestEl.textContent = "?";
-          return;
-        }
-        if (ver === PLUGIN_VERSION) {
-          manifestEl.textContent = ver;
-          return;
-        }
-        manifestEl.textContent = ver + " (≠ assets)";
-        manifestEl.title = "Le manifeste Pages et les assets charges different. "
-          + "Pour ruban / raccourcis : republier le manifeste cote admin M365. "
-          + "Les formules suivent surtout les assets charges.";
-      })
-      .catch(function () {
-        if (manifestEl) {
-          manifestEl.textContent = "?";
         }
       });
   }
@@ -350,31 +286,20 @@
           } catch (e) {
             status(e && e.message ? e.message : String(e));
           }
-          syncDebugCheckboxFromSelection();
-          flushStorageToOfficeRuntime().then(function (syncInfo) {
-            var extra = "";
-            if (syncInfo && typeof syncInfo === "object") {
-              extra = " [ortPush=" + String(syncInfo.pushed || 0) + "]";
-            }
-            status("Connexion active: " + value + "." + extra + " Recalculez (Ctrl+Alt+F9).");
+          flushStorageToOfficeRuntime().then(function () {
+            status("Connexion active : " + value + ".", "ok");
           }).catch(function () {
-            status("Connexion active: " + value);
+            status("Connexion active : " + value + ".", "ok");
           });
-        } else {
-          setChecked("conn-debug", false);
         }
       });
     }
 
     var autoSelected = ensureActiveConnectionSelected();
-    syncDebugCheckboxFromSelection();
     if (!autoSelected) {
-      status("Aucune connexion configuree. Cree une connexion pour utiliser PALO.DATAC / PALO.ENAME.");
+      status("Aucune connexion. Renseignez le serveur, puis Enregistrer.");
     } else {
       flushStorageToOfficeRuntime().catch(function () {});
-    }
-    if (window.PaloOffice && typeof window.PaloOffice.datacPerfRender === "function") {
-      window.PaloOffice.datacPerfRender();
     }
   }
 

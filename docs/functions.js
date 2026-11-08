@@ -3181,7 +3181,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.22";
+var PALO_ASSET_VERSION = "1.0.3.24";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;

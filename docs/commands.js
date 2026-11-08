@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.22";
+  var PALO_PLUGIN_VERSION = "1.0.3.24";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -860,17 +860,11 @@
     };
   }
 
-  function paloHostIsOfficeOnline() {
-    try {
-      return Boolean(
-        Office.context
-        && Office.context.platform != null
-        && typeof Office.PlatformType !== "undefined"
-        && Office.context.platform === Office.PlatformType.OfficeOnline
-      );
-    } catch (_platform) {
-      return false;
+  function wrapDatacFormula(formula) {
+    if (typeof formula !== "string" || formula.charAt(0) !== "=") {
+      return formula;
     }
+    return "=IF(TRUE," + formula.slice(1) + ")";
   }
 
   async function recalculateDatacAddresses(addresses) {
@@ -884,48 +878,23 @@
       for (i = 0; i < addresses.length; i += 1) {
         ranges.push(context.workbook.getRange(addresses[i]));
       }
-      var online = paloHostIsOfficeOnline();
-      var canDirty = typeof ranges[0].setDirty === "function";
-      var canRangeCalculate = !online && typeof ranges[0].calculate === "function";
-      if (canDirty) {
-        for (i = 0; i < ranges.length; i += 1) {
-          ranges[i].setDirty();
-        }
+      for (i = 0; i < ranges.length; i += 1) {
+        ranges[i].load("formulas");
       }
-      if (canRangeCalculate) {
-        for (i = 0; i < ranges.length; i += 1) {
-          ranges[i].calculate();
-        }
-        await context.sync();
-        logDatacPerf("recalcul", {
-          phase: "ok",
-          api: (canDirty ? "setDirty+" : "") + "Range.calculate",
-          n: ranges.length
+      await context.sync();
+      var originals = [];
+      for (i = 0; i < ranges.length; i += 1) {
+        originals.push(ranges[i].formulas);
+        ranges[i].formulas = ranges[i].formulas.map(function (row) {
+          return row.map(wrapDatacFormula);
         });
-        return;
       }
-      if (
-        context.workbook.application
-        && typeof context.workbook.application.calculate === "function"
-        && typeof Excel !== "undefined"
-        && Excel.CalculationType
-        && Excel.CalculationType.full
-      ) {
-        context.workbook.application.calculate(Excel.CalculationType.full);
-        await context.sync();
-        logDatacPerf("recalcul", {
-          phase: "ok",
-          api: (canDirty ? "setDirty+" : "") + "full",
-          n: ranges.length
-        });
-        return;
+      await context.sync();
+      for (i = 0; i < ranges.length; i += 1) {
+        ranges[i].formulas = originals[i];
       }
-      if (canDirty) {
-        await context.sync();
-        logDatacPerf("recalcul", { phase: "ok", api: "setDirty", n: ranges.length });
-        return;
-      }
-      throw new Error("Excel ne propose pas de recalcul des fonctions personnalisees.");
+      await context.sync();
+      logDatacPerf("recalcul", { phase: "ok", api: "formule", n: ranges.length });
     });
   }
 
