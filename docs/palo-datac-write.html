@@ -54,6 +54,7 @@
       background: var(--palo-surface);
     }
     main {
+      flex: 1;
       padding: 12px;
       display: flex;
       flex-direction: column;
@@ -84,28 +85,34 @@
       border-color: var(--palo-focus);
       box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
-    .actions { display: flex; flex-direction: column; gap: 8px; }
+    .actions {
+      margin-top: auto;
+      display: flex;
+      flex-direction: row;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+    }
     button {
       font: inherit;
-      padding: 8px 10px;
+      min-width: 96px;
+      padding: 6px 14px;
       border: 1px solid var(--palo-button);
       border-radius: 2px;
       background: var(--palo-button);
       color: var(--palo-button-text);
       cursor: pointer;
-      text-align: left;
+      text-align: center;
     }
     button.secondary {
-      background: var(--palo-surface);
+      background: #ffffff;
       color: var(--palo-text);
       border-color: var(--palo-input-border);
     }
-    button:disabled { opacity: 0.6; cursor: wait; }
-    button small {
-      display: block;
-      font-weight: 400;
-      opacity: 0.9;
+    html.theme-dark button.secondary {
+      background: var(--palo-surface);
     }
+    button:disabled { opacity: 0.6; cursor: wait; }
     #status { min-height: 1.2em; white-space: pre-wrap; }
     .alert {
       margin-top: 4px;
@@ -120,6 +127,9 @@
       border-color: #f5c2c7;
     }
     @media (prefers-color-scheme: dark) {
+      button.secondary {
+        background: var(--palo-surface);
+      }
       .alert-danger {
         color: #f8d7da;
         background: #58151c;
@@ -144,24 +154,32 @@
     <div>
       <label for="splash">Splash</label>
       <select id="splash">
-        <option value="1" selected>1 — Defaut (repartition)</option>
-        <option value="0">0 — Sans splash</option>
-        <option value="2">2 — Ajouter aux cellules de base</option>
-        <option value="3">3 — Ecrire sur les cellules de base</option>
-        <option value="4">4 — Ecrire sur les cellules de base peuplees</option>
-        <option value="5">5 — Ajouter aux cellules de base peuplees</option>
+        <option value="1" selected>Remplacer</option>
+        <option value="2">Ajouter</option>
       </select>
-    </div>
-    <div class="actions">
-      <button type="button" id="btn-replace">Cell replace<small id="replace-hint">Cellule active, /cell/replace</small></button>
-      <button type="button" id="btn-bulk" class="secondary">Cell replace bulk<small id="bulk-hint">Selection PALO.DATAC, /cell/replace_bulk</small></button>
     </div>
     <p id="status" class="hint"></p>
     <div id="alert-danger" class="alert alert-danger" role="alert" hidden></div>
+    <div class="actions">
+      <button type="button" id="btn-cancel" class="secondary">Annuler</button>
+      <button type="button" id="btn-apply">Appliquer</button>
+    </div>
   </main>
   <script>
     var STORAGE_KEY = "palo_datac_write_v1";
     var state = { cells: [], busy: false, writeMode: "replace" };
+    var SPLASH_BASE = [
+      { value: "1", label: "Remplacer" },
+      { value: "2", label: "Ajouter" }
+    ];
+    var SPLASH_CONSOLIDATED = [
+      { value: "1", label: "1 — Defaut (repartition)" },
+      { value: "0", label: "0 — Sans splash" },
+      { value: "2", label: "2 — Ajouter aux cellules de base" },
+      { value: "3", label: "3 — Ecrire sur les cellules de base" },
+      { value: "4", label: "4 — Ecrire sur les cellules de base peuplees" },
+      { value: "5", label: "5 — Ajouter aux cellules de base peuplees" }
+    ];
 
     function applyOfficeTheme() {
       var theme = Office.context && Office.context.officeTheme;
@@ -199,6 +217,28 @@
 
     function pathLabel(cell) {
       return (cell.coordinates || []).join(", ");
+    }
+
+    function fillSplash(consolidated) {
+      var select = document.getElementById("splash");
+      var previous = select.value;
+      var options = consolidated ? SPLASH_CONSOLIDATED : SPLASH_BASE;
+      var allowed = false;
+      var i;
+      select.innerHTML = "";
+      for (i = 0; i < options.length; i += 1) {
+        var opt = document.createElement("option");
+        opt.value = options[i].value;
+        opt.textContent = options[i].label;
+        if (options[i].value === previous) {
+          opt.selected = true;
+          allowed = true;
+        }
+        select.appendChild(opt);
+      }
+      if (!allowed) {
+        select.value = "1";
+      }
     }
 
     function render(payload) {
@@ -246,13 +286,9 @@
         lines.push(payload.skipped + " formule(s) ignoree(s) (coordonnee vide ou illisible).");
       }
       summary.textContent = lines.join(" ");
-      document.getElementById("replace-hint").textContent = active
-        ? (active.address || "Cellule active") + " — /cell/replace"
-        : "Cellule active — /cell/replace";
-      document.getElementById("bulk-hint").textContent = state.cells.length + " cellule(s) — /cell/replace_bulk";
+      fillSplash(state.writeMode === "bulk");
       var canWrite = !missing.length;
-      document.getElementById("btn-replace").style.display = canWrite && state.writeMode === "replace" ? "" : "none";
-      document.getElementById("btn-bulk").style.display = canWrite && state.writeMode === "bulk" ? "" : "none";
+      document.getElementById("btn-apply").disabled = !canWrite;
       document.getElementById("value").disabled = !canWrite;
       document.getElementById("splash").disabled = !canWrite;
       if (missing.length) {
@@ -308,9 +344,9 @@
         splash = 1;
       }
       state.busy = true;
-      document.getElementById("btn-replace").disabled = true;
-      document.getElementById("btn-bulk").disabled = true;
-      setStatus(mode === "bulk" ? "Ecriture bulk..." : "Ecriture...", "");
+      document.getElementById("btn-apply").disabled = true;
+      document.getElementById("btn-cancel").disabled = true;
+      setStatus("Ecriture...", "");
       Office.context.ui.messageParent(JSON.stringify({
         type: "write",
         mode: mode,
@@ -321,20 +357,25 @@
 
     function onResult(payload) {
       state.busy = false;
-      document.getElementById("btn-replace").disabled = false;
-      document.getElementById("btn-bulk").disabled = false;
+      document.getElementById("btn-apply").disabled = false;
+      document.getElementById("btn-cancel").disabled = false;
       setStatus(payload && payload.message ? payload.message : "Ecriture refusee.", "error");
+    }
+
+    function cancel() {
+      if (state.busy) {
+        return;
+      }
+      Office.context.ui.messageParent(JSON.stringify({ type: "cancel" }), { targetOrigin: "*" });
     }
 
     Office.onReady(function () {
       applyOfficeTheme();
       tryReadLocalStorage();
-      document.getElementById("btn-replace").addEventListener("click", function () {
-        send("replace");
+      document.getElementById("btn-apply").addEventListener("click", function () {
+        send(state.writeMode === "bulk" ? "bulk" : "replace");
       });
-      document.getElementById("btn-bulk").addEventListener("click", function () {
-        send("bulk");
-      });
+      document.getElementById("btn-cancel").addEventListener("click", cancel);
       document.getElementById("value").addEventListener("keydown", function (ev) {
         if (ev.key === "Enter") {
           send(state.writeMode === "bulk" ? "bulk" : "replace");

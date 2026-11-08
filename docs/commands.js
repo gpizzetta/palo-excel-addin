@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.10";
+  var PALO_PLUGIN_VERSION = "1.0.3.11";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -836,6 +836,15 @@
                 o = JSON.parse(msg);
               } catch (_parse) {
                 o = null;
+              }
+              if (o && o.type === "cancel") {
+                cleanup();
+                try {
+                  dlg.close();
+                } catch (_cancelClose) {
+                  // Le dialogue est deja ferme.
+                }
+                return;
               }
               if (!o || o.type !== "write") {
                 return;
