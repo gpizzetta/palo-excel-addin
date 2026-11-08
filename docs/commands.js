@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.24";
+  var PALO_PLUGIN_VERSION = "1.0.3.26";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -266,16 +266,6 @@
       name = "'" + name.replace(/'/g, "''") + "'";
     }
     return name + "!" + raw;
-  }
-
-  function logDatacPerf(step, fields) {
-    try {
-      if (window.PaloOffice && typeof window.PaloOffice.datacPerf === "function") {
-        window.PaloOffice.datacPerf(step, fields || null);
-      }
-    } catch (_log) {
-      // Le journal ne bloque pas le recalcul.
-    }
   }
 
   function prepareDatacArgument(context, workbook, worksheet, rawArgText) {
@@ -860,44 +850,6 @@
     };
   }
 
-  function wrapDatacFormula(formula) {
-    if (typeof formula !== "string" || formula.charAt(0) !== "=") {
-      return formula;
-    }
-    return "=IF(TRUE," + formula.slice(1) + ")";
-  }
-
-  async function recalculateDatacAddresses(addresses) {
-    if (!addresses || !addresses.length) {
-      return;
-    }
-    logDatacPerf("recalcul", { phase: "demande", n: addresses.length });
-    await Excel.run(async function (context) {
-      var ranges = [];
-      var i;
-      for (i = 0; i < addresses.length; i += 1) {
-        ranges.push(context.workbook.getRange(addresses[i]));
-      }
-      for (i = 0; i < ranges.length; i += 1) {
-        ranges[i].load("formulas");
-      }
-      await context.sync();
-      var originals = [];
-      for (i = 0; i < ranges.length; i += 1) {
-        originals.push(ranges[i].formulas);
-        ranges[i].formulas = ranges[i].formulas.map(function (row) {
-          return row.map(wrapDatacFormula);
-        });
-      }
-      await context.sync();
-      for (i = 0; i < ranges.length; i += 1) {
-        ranges[i].formulas = originals[i];
-      }
-      await context.sync();
-      logDatacPerf("recalcul", { phase: "ok", api: "formule", n: ranges.length });
-    });
-  }
-
   async function loadDatacLikeDimensions(cells) {
     var active = null;
     var i;
@@ -979,33 +931,6 @@
             var dlg = asyncResult.value;
             var cleaned = false;
             var ribbonEventCompleted = false;
-            var refreshAddresses = (payload.cells || []).map(function (cell) {
-              return cell && cell.address ? String(cell.address) : "";
-            }).filter(Boolean);
-            var reloadAddresses = refreshAddresses.slice();
-            var reloadStarted = false;
-            function launchReload() {
-              if (reloadStarted || !reloadAddresses || !reloadAddresses.length) {
-                return;
-              }
-              reloadStarted = true;
-              var addresses = reloadAddresses.slice();
-              var attempt = 0;
-              function run() {
-                attempt += 1;
-                recalculateDatacAddresses(addresses).catch(function (err) {
-                  var message = err && err.message ? err.message : String(err);
-                  if (attempt < 3) {
-                    logDatacPerf("recalcul", { phase: "retry", attempt: attempt, error: message });
-                    setTimeout(run, 500);
-                    return;
-                  }
-                  logDatacPerf("recalcul", { phase: "erreur", error: message });
-                  paloUserNotify("Excel n'a pas relu les formules PALO.DATAC. " + message, "error");
-                });
-              }
-              setTimeout(run, 400);
-            }
             function finishRibbonUiEvent() {
               if (ribbonEventCompleted || !event) {
                 return;
@@ -1088,17 +1013,13 @@
                 o.value == null ? "" : String(o.value),
                 o.path || null
               )
-                .then(function (result) {
-                  if (result && result.addresses && result.addresses.length) {
-                    reloadAddresses = result.addresses;
-                  }
+                .then(function () {
                   cleanup();
                   try {
                     dlg.close();
                   } catch (_closeOk) {
-                    launchReload();
+                    // Le dialogue est deja ferme.
                   }
-                  setTimeout(launchReload, 700);
                 })
                 .catch(function (err) {
                   postResult(false, err && err.message ? err.message : String(err));
@@ -1108,7 +1029,6 @@
             dlg.addEventHandler(Office.EventType.DialogEventReceived, function (ev) {
               if (ev && (ev.error === 12004 || ev.error === 12006)) {
                 cleanup();
-                launchReload();
               }
             });
             resolve();
