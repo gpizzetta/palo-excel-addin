@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.21";
+  var PALO_PLUGIN_VERSION = "1.0.3.22";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -860,6 +860,19 @@
     };
   }
 
+  function paloHostIsOfficeOnline() {
+    try {
+      return Boolean(
+        Office.context
+        && Office.context.platform != null
+        && typeof Office.PlatformType !== "undefined"
+        && Office.context.platform === Office.PlatformType.OfficeOnline
+      );
+    } catch (_platform) {
+      return false;
+    }
+  }
+
   async function recalculateDatacAddresses(addresses) {
     if (!addresses || !addresses.length) {
       return;
@@ -871,15 +884,15 @@
       for (i = 0; i < addresses.length; i += 1) {
         ranges.push(context.workbook.getRange(addresses[i]));
       }
+      var online = paloHostIsOfficeOnline();
       var canDirty = typeof ranges[0].setDirty === "function";
-      var canCalculate = typeof ranges[0].calculate === "function";
+      var canRangeCalculate = !online && typeof ranges[0].calculate === "function";
       if (canDirty) {
         for (i = 0; i < ranges.length; i += 1) {
           ranges[i].setDirty();
         }
-        await context.sync();
       }
-      if (canCalculate) {
+      if (canRangeCalculate) {
         for (i = 0; i < ranges.length; i += 1) {
           ranges[i].calculate();
         }
@@ -892,18 +905,27 @@
         return;
       }
       if (
-        canDirty
-        && context.workbook.application
+        context.workbook.application
         && typeof context.workbook.application.calculate === "function"
         && typeof Excel !== "undefined"
         && Excel.CalculationType
+        && Excel.CalculationType.full
       ) {
-        context.workbook.application.calculate(Excel.CalculationType.recalculate);
+        context.workbook.application.calculate(Excel.CalculationType.full);
         await context.sync();
-        logDatacPerf("recalcul", { phase: "ok", api: "setDirty+Recalculate", n: ranges.length });
+        logDatacPerf("recalcul", {
+          phase: "ok",
+          api: (canDirty ? "setDirty+" : "") + "full",
+          n: ranges.length
+        });
         return;
       }
-      throw new Error("Excel ne propose pas Range.setDirty ni Range.calculate.");
+      if (canDirty) {
+        await context.sync();
+        logDatacPerf("recalcul", { phase: "ok", api: "setDirty", n: ranges.length });
+        return;
+      }
+      throw new Error("Excel ne propose pas de recalcul des fonctions personnalisees.");
     });
   }
 
@@ -988,22 +1010,32 @@
             var dlg = asyncResult.value;
             var cleaned = false;
             var ribbonEventCompleted = false;
-            var reloadAddresses = null;
+            var refreshAddresses = (payload.cells || []).map(function (cell) {
+              return cell && cell.address ? String(cell.address) : "";
+            }).filter(Boolean);
+            var reloadAddresses = refreshAddresses.slice();
             var reloadStarted = false;
             function launchReload() {
               if (reloadStarted || !reloadAddresses || !reloadAddresses.length) {
                 return;
               }
               reloadStarted = true;
-              var addresses = reloadAddresses;
-              reloadAddresses = null;
-              setTimeout(function () {
+              var addresses = reloadAddresses.slice();
+              var attempt = 0;
+              function run() {
+                attempt += 1;
                 recalculateDatacAddresses(addresses).catch(function (err) {
                   var message = err && err.message ? err.message : String(err);
+                  if (attempt < 3) {
+                    logDatacPerf("recalcul", { phase: "retry", attempt: attempt, error: message });
+                    setTimeout(run, 500);
+                    return;
+                  }
                   logDatacPerf("recalcul", { phase: "erreur", error: message });
-                  paloUserNotify("La valeur est enregistree, mais Excel n'a pas relu la formule. " + message, "error");
+                  paloUserNotify("Excel n'a pas relu les formules PALO.DATAC. " + message, "error");
                 });
-              }, 150);
+              }
+              setTimeout(run, 400);
             }
             function finishRibbonUiEvent() {
               if (ribbonEventCompleted || !event) {
@@ -1088,14 +1120,16 @@
                 o.path || null
               )
                 .then(function (result) {
-                  reloadAddresses = result.addresses;
+                  if (result && result.addresses && result.addresses.length) {
+                    reloadAddresses = result.addresses;
+                  }
                   cleanup();
                   try {
                     dlg.close();
                   } catch (_closeOk) {
                     launchReload();
                   }
-                  setTimeout(launchReload, 400);
+                  setTimeout(launchReload, 700);
                 })
                 .catch(function (err) {
                   postResult(false, err && err.message ? err.message : String(err));
