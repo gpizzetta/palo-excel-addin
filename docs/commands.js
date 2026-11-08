@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.8";
+  var PALO_PLUGIN_VERSION = "1.0.3.9";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_MAX_CELLS = 200;
@@ -455,7 +455,8 @@
             group[j].cube,
             idPath,
             value,
-            splashMode
+            splashMode,
+            true
           );
           if (!ok) {
             throw new Error("cell/replace a refuse l'ecriture (" + group[j].address + ").");
@@ -582,11 +583,26 @@
       return;
     }
     await Excel.run(async function (context) {
+      var ranges = [];
       var i;
       for (i = 0; i < addresses.length; i += 1) {
         var range = context.workbook.getRange(addresses[i]);
-        if (typeof range.calculate === "function") {
-          range.calculate();
+        range.load("formulasLocal");
+        ranges.push(range);
+      }
+      await context.sync();
+      for (i = 0; i < ranges.length; i += 1) {
+        var formula = ranges[i].formulasLocal && ranges[i].formulasLocal[0]
+          ? String(ranges[i].formulasLocal[0][0] || "")
+          : "";
+        if (formula) {
+          ranges[i].formulasLocal = [[formula]];
+        }
+      }
+      await context.sync();
+      for (i = 0; i < ranges.length; i += 1) {
+        if (typeof ranges[i].calculate === "function") {
+          ranges[i].calculate();
         }
       }
       await context.sync();
@@ -626,6 +642,21 @@
             var dlg = asyncResult.value;
             var cleaned = false;
             var ribbonEventCompleted = false;
+            var reloadAddresses = null;
+            var reloadStarted = false;
+            function launchReload() {
+              if (reloadStarted || !reloadAddresses || !reloadAddresses.length) {
+                return;
+              }
+              reloadStarted = true;
+              var addresses = reloadAddresses;
+              reloadAddresses = null;
+              setTimeout(function () {
+                recalculateDatacAddresses(addresses).catch(function () {
+                  // La valeur est deja enregistree. Le recalcul Excel peut etre relance a la main.
+                });
+              }, 150);
+            }
             function finishRibbonUiEvent() {
               if (ribbonEventCompleted || !event) {
                 return;
@@ -693,16 +724,14 @@
               var mode = payload.writeMode === "bulk" ? "bulk" : "replace";
               executeDatacWrite(payload.cells, mode, o.value == null ? "" : String(o.value), Number(o.splash))
                 .then(function (result) {
-                  return recalculateDatacAddresses(result.addresses).catch(function () {
-                    return null;
-                  }).then(function () {
-                    cleanup();
-                    try {
-                      dlg.close();
-                    } catch (_closeOk) {
-                      // Le dialogue est deja ferme.
-                    }
-                  });
+                  reloadAddresses = result.addresses;
+                  cleanup();
+                  try {
+                    dlg.close();
+                  } catch (_closeOk) {
+                    launchReload();
+                  }
+                  setTimeout(launchReload, 400);
                 })
                 .catch(function (err) {
                   postResult(false, err && err.message ? err.message : String(err));
@@ -712,6 +741,7 @@
             dlg.addEventHandler(Office.EventType.DialogEventReceived, function (ev) {
               if (ev && (ev.error === 12004 || ev.error === 12006)) {
                 cleanup();
+                launchReload();
               }
             });
             resolve();

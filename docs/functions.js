@@ -1536,16 +1536,21 @@
     name_cube,
     idPathStr,
     value,
-    splash
+    splash,
+    wait
   ) {
-    var text = await this.call("/cell/replace", {
+    var params = {
       sid: sid,
       name_database: name_database,
       name_cube: name_cube,
       path: idPathStr,
       value: normalizePaloPathSegment(value),
       splash: splash || 0
-    });
+    };
+    if (wait) {
+      params.wait = 1;
+    }
+    var text = await this.call("/cell/replace", params);
     return String(text).trim().indexOf("1") === 0;
   };
 
@@ -1601,7 +1606,8 @@
         name_cube: name_cube,
         paths: pathPart,
         values: valuePart,
-        splash: splashMode
+        splash: splashMode,
+        wait: 1
       });
       var trimmed = String(text == null ? "" : text).trim();
       if (trimmed.indexOf("1") !== 0) {
@@ -2863,7 +2869,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.8";
+var PALO_ASSET_VERSION = "1.0.3.9";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
