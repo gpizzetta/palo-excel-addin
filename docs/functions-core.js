@@ -1,9 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.19";
-/** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
-var PALO_CF_OPEN_GRACE_MS = 3500;
+var PALO_ASSET_VERSION = "1.0.3.20";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -56,25 +54,6 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     return Boolean(g.PaloOffice && typeof g.PaloOffice.createConnectionManager === "function");
   }
 
-  function paloCfInOpenGrace() {
-    var at = gBoot.__PALO_CF_REGISTERED_AT__ || 0;
-    return at > 0 && (Date.now() - at) < PALO_CF_OPEN_GRACE_MS;
-  }
-
-  function paloCfWaitPastGrace() {
-    var at = gBoot.__PALO_CF_REGISTERED_AT__ || 0;
-    if (at <= 0) {
-      return Promise.resolve();
-    }
-    var remain = PALO_CF_OPEN_GRACE_MS - (Date.now() - at);
-    if (remain <= 0) {
-      return Promise.resolve();
-    }
-    return new Promise(function (resolve) {
-      setTimeout(resolve, remain);
-    });
-  }
-
   async function paloCfAwaitStorageReady() {
     if (!hasPaloOffice()) {
       return;
@@ -86,16 +65,12 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
   }
 
   async function paloCfEnsureRuntimeReady() {
-    await paloCfWaitPastGrace();
     await ensurePaloOfficeReady();
     await paloCfAwaitStorageReady();
   }
 
-  function paloWarmActiveSessionAfterGrace() {
-    paloCfEnsureRuntimeReady()
-      .then(function () {
-        return getConnectionManager();
-      })
+  function paloWarmActiveSession() {
+    getConnectionManager()
       .then(function (manager) {
         if (!manager) {
           return;
@@ -124,7 +99,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       if (po && typeof po.paloEnsureStorageReady === "function") {
         po.paloEnsureStorageReady(true).catch(function () {});
       }
-      paloWarmActiveSessionAfterGrace();
+      paloWarmActiveSession();
     }
     if (typeof Office !== "undefined" && Office && typeof Office.onReady === "function") {
       Office.onReady(warmAfterReady);
@@ -599,32 +574,6 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     return String(value);
   }
 
-  function paloIsCfExcelHost() {
-    if (typeof CustomFunctions !== "undefined") {
-      return true;
-    }
-    try {
-      return typeof Office !== "undefined" && typeof importScripts !== "function";
-    } catch (_host) {
-      return false;
-    }
-  }
-
-  /** Excel Online : name_path. Excel Desktop CF (document=non) : chemin 1.0.2.6 (id + batch). */
-  function paloPreferNamePathDatac() {
-    try {
-      if (typeof Office !== "undefined" && Office.context && Office.context.platform != null) {
-        var platform = Office.context.platform;
-        if (typeof Office.PlatformType !== "undefined") {
-          return platform === Office.PlatformType.OfficeOnline;
-        }
-        return String(platform).toLowerCase().indexOf("online") !== -1;
-      }
-    } catch (_platform) {
-    }
-    return false;
-  }
-
   function paloBuildNamePathFromCoords(coordinates, cubeName) {
     var po = paloGlobalRef().PaloOffice;
     if (po && typeof po.paloBuildNamePathSafe === "function") {
@@ -865,7 +814,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
 
     try {
       var started = Date.now();
-      var mode = paloPreferNamePathDatac() && paloIsCfExcelHost() ? "name_path" : "ids";
+      var mode = "ids";
       paloDatacPerf("debut", { id: requestId, cube: String(cubeName || ""), mode: mode });
       var stepAt = Date.now();
       var manager = await getConnectionManager();
@@ -902,40 +851,25 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         coordinates: coordinates.map(function (coord) {
           return String(coerceExcelScalarArg(coord));
         }),
-        mode: paloPreferNamePathDatac() ? "name_path" : "id_path"
+        mode: "id_path"
       });
-      var value;
       var coordsScalar = coordinates.map(function (coord) {
         return String(coerceExcelScalarArg(coord));
       });
       stepAt = Date.now();
-      if (paloPreferNamePathDatac() && paloIsCfExcelHost()) {
-        var pathResolved = paloResolveNamePathFromCfArgs(cfArgs, 2);
-        if (!pathResolved.ok) {
-          paloDatacPerf("chemin", { id: requestId, ms: Date.now() - started, error: pathResolved.error });
-          return "#PALO! " + pathResolved.error;
+      var value = await manager.requestCellValueBatched(
+        context.connectionName,
+        context.sid,
+        context.client,
+        context.database,
+        cubeName,
+        "",
+        coordsScalar,
+        {
+          requestId: requestId,
+          coordinates: coordsScalar
         }
-        var direct = await paloFetchCellByNamePathLiteral(servdb, cubeName, pathResolved.path);
-        if (!direct.ok) {
-          paloDatacPerf("name_path", { id: requestId, ms: Date.now() - started, error: direct.error });
-          return "#PALO! " + direct.error;
-        }
-        value = direct.value;
-      } else {
-        value = await manager.requestCellValueBatched(
-          context.connectionName,
-          context.sid,
-          context.client,
-          context.database,
-          cubeName,
-          "",
-          coordsScalar,
-          {
-            requestId: requestId,
-            coordinates: coordsScalar
-          }
-        );
-      }
+      );
       var readMs = Date.now() - stepAt;
       paloDatacPerf("lecture", { id: requestId, ms: readMs, mode: mode });
       paloDatacPerf("fin", {

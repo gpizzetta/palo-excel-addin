@@ -1102,16 +1102,13 @@
   }
 
   function paloHttpMaxConcurrent() {
-    if (paloInCustomFunctionsRuntime()) {
-      return 2;
-    }
     if (typeof window !== "undefined" && window.PALO_HTTP_MAX_CONCURRENT != null) {
       var n = Number(window.PALO_HTTP_MAX_CONCURRENT);
       if (!Number.isNaN(n) && n >= 1) {
-        return Math.min(32, Math.floor(n));
+        return Math.min(64, Math.floor(n));
       }
     }
-    return 8;
+    return 32;
   }
 
   function paloHttpRetryCount() {
@@ -1812,11 +1809,7 @@
   }
 
   function cellBatchDelayMs() {
-    // Excel Online CF : pas de file setTimeout (plantages) ; lecture unitaire immediate.
-    if (paloInCustomFunctionsRuntime()) {
-      return 0;
-    }
-    // Bulk /cell/values actif par defaut (24 ms), avec fallback unitaire et decoupage automatique.
+    // 24 ms : Excel lance les formules ensemble, une seule vague /cell/values part ensuite.
     if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH !== undefined) {
       return window.PALO_DISABLE_BATCH ? 0 : 24;
     }
@@ -1850,7 +1843,7 @@
         return Math.floor(n);
       }
     }
-    return 5000;
+    return 8000;
   }
 
   /**
@@ -1967,29 +1960,6 @@
     var flushStarted = Date.now();
     var queueWait = items[0] && items[0].enqueuedAt ? flushStarted - items[0].enqueuedAt : 0;
     try {
-      if (paloInCustomFunctionsRuntime()) {
-        var cfIdx;
-        for (cfIdx = 0; cfIdx < items.length; cfIdx += 1) {
-          var cfVal = await this._resolveCellValueByNameSegments(
-            q.connectionName,
-            sid,
-            client,
-            name_database,
-            name_cube,
-            items[cfIdx].pathSegments,
-            items[cfIdx].namePath
-          );
-          items[cfIdx].resolve(cfVal);
-        }
-        paloDatacPerf("lot", {
-          cube: name_cube,
-          n: items.length,
-          attenteMs: queueWait,
-          mode: "unitaire",
-          ms: Date.now() - flushStarted
-        });
-        return;
-      }
       if (items.length === 1) {
         var single = await this._resolveCellValueByNameSegments(
           q.connectionName,
@@ -2054,6 +2024,7 @@
         namePathsHypotheticalLen: namesJoinedLen
       });
       var maxUrlChars = cellValuesMaxUrlChars();
+      var chunks = [];
       var start = 0;
       while (start < idPaths.length) {
         var end = start;
@@ -2076,81 +2047,84 @@
           joined = idPaths[start];
           end = start + 1;
         }
-        paloTrace("cell-values-chunk", {
-          connectionName: q.connectionName,
-          name_database: name_database,
-          name_cube: name_cube,
-          start: start,
-          end: end,
-          total: idPaths.length,
-          urlLength: client.buildUrl("/cell/values", {
-            sid: sid,
-            name_database: name_database,
-            name_cube: name_cube,
-            paths: joined
-          }).length,
-          maxUrlChars: maxUrlChars
-        });
-        var arr;
-        try {
-          arr = await client.cellValues(sid, name_database, name_cube, joined);
-          if (arr.length !== (end - start)) {
-            throw new Error(
-              "cell/values: " + (end - start) + " chemin(s) envoyes, " + arr.length + " ligne(s) recues."
-            );
-          }
-          var allEmpty = arr.length > 0 && arr.every(function (v) {
-            return v === null || v === "";
-          });
-          if (allEmpty) {
-            paloTrace("cell-values-chunk-all-empty-fallback-single", {
-              connectionName: q.connectionName,
-              name_database: name_database,
-              name_cube: name_cube,
-              start: start,
-              end: end
-            });
-            arr = [];
-            var s;
-            for (s = start; s < end; s += 1) {
-              arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[s]));
-            }
-          }
-        } catch (chunkErr) {
-          // Fiabilite prioritaire: si un chunk batch echoue, fallback cellule par cellule
-          // pour eviter de renvoyer des cellules vides sur recalcul massif.
-          paloTrace("cell-values-chunk-fallback-single", {
+        chunks.push({ start: start, end: end, joined: joined });
+        start = end;
+      }
+      await Promise.all(chunks.map(function (chunk) {
+        return (async function () {
+          paloTrace("cell-values-chunk", {
             connectionName: q.connectionName,
             name_database: name_database,
             name_cube: name_cube,
-            start: start,
-            end: end,
-            reason: chunkErr && chunkErr.message ? chunkErr.message : String(chunkErr)
+            start: chunk.start,
+            end: chunk.end,
+            total: idPaths.length,
+            urlLength: client.buildUrl("/cell/values", {
+              sid: sid,
+              name_database: name_database,
+              name_cube: name_cube,
+              paths: chunk.joined
+            }).length,
+            maxUrlChars: maxUrlChars
           });
-          arr = [];
-          var f;
-          for (f = start; f < end; f += 1) {
-            arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[f]));
+          function readChunkCells() {
+            var jobs = [];
+            var s;
+            for (s = chunk.start; s < chunk.end; s += 1) {
+              jobs.push(client.cellValueByIds(sid, name_database, name_cube, idPaths[s]));
+            }
+            return Promise.all(jobs);
           }
-        }
-        var i;
-        for (i = start; i < end; i += 1) {
-          if (paloBulkTraceEnabled() || i - start < 5) {
-            paloTrace("cell-values-resolve", {
-              index: i,
-              chunkIndex: i - start,
-              idPath: idPaths[i],
-              value: arr[i - start],
-              requestId: items[i].debugMeta && items[i].debugMeta.requestId ? items[i].debugMeta.requestId : null,
-              coordinates: items[i].debugMeta && Array.isArray(items[i].debugMeta.coordinates)
-                ? items[i].debugMeta.coordinates
-                : null
+          var arr;
+          try {
+            arr = await client.cellValues(sid, name_database, name_cube, chunk.joined);
+            if (arr.length !== (chunk.end - chunk.start)) {
+              throw new Error(
+                "cell/values: " + (chunk.end - chunk.start) + " chemin(s) envoyes, " + arr.length + " ligne(s) recues."
+              );
+            }
+            var allEmpty = arr.length > 0 && arr.every(function (v) {
+              return v === null || v === "";
             });
+            if (allEmpty) {
+              paloTrace("cell-values-chunk-all-empty-fallback-single", {
+                connectionName: q.connectionName,
+                name_database: name_database,
+                name_cube: name_cube,
+                start: chunk.start,
+                end: chunk.end
+              });
+              arr = await readChunkCells();
+            }
+          } catch (chunkErr) {
+            paloTrace("cell-values-chunk-fallback-single", {
+              connectionName: q.connectionName,
+              name_database: name_database,
+              name_cube: name_cube,
+              start: chunk.start,
+              end: chunk.end,
+              reason: chunkErr && chunkErr.message ? chunkErr.message : String(chunkErr)
+            });
+            arr = await readChunkCells();
           }
-          items[i].resolve(arr[i - start]);
-        }
-        start = end;
-      }
+          var i;
+          for (i = chunk.start; i < chunk.end; i += 1) {
+            if (paloBulkTraceEnabled() || i - chunk.start < 5) {
+              paloTrace("cell-values-resolve", {
+                index: i,
+                chunkIndex: i - chunk.start,
+                idPath: idPaths[i],
+                value: arr[i - chunk.start],
+                requestId: items[i].debugMeta && items[i].debugMeta.requestId ? items[i].debugMeta.requestId : null,
+                coordinates: items[i].debugMeta && Array.isArray(items[i].debugMeta.coordinates)
+                  ? items[i].debugMeta.coordinates
+                  : null
+              });
+            }
+            items[i].resolve(arr[i - chunk.start]);
+          }
+        })();
+      }));
       paloDatacPerf("lot", {
         cube: name_cube,
         n: items.length,
@@ -2169,7 +2143,20 @@
       });
       var j;
       for (j = 0; j < items.length; j += 1) {
-        items[j].reject(err);
+        try {
+          var fallbackValue = await this._resolveCellValueByNameSegments(
+            q.connectionName,
+            sid,
+            client,
+            name_database,
+            name_cube,
+            items[j].pathSegments,
+            items[j].namePath
+          );
+          items[j].resolve(fallbackValue);
+        } catch (fallbackErr) {
+          items[j].reject(fallbackErr);
+        }
       }
     }
   };
@@ -2729,17 +2716,18 @@
     }
 
     // Etape 2 : une Map nom->id par dimension via cache memoire (TTL + refresh sur manquants).
-    var dimMaps = [];
+    var dimJobs = [];
     for (d = 0; d < dimCount; d += 1) {
-      dimMaps[d] = await this.resolveNameSetToIdMapCached(
+      dimJobs.push(this.resolveNameSetToIdMapCached(
         connectionName,
         sid,
         client,
         name_database,
         dimNames[d],
         uniquePerDim[d]
-      );
+      ));
     }
+    var dimMaps = await Promise.all(dimJobs);
 
     // Etape 3 : assemblage de la chaine paths — lookups Map seulement, pas de resolution reseau.
     var idPaths = [];
@@ -2799,17 +2787,18 @@
     }
 
     var mapsStarted = Date.now();
-    var dimMaps = [];
+    var dimJobs = [];
     for (d = 0; d < dimCount; d += 1) {
-      dimMaps[d] = await this.resolveNameSetToIdMapCached(
+      dimJobs.push(this.resolveNameSetToIdMapCached(
         connectionName,
         sid,
         client,
         name_database,
         dimNames[d],
         uniquePerDim[d]
-      );
+      ));
     }
+    var dimMaps = await Promise.all(dimJobs);
     paloDatacPerf("ids", {
       cube: name_cube,
       n: pathSegmentsList.length,
@@ -2992,7 +2981,7 @@
     }
   };
 
-  PaloConnectionManager.prototype.getValidSid = async function getValidSid(connectionName, client) {
+  PaloConnectionManager.prototype.getValidSid = function getValidSid(connectionName, client) {
     var cached = this.sessions.get(connectionName);
     if (cached) {
       var ageMs = Date.now() - cached.createdAt;
@@ -3005,28 +2994,46 @@
             sidPrefix: cached.sid ? cached.sid.slice(0, 8) : ""
           });
         }
-        return cached.sid;
+        return Promise.resolve(cached.sid);
       }
     }
+    if (!this._sidInflight) {
+      this._sidInflight = new Map();
+    }
+    var pending = this._sidInflight.get(connectionName);
+    if (pending) {
+      return pending;
+    }
+    var self = this;
     if (paloHttpLogEnabled()) {
       console.info("[PaloOffice] getValidSid login Palo", { connectionName: connectionName });
     }
-    var loginStarted = Date.now();
-    var login = await client.login();
-    paloDatacPerf("login", { connection: connectionName, ms: Date.now() - loginStarted });
-    this.sessions.set(connectionName, {
-      sid: login.sid,
-      ttlSeconds: login.ttl,
-      createdAt: Date.now()
-    });
-    if (paloHttpLogEnabled()) {
-      console.info("[PaloOffice] getValidSid login OK", {
-        connectionName: connectionName,
-        sidPrefix: login.sid ? login.sid.slice(0, 8) : "",
-        ttlSeconds: login.ttl
+    pending = (async function () {
+      var loginStarted = Date.now();
+      var login = await client.login();
+      paloDatacPerf("login", { connection: connectionName, ms: Date.now() - loginStarted });
+      self.sessions.set(connectionName, {
+        sid: login.sid,
+        ttlSeconds: login.ttl,
+        createdAt: Date.now()
       });
-    }
-    return login.sid;
+      if (paloHttpLogEnabled()) {
+        console.info("[PaloOffice] getValidSid login OK", {
+          connectionName: connectionName,
+          sidPrefix: login.sid ? login.sid.slice(0, 8) : "",
+          ttlSeconds: login.ttl
+        });
+      }
+      return login.sid;
+    })();
+    this._sidInflight.set(connectionName, pending);
+    var clearInflight = function () {
+      if (self._sidInflight && self._sidInflight.get(connectionName) === pending) {
+        self._sidInflight.delete(connectionName);
+      }
+    };
+    pending.then(clearInflight, clearInflight);
+    return pending;
   };
 
   paloGlobal.PaloOffice = paloGlobal.PaloOffice || {};
