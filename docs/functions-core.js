@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.13";
+var PALO_ASSET_VERSION = "1.0.3.14";
 /** Delai apres enregistrement CF : evite la tempete HTTP/recalcul a l'ouverture du classeur. */
 var PALO_CF_OPEN_GRACE_MS = 3500;
 
@@ -274,6 +274,19 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       return po.getLastApiUrl();
     }
     return "";
+  }
+
+  function paloDatacPerf(text) {
+    var po = paloGlobalRef().PaloOffice;
+    if (po && typeof po.datacPerf === "function") {
+      po.datacPerf(text);
+      return;
+    }
+    try {
+      console.info("[Palo DATAC] " + text);
+    } catch (_log) {
+      // ignore
+    }
   }
 
   function nextDatacRequestId() {
@@ -768,11 +781,13 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     if (!path) {
       return { ok: false, error: "name_path vide", value: null, path: "", url: "" };
     }
+    var started = Date.now();
     var manager = await getConnectionManager();
     if (!manager) {
       return { ok: false, error: "Runtime pas pret (volet Connexion)", value: null, path: path, url: "" };
     }
     var context = await manager.getClientAndContext(paloCoerceCfArgSafe(servdb));
+    var contextMs = Date.now() - started;
     var cube = paloCoerceCfArgSafe(cubeName);
     var url = context.client.buildUrl("/cell/value", {
       sid: context.sid,
@@ -780,11 +795,15 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       name_cube: cube,
       name_path: path
     });
+    var valueStarted = Date.now();
     var value = await context.client.cellValue(
       context.sid,
       context.database,
       cube,
       path
+    );
+    paloDatacPerf(
+      "name_path contexte=" + contextMs + "ms cell/value=" + (Date.now() - valueStarted) + "ms"
     );
     return {
       ok: true,
@@ -844,11 +863,19 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
     }
 
     try {
+      var started = Date.now();
+      var mode = paloPreferNamePathDatac() && paloIsCfExcelHost() ? "name_path" : "ids";
+      paloDatacPerf("#" + requestId + " debut cube=" + String(cubeName || "") + " mode=" + mode);
+      var stepAt = Date.now();
       var manager = await getConnectionManager();
+      var managerMs = Date.now() - stepAt;
       if (!manager) {
+        paloDatacPerf("#" + requestId + " arret runtime pas pret " + (Date.now() - started) + "ms");
         return "";
       }
+      stepAt = Date.now();
       var context = await manager.getClientAndContext(servdb);
+      var contextMs = Date.now() - stepAt;
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] cell/value params", {
           requestId: requestId,
@@ -874,13 +901,16 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
       var coordsScalar = coordinates.map(function (coord) {
         return String(coerceExcelScalarArg(coord));
       });
+      stepAt = Date.now();
       if (paloPreferNamePathDatac() && paloIsCfExcelHost()) {
         var pathResolved = paloResolveNamePathFromCfArgs(cfArgs, 2);
         if (!pathResolved.ok) {
+          paloDatacPerf("#" + requestId + " chemin illisible " + (Date.now() - started) + "ms");
           return "#PALO! " + pathResolved.error;
         }
         var direct = await paloFetchCellByNamePathLiteral(servdb, cubeName, pathResolved.path);
         if (!direct.ok) {
+          paloDatacPerf("#" + requestId + " name_path refuse " + (Date.now() - started) + "ms");
           return "#PALO! " + direct.error;
         }
         value = direct.value;
@@ -899,6 +929,7 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
           }
         );
       }
+      var readMs = Date.now() - stepAt;
       if (paloFnTrace()) {
         console.info("[PaloOffice DATAC] fin OK", { requestId: requestId, value: value });
       }
@@ -906,9 +937,19 @@ var PALO_CF_OPEN_GRACE_MS = 3500;
         requestId: requestId,
         value: value
       });
+      paloDatacPerf(
+        "#" + requestId
+        + " fin total=" + (Date.now() - started) + "ms"
+        + " manager=" + managerMs + "ms"
+        + " contexte=" + contextMs + "ms"
+        + " sid=" + (context.sidFromCache ? "cache" : "login")
+        + " lecture=" + readMs + "ms"
+        + " mode=" + mode
+      );
       return paloCfDatacReturn(value);
     } catch (error) {
       var msg = error && error.message ? String(error.message) : String(error);
+      paloDatacPerf("#" + requestId + " erreur " + msg);
       if (paloFnTrace() || (typeof window !== "undefined" && window.PALO_LOG_HTTP)) {
         console.warn("[PaloOffice DATAC] erreur", { requestId: requestId, message: msg });
       }

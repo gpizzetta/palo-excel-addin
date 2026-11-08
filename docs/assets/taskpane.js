@@ -1,5 +1,5 @@
 (function taskpaneBootstrap() {
-  var PLUGIN_VERSION = "1.0.3.13";
+  var PLUGIN_VERSION = "1.0.3.14";
   var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
   var manager = null;
 
@@ -372,6 +372,9 @@
       status("Aucune connexion configuree. Cree une connexion pour utiliser PALO.DATAC / PALO.ENAME.");
     } else {
       flushStorageToOfficeRuntime().catch(function () {});
+    }
+    if (window.PaloOffice && typeof window.PaloOffice.datacPerfRender === "function") {
+      window.PaloOffice.datacPerfRender();
     }
   }
 

@@ -314,7 +314,8 @@ button:active {
   color: var(--excel-danger);
 }
 
-pre#status-log {
+pre#status-log,
+pre#datac-perf-log {
   flex: 1;
   min-width: 0;
   margin: 0;
@@ -331,5 +332,10 @@ pre#status-log {
   border-radius: 0;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+pre#datac-perf-log {
+  max-height: 240px;
+  min-height: 8em;
 }
 

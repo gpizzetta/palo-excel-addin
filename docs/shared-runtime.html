@@ -8,7 +8,7 @@
   <title>Palo OLAP Add-in</title>
   <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-  <link rel="stylesheet" href="./assets/taskpane.css?v=1.0.3.13">
+  <link rel="stylesheet" href="./assets/taskpane.css?v=1.0.3.14">
 </head>
 <body>
   <main class="app">
@@ -50,16 +50,22 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2>Journal PALO.DATAC</h2>
+      <p class="muted small">Duree de chaque etape, en millisecondes. Les 80 dernieres lignes.</p>
+      <pre id="datac-perf-log">En attente d'un recalcul PALO.DATAC.</pre>
+    </section>
+
     <p class="version-line version-line--footer">
-      Assets: <strong id="plugin-version">1.0.3.13</strong>
+      Assets: <strong id="plugin-version">1.0.3.14</strong>
       · Manifest: <strong id="manifest-version">…</strong>
     </p>
   </main>
 
   <!-- functions.js = bundle (palo-api + fonctions PALO.*). Modele 1.0.2.6 : un seul script ici. -->
-  <script src="./functions.js?v=1.0.3.13"></script>
-  <script src="./assets/palo-ename-ribbon.js?v=1.0.3.13"></script>
-  <script src="./commands.js?v=1.0.3.13"></script>
-  <script src="./assets/taskpane.js?v=1.0.3.13"></script>
+  <script src="./functions.js?v=1.0.3.14"></script>
+  <script src="./assets/palo-ename-ribbon.js?v=1.0.3.14"></script>
+  <script src="./commands.js?v=1.0.3.14"></script>
+  <script src="./assets/taskpane.js?v=1.0.3.14"></script>
 </body>
 </html>
