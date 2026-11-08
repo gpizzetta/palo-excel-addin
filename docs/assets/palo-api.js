@@ -1540,6 +1540,39 @@
     return String(text).trim().indexOf("1") === 0;
   };
 
+  /**
+   * /cell/copy : repartit value sur path_to selon les proportions de path.
+   * C'est l'appel derriere « 10000 like 2025;demo ». Pas de parametre splash.
+   */
+  PaloApiClient.prototype.cellCopyByIds = async function cellCopyByIds(
+    sid,
+    name_database,
+    name_cube,
+    sourceIdPath,
+    targetIdPath,
+    value
+  ) {
+    var params = {
+      sid: sid,
+      name_database: name_database,
+      name_cube: name_cube,
+      path: sourceIdPath,
+      path_to: targetIdPath,
+      "function": 0,
+      use_rules: 0,
+      wait: 1
+    };
+    if (value != null && value !== "") {
+      params.value = formatPaloCellReplaceValue(value, "numeric");
+    }
+    var text = await this.call("/cell/copy", params);
+    var trimmed = String(text == null ? "" : text).trim();
+    if (trimmed.indexOf("1") !== 0) {
+      throw new Error(trimmed ? "cell/copy: " + trimmed.slice(0, 300) : "cell/copy a refuse l'ecriture.");
+    }
+    return true;
+  };
+
   /** Valeur de /cell/replace_bulk : separateur ":", chaines speciales encodees en CSV. */
   function encodePaloBulkValue(value) {
     var s = normalizePaloPathSegment(value);

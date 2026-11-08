@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.11";
+  var PALO_PLUGIN_VERSION = "1.0.3.13";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -419,10 +419,81 @@
   }
 
   /**
+   * Action du popup. splash/compute : /cell/replace. copy : /cell/copy.
+   * literal = le nombre saisi. Les autres calculs lisent la cellule d'abord.
+   */
+  var WRITE_ACTIONS = {
+    replace: { splash: 0, compute: "literal" },
+    add: { splash: 2, compute: "literal" },
+    "add-pct": { splash: 2, compute: "delta-pct" },
+    "set-pct": { splash: 0, compute: "ratio" },
+    spread: { splash: 1, compute: "literal" },
+    "add-total": { splash: 1, compute: "add-current" },
+    "add-total-pct": { splash: 1, compute: "grow-pct" },
+    "set-total-pct": { splash: 1, compute: "ratio" },
+    "set-bases": { splash: 3, compute: "literal" },
+    "add-bases": { splash: 2, compute: "literal" },
+    like: { copy: "value" },
+    "like-add": { copy: "add" },
+    "like-pct": { copy: "pct" },
+    "like-add-pct": { copy: "add-pct" },
+    copy: { copy: "plain" }
+  };
+
+  function requireWriteAmount(value) {
+    var n = window.PaloOffice.parsePaloNumericInput(value);
+    if (n == null) {
+      throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+    }
+    return n;
+  }
+
+  async function readPlanNumber(plan, idPath) {
+    var storedType = 0;
+    try {
+      storedType = await plan.ctx.client.cellStoredTypeByIds(
+        plan.ctx.sid,
+        plan.ctx.database,
+        plan.cell.cube,
+        idPath
+      );
+    } catch (errRead) {
+      if (isTransportError(errRead)) {
+        throw errRead;
+      }
+    }
+    if (storedType === 2) {
+      throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+    }
+    var raw = 0;
+    try {
+      raw = await plan.ctx.client.cellValueByIds(
+        plan.ctx.sid,
+        plan.ctx.database,
+        plan.cell.cube,
+        idPath
+      );
+    } catch (errValue) {
+      if (isTransportError(errValue)) {
+        throw errValue;
+      }
+    }
+    if (typeof raw === "number" && Number.isFinite(raw)) {
+      return raw;
+    }
+    var parsed = window.PaloOffice.parsePaloNumericInput(raw);
+    return parsed == null ? 0 : parsed;
+  }
+
+  /**
    * Type d'element avant ecriture : 2 → string quotee. 1 ou 4 → nombre non quote.
    * Une cellule Palo deja string sur une mesure numerique est videe puis reecrite en numeric.
    */
-  async function executeDatacWrite(cells, mode, value, splash) {
+  async function executeDatacWrite(cells, mode, action, value, pathOverrides) {
+    var spec = WRITE_ACTIONS[action];
+    if (!spec) {
+      throw new Error("Action inconnue.");
+    }
     var targets = cells;
     if (mode !== "bulk") {
       targets = cells.filter(function (c) { return c.active; });
@@ -442,7 +513,7 @@
     var keys = Object.keys(groups);
     var typeCache = {};
     var plans = [];
-    var splashMode = splash == null || Number.isNaN(Number(splash)) ? 1 : Number(splash);
+    var amount = spec.copy === "plain" ? null : requireWriteAmount(value);
     var i;
     var j;
     var k;
@@ -471,18 +542,22 @@
           types.push(await elementTypeForWrite(ctx, dimNames[k], cell.coordinates[k], typeCache));
         }
         var kind = window.PaloOffice.paloPathStorageKind(types);
-        var storedValue = value;
-        if (kind === "numeric") {
-          storedValue = window.PaloOffice.parsePaloNumericInput(value);
-          if (storedValue == null) {
-            throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+        if (kind !== "numeric") {
+          throw new Error("Cette action s'applique a une mesure numerique.");
+        }
+        var sourceCoordinates = cell.coordinates.slice();
+        if (pathOverrides) {
+          for (k = 0; k < dimNames.length; k += 1) {
+            if (pathOverrides[dimNames[k]]) {
+              sourceCoordinates[k] = String(pathOverrides[dimNames[k]]);
+            }
           }
         }
         groupPlans.push({
           ctx: ctx,
           cell: cell,
           kind: kind,
-          value: storedValue
+          sourceCoordinates: sourceCoordinates
         });
       }
       if (mode === "bulk") {
@@ -512,48 +587,103 @@
       plans = plans.concat(groupPlans);
     }
 
+    if (spec.copy) {
+      var copied = 0;
+      for (i = 0; i < plans.length; i += 1) {
+        var sourcePath = await manager.buildCellIdPathFromSegments(
+          plans[i].ctx.connectionName,
+          plans[i].ctx.sid,
+          plans[i].ctx.client,
+          plans[i].ctx.database,
+          plans[i].cell.cube,
+          plans[i].sourceCoordinates
+        );
+        var copyValue = null;
+        if (spec.copy === "value") {
+          copyValue = amount;
+        } else if (spec.copy !== "plain") {
+          var sourceNumber = await readPlanNumber(plans[i], sourcePath);
+          if (spec.copy === "add") {
+            copyValue = sourceNumber + amount;
+          } else if (spec.copy === "pct") {
+            copyValue = sourceNumber * amount / 100;
+          } else {
+            copyValue = sourceNumber * (100 + amount) / 100;
+          }
+        }
+        await plans[i].ctx.client.cellCopyByIds(
+          plans[i].ctx.sid,
+          plans[i].ctx.database,
+          plans[i].cell.cube,
+          sourcePath,
+          plans[i].idPath,
+          copyValue
+        );
+        copied += 1;
+      }
+      return {
+        written: copied,
+        addresses: targets.map(function (c) { return c.address; })
+      };
+    }
+
     for (i = 0; i < plans.length; i += 1) {
-      if (plans[i].kind !== "numeric") {
-        continue;
-      }
-      var storedType = 0;
-      try {
-        storedType = await plans[i].ctx.client.cellStoredTypeByIds(
-          plans[i].ctx.sid,
-          plans[i].ctx.database,
-          plans[i].cell.cube,
-          plans[i].idPath
-        );
-      } catch (errType) {
-        if (isTransportError(errType)) {
-          throw errType;
+      if (spec.compute === "literal") {
+        plans[i].writeValue = amount;
+      } else {
+        var currentNumber = await readPlanNumber(plans[i], plans[i].idPath);
+        if (spec.compute === "add-current") {
+          plans[i].writeValue = currentNumber + amount;
+        } else if (spec.compute === "grow-pct") {
+          plans[i].writeValue = currentNumber * (100 + amount) / 100;
+        } else {
+          plans[i].writeValue = currentNumber * amount / 100;
         }
-        storedType = 0;
       }
-      if (storedType !== 2) {
-        continue;
-      }
-      var cleared = false;
-      try {
-        cleared = await plans[i].ctx.client.cellClearByIds(
-          plans[i].ctx.sid,
-          plans[i].ctx.database,
-          plans[i].cell.cube,
-          plans[i].idPath
-        );
-      } catch (errClear) {
-        if (isTransportError(errClear)) {
-          throw errClear;
+    }
+
+    if (spec.compute === "literal") {
+      for (i = 0; i < plans.length; i += 1) {
+        var storedType = 0;
+        try {
+          storedType = await plans[i].ctx.client.cellStoredTypeByIds(
+            plans[i].ctx.sid,
+            plans[i].ctx.database,
+            plans[i].cell.cube,
+            plans[i].idPath
+          );
+        } catch (errType) {
+          if (isTransportError(errType)) {
+            throw errType;
+          }
+          storedType = 0;
         }
-        cleared = false;
-      }
-      if (!cleared) {
-        throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+        if (storedType !== 2) {
+          continue;
+        }
+        var cleared = false;
+        try {
+          cleared = await plans[i].ctx.client.cellClearByIds(
+            plans[i].ctx.sid,
+            plans[i].ctx.database,
+            plans[i].cell.cube,
+            plans[i].idPath
+          );
+        } catch (errClear) {
+          if (isTransportError(errClear)) {
+            throw errClear;
+          }
+          cleared = false;
+        }
+        if (!cleared) {
+          throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+        }
       }
     }
 
     var written = 0;
-    if (mode === "bulk") {
+    var splashMode = spec.splash;
+    if (mode === "bulk" && spec.compute === "literal") {
       for (i = 0; i < keys.length; i += 1) {
         var bulkPlans = plans.filter(function (plan) {
           return plan.cell.servdb + "\0" + plan.cell.cube === keys[i];
@@ -566,9 +696,9 @@
           bulkPlans[0].ctx.database,
           bulkPlans[0].cell.cube,
           bulkPlans.map(function (plan) { return plan.idPath; }),
-          bulkPlans.map(function (plan) { return plan.value; }),
+          bulkPlans.map(function (plan) { return plan.writeValue; }),
           splashMode,
-          bulkPlans.map(function (plan) { return plan.kind; })
+          bulkPlans.map(function () { return "numeric"; })
         );
         written += bulkPlans.length;
       }
@@ -579,10 +709,10 @@
           plans[i].ctx.database,
           plans[i].cell.cube,
           plans[i].idPath,
-          plans[i].value,
+          plans[i].writeValue,
           splashMode,
           true,
-          plans[i].kind
+          "numeric"
         );
         if (!ok) {
           throw new Error("cell/replace a refuse l'ecriture (" + plans[i].cell.address + ").");
@@ -734,6 +864,53 @@
     });
   }
 
+  async function loadDatacLikeDimensions(cells) {
+    var active = null;
+    var i;
+    for (i = 0; i < cells.length; i += 1) {
+      if (cells[i].active) {
+        active = cells[i];
+      }
+    }
+    if (!active) {
+      active = cells[0];
+    }
+    var manager = window.PaloOffice.createConnectionManager();
+    var ctx = await manager.getClientAndContext(active.servdb);
+    var dimNames = await manager.getCubeDimensionNamesOrdered(
+      ctx.connectionName,
+      ctx.sid,
+      ctx.client,
+      ctx.database,
+      active.cube
+    );
+    var dimensions = [];
+    for (i = 0; i < dimNames.length; i += 1) {
+      var elems = await ctx.client.dimensionElements(ctx.sid, ctx.database, dimNames[i]);
+      var names = [];
+      var seen = {};
+      var j;
+      for (j = 0; j < elems.length; j += 1) {
+        var name = String(elems[j].name || "").trim();
+        if (!name || seen[name]) {
+          continue;
+        }
+        seen[name] = true;
+        names.push(name);
+      }
+      var current = String(active.coordinates[i] || "");
+      if (current && !seen[current]) {
+        names.unshift(current);
+      }
+      dimensions.push({
+        name: dimNames[i],
+        current: current,
+        elements: names
+      });
+    }
+    return dimensions;
+  }
+
   function openDatacWriteDialog(event, pickContext) {
     var payload = {
       cells: pickContext.cells,
@@ -741,7 +918,8 @@
       skipped: pickContext.skipped || 0,
       writeMode: pickContext.writeMode === "bulk" ? "bulk" : "replace",
       consolidated: pickContext.consolidated || [],
-      missing: pickContext.missing || []
+      missing: pickContext.missing || [],
+      dimensions: pickContext.dimensions || []
     };
     return storageRemove(DATAC_WRITE_STORAGE_KEY).then(function () {
       return storageSetJson(DATAC_WRITE_STORAGE_KEY, payload);
@@ -751,7 +929,7 @@
         dialogUrl.searchParams.set("v", PALO_PLUGIN_VERSION);
         Office.context.ui.displayDialogAsync(
           dialogUrl.href,
-          { height: 58, width: 34, displayInIframe: true },
+          { height: 72, width: 40, displayInIframe: true },
           function (asyncResult) {
             if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
               paloUserNotify(
@@ -823,7 +1001,8 @@
                       skipped: payload.skipped,
                       writeMode: payload.writeMode,
                       consolidated: payload.consolidated,
-                      missing: payload.missing
+                      missing: payload.missing,
+                      dimensions: payload.dimensions
                     }));
                   } catch (_e) {
                     // Le dialogue relit le stockage.
@@ -856,7 +1035,13 @@
                 return;
               }
               var mode = payload.writeMode === "bulk" ? "bulk" : "replace";
-              executeDatacWrite(payload.cells, mode, o.value == null ? "" : String(o.value), Number(o.splash))
+              executeDatacWrite(
+                payload.cells,
+                mode,
+                o.action,
+                o.value == null ? "" : String(o.value),
+                o.path || null
+              )
                 .then(function (result) {
                   reloadAddresses = result.addresses;
                   cleanup();
@@ -990,6 +1175,10 @@
         pickContext.writeMode = classified.mode;
         pickContext.consolidated = classified.consolidated;
         pickContext.missing = classified.missing;
+        pickContext.dimensions = [];
+        if (!(classified.missing && classified.missing.length)) {
+          pickContext.dimensions = await loadDatacLikeDimensions(pickContext.cells);
+        }
         await openDatacWriteDialog(event, pickContext);
         return;
       }

@@ -61,6 +61,17 @@
       gap: 10px;
       min-height: 0;
     }
+    .fields {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    #value-block[hidden],
+    #like-block[hidden] { display: none; }
+    #like-dims { display: flex; flex-direction: column; gap: 8px; }
     p { margin: 0; }
     .hint { color: var(--palo-text-secondary); font-size: 12px; line-height: 1.4; }
     label {
@@ -146,20 +157,29 @@
 <body>
   <h1>Ecriture PALO.DATAC</h1>
   <main>
+    <div class="fields">
     <p id="summary" class="hint">Lecture de la selection...</p>
     <div>
-      <label for="value">Valeur</label>
+      <label for="action">Action</label>
+      <select id="action">
+        <option value="replace" selected>Remplacer</option>
+        <option value="add">Ajouter</option>
+        <option value="add-pct">Ajouter en %</option>
+        <option value="set-pct">Pourcentage de la cellule</option>
+        <option value="copy">Copier</option>
+      </select>
+    </div>
+    <div id="value-block">
+      <label for="value" id="value-label">Valeur</label>
       <input id="value" type="text" spellcheck="false" autocomplete="off" placeholder="Ex. 100">
     </div>
-    <div>
-      <label for="splash">Splash</label>
-      <select id="splash">
-        <option value="1" selected>Remplacer</option>
-        <option value="2">Ajouter</option>
-      </select>
+    <div id="like-block" hidden>
+      <p id="like-hint" class="hint">Chemin source. Les listes partent du chemin de la cellule.</p>
+      <div id="like-dims"></div>
     </div>
     <p id="status" class="hint"></p>
     <div id="alert-danger" class="alert alert-danger" role="alert" hidden></div>
+    </div>
     <div class="actions">
       <button type="button" id="btn-cancel" class="secondary">Annuler</button>
       <button type="button" id="btn-apply">Appliquer</button>
@@ -168,17 +188,25 @@
   <script>
     var STORAGE_KEY = "palo_datac_write_v1";
     var state = { cells: [], busy: false, writeMode: "replace" };
-    var SPLASH_BASE = [
-      { value: "1", label: "Remplacer" },
-      { value: "2", label: "Ajouter" }
+    var ACTIONS_BASE = [
+      { id: "replace", label: "Remplacer", value: "amount", path: false },
+      { id: "add", label: "Ajouter", value: "amount", path: false },
+      { id: "add-pct", label: "Ajouter en %", value: "percent", path: false },
+      { id: "set-pct", label: "Pourcentage de la cellule", value: "percent", path: false },
+      { id: "copy", label: "Copier", value: "none", path: true }
     ];
-    var SPLASH_CONSOLIDATED = [
-      { value: "1", label: "1 — Defaut (repartition)" },
-      { value: "0", label: "0 — Sans splash" },
-      { value: "2", label: "2 — Ajouter aux cellules de base" },
-      { value: "3", label: "3 — Ecrire sur les cellules de base" },
-      { value: "4", label: "4 — Ecrire sur les cellules de base peuplees" },
-      { value: "5", label: "5 — Ajouter aux cellules de base peuplees" }
+    var ACTIONS_CONSOLIDATED = [
+      { id: "spread", label: "Repartir", value: "amount", path: false },
+      { id: "add-total", label: "Ajouter au total", value: "amount", path: false },
+      { id: "add-total-pct", label: "Ajouter un % au total", value: "percent", path: false },
+      { id: "set-total-pct", label: "Passer le total a %", value: "percent", path: false },
+      { id: "set-bases", label: "Ecrire sur chaque base", value: "amount", path: false },
+      { id: "add-bases", label: "Ajouter a chaque base", value: "amount", path: false },
+      { id: "like", label: "Reprendre une repartition", value: "amount", path: true },
+      { id: "like-add", label: "Reprendre et ajouter", value: "amount", path: true },
+      { id: "like-pct", label: "Pourcentage du modele", value: "percent", path: true },
+      { id: "like-add-pct", label: "Ajouter en % au modele", value: "percent", path: true },
+      { id: "copy", label: "Copier", value: "none", path: true }
     ];
 
     function applyOfficeTheme() {
@@ -219,26 +247,102 @@
       return (cell.coordinates || []).join(", ");
     }
 
-    function fillSplash(consolidated) {
-      var select = document.getElementById("splash");
+    function actionList() {
+      return state.writeMode === "bulk" ? ACTIONS_CONSOLIDATED : ACTIONS_BASE;
+    }
+
+    function currentAction() {
+      var id = document.getElementById("action").value;
+      var list = actionList();
+      var i;
+      for (i = 0; i < list.length; i += 1) {
+        if (list[i].id === id) {
+          return list[i];
+        }
+      }
+      return list[0];
+    }
+
+    function fillActions() {
+      var select = document.getElementById("action");
       var previous = select.value;
-      var options = consolidated ? SPLASH_CONSOLIDATED : SPLASH_BASE;
+      var list = actionList();
       var allowed = false;
       var i;
       select.innerHTML = "";
-      for (i = 0; i < options.length; i += 1) {
+      for (i = 0; i < list.length; i += 1) {
         var opt = document.createElement("option");
-        opt.value = options[i].value;
-        opt.textContent = options[i].label;
-        if (options[i].value === previous) {
+        opt.value = list[i].id;
+        opt.textContent = list[i].label;
+        if (list[i].id === previous) {
           opt.selected = true;
           allowed = true;
         }
         select.appendChild(opt);
       }
       if (!allowed) {
-        select.value = "1";
+        select.value = list[0].id;
       }
+    }
+
+    function collectPath() {
+      if (!currentAction().path || document.getElementById("like-block").hidden) {
+        return null;
+      }
+      var selects = document.querySelectorAll("#like-dims select");
+      var path = {};
+      var i;
+      for (i = 0; i < selects.length; i += 1) {
+        var chosen = selects[i].value;
+        var current = selects[i].getAttribute("data-current") || "";
+        if (chosen && chosen !== current) {
+          path[selects[i].getAttribute("data-dimension")] = chosen;
+        }
+      }
+      return path;
+    }
+
+    function applyActionFields() {
+      var action = currentAction();
+      var valueBlock = document.getElementById("value-block");
+      var label = document.getElementById("value-label");
+      var input = document.getElementById("value");
+      var pathBlock = document.getElementById("like-block");
+      valueBlock.hidden = action.value === "none";
+      label.textContent = action.value === "percent" ? "Pourcentage" : "Valeur";
+      input.placeholder = action.value === "percent" ? "Ex. 10" : "Ex. 100";
+      pathBlock.hidden = !(action.path && state.dimensions && state.dimensions.length);
+    }
+
+    function renderLike(dimensions) {
+      var host = document.getElementById("like-dims");
+      host.innerHTML = "";
+      state.dimensions = Array.isArray(dimensions) ? dimensions : [];
+      state.dimensions.forEach(function (dim) {
+        var wrap = document.createElement("div");
+        var label = document.createElement("label");
+        label.textContent = dim.name;
+        var select = document.createElement("select");
+        select.setAttribute("data-dimension", dim.name);
+        select.setAttribute("data-current", dim.current || "");
+        var names = Array.isArray(dim.elements) ? dim.elements.slice() : [];
+        if (dim.current && names.indexOf(dim.current) < 0) {
+          names.unshift(dim.current);
+        }
+        names.forEach(function (name) {
+          var opt = document.createElement("option");
+          opt.value = name;
+          opt.textContent = name;
+          if (name === dim.current) {
+            opt.selected = true;
+          }
+          select.appendChild(opt);
+        });
+        wrap.appendChild(label);
+        wrap.appendChild(select);
+        host.appendChild(wrap);
+      });
+      applyActionFields();
     }
 
     function render(payload) {
@@ -286,11 +390,13 @@
         lines.push(payload.skipped + " formule(s) ignoree(s) (coordonnee vide ou illisible).");
       }
       summary.textContent = lines.join(" ");
-      fillSplash(state.writeMode === "bulk");
+      state.dimensions = payload && Array.isArray(payload.dimensions) ? payload.dimensions : [];
+      fillActions();
+      renderLike(state.dimensions);
       var canWrite = !missing.length;
       document.getElementById("btn-apply").disabled = !canWrite;
-      document.getElementById("value").disabled = !canWrite;
-      document.getElementById("splash").disabled = !canWrite;
+      document.getElementById("action").disabled = !canWrite;
+      document.getElementById("value").disabled = !canWrite || currentAction().value === "none";
       if (missing.length) {
         setStatus(missing.map(function (item) {
           return item && item.message
@@ -338,11 +444,9 @@
         setStatus("Aucune cellule PALO.DATAC.", "error");
         return;
       }
-      var value = document.getElementById("value").value;
-      var splash = Number(document.getElementById("splash").value);
-      if (!Number.isFinite(splash)) {
-        splash = 1;
-      }
+      var action = currentAction();
+      var value = action.value === "none" ? "" : document.getElementById("value").value;
+      var path = collectPath();
       state.busy = true;
       document.getElementById("btn-apply").disabled = true;
       document.getElementById("btn-cancel").disabled = true;
@@ -350,8 +454,9 @@
       Office.context.ui.messageParent(JSON.stringify({
         type: "write",
         mode: mode,
+        action: action.id,
         value: value,
-        splash: splash
+        path: path
       }), { targetOrigin: "*" });
     }
 
@@ -372,6 +477,18 @@
     Office.onReady(function () {
       applyOfficeTheme();
       tryReadLocalStorage();
+      document.getElementById("action").addEventListener("change", function () {
+        applyActionFields();
+        var input = document.getElementById("value");
+        input.disabled = Boolean(state.missing && state.missing.length) || currentAction().value === "none";
+        if (currentAction().value !== "none") {
+          try {
+            input.focus();
+          } catch (_focus) {
+            // ignore
+          }
+        }
+      });
       document.getElementById("btn-apply").addEventListener("click", function () {
         send(state.writeMode === "bulk" ? "bulk" : "replace");
       });
