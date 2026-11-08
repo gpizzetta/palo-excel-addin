@@ -1380,8 +1380,19 @@
       );
     }
     if (!response.ok) {
-      paloDatacPerf("http", { path: path, ms: Date.now() - httpStarted, error: "HTTP " + response.status });
-      throw new Error("HTTP " + response.status + " sur " + logUrl);
+      var errBody = "";
+      try {
+        errBody = await response.text();
+      } catch (_errBody) {
+      }
+      var detail = String(errBody || "").trim().replace(/\s+/g, " ").slice(0, 160);
+      paloDatacPerf("http", {
+        path: path,
+        ms: Date.now() - httpStarted,
+        error: "HTTP " + response.status,
+        detail: detail
+      });
+      throw new Error("HTTP " + response.status + " sur " + logUrl + (detail ? " — " + detail : ""));
     }
     var text = await response.text();
     paloDatacPerf("http", { path: path, ms: Date.now() - httpStarted, octets: text.length });
@@ -1908,8 +1919,23 @@
       + "\0" + String(name_cube || "");
   }
 
+  function paloScheduleBatchFlush(timers, key, flush) {
+    if (timers.get(key)) {
+      return;
+    }
+    timers.set(key, true);
+    Promise.resolve().then(function () {
+      if (timers.get(key) !== true) {
+        return;
+      }
+      timers.delete(key);
+      flush();
+    });
+  }
+
   function cellBatchDelayMs() {
-    // 24 ms : Excel lance les formules ensemble, une seule vague /cell/values part ensuite.
+    // 0 desactive le regroupement. Sinon la vague part dans le meme tour, sans setTimeout
+    // (Excel retarde ce minuteur de plusieurs centaines de ms pendant un recalcul).
     if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH !== undefined) {
       return window.PALO_DISABLE_BATCH ? 0 : 24;
     }
@@ -2029,17 +2055,9 @@
           requestId: debugMeta && debugMeta.requestId ? debugMeta.requestId : null
         });
       }
-      var prev = manager._cellBatchTimers.get(key);
-      if (prev) {
-        clearTimeout(prev);
-      }
-      manager._cellBatchTimers.set(
-        key,
-        setTimeout(function () {
-          manager._cellBatchTimers.delete(key);
-          manager._flushCellValueBatch(key);
-        }, cellBatchDelayMs())
-      );
+      paloScheduleBatchFlush(manager._cellBatchTimers, key, function () {
+        manager._flushCellValueBatch(key);
+      });
     });
   };
 
@@ -2310,17 +2328,9 @@
         resolve: resolve,
         reject: reject
       });
-      var prev = manager._databBatchTimers.get(key);
-      if (prev) {
-        clearTimeout(prev);
-      }
-      manager._databBatchTimers.set(
-        key,
-        setTimeout(function () {
-          manager._databBatchTimers.delete(key);
-          manager._flushDatabBatch(key);
-        }, databBatchDelayMs())
-      );
+      paloScheduleBatchFlush(manager._databBatchTimers, key, function () {
+        manager._flushDatabBatch(key);
+      });
     });
   };
 
@@ -3171,7 +3181,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.20";
+var PALO_ASSET_VERSION = "1.0.3.21";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
