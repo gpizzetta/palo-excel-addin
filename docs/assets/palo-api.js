@@ -1367,6 +1367,68 @@
     return parseCellValueResponseLine(line);
   };
 
+  function parseCellStoredType(line) {
+    var p = splitSemicolonLine(String(line || "").trim());
+    var type = Number(p[0] || "0");
+    return type === 1 || type === 2 ? type : 0;
+  }
+
+  /**
+   * 1 = numerique, 2 = texte. Un element texte sur le chemin impose une cellule string.
+   * 4 = consolide : la cellule reste numerique s'il n'y a aucun element de type 2.
+   */
+  function paloPathStorageKind(elementTypes) {
+    var i;
+    var types = Array.isArray(elementTypes) ? elementTypes : [];
+    for (i = 0; i < types.length; i += 1) {
+      if (Number(types[i]) === 2) {
+        return "string";
+      }
+    }
+    return "numeric";
+  }
+
+  /** Nombre Palo : 10, 10.5, 10,5, 1 000,5. Apostrophe Excel ou texte → null. */
+  function parsePaloNumericInput(raw) {
+    if (typeof raw === "number") {
+      return Number.isFinite(raw) ? raw : null;
+    }
+    var s = String(raw == null ? "" : raw).trim();
+    if (!s || s.charAt(0) === "'") {
+      return null;
+    }
+    s = s.replace(/\s/g, "");
+    var comma = s.lastIndexOf(",");
+    var dot = s.lastIndexOf(".");
+    if (comma >= 0 && dot >= 0) {
+      if (comma > dot) {
+        s = s.replace(/\./g, "").replace(",", ".");
+      } else {
+        s = s.replace(/,/g, "");
+      }
+    } else if (comma >= 0) {
+      s = s.replace(",", ".");
+    }
+    if (!/^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(s)) {
+      return null;
+    }
+    var n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  /** Numerique sans guillemets. Texte toujours entre guillemets CSV pour /cell/replace. */
+  function formatPaloCellReplaceValue(value, kind) {
+    if (kind === "string") {
+      var text = value == null ? "" : String(value);
+      return "\"" + text.replace(/"/g, "\"\"") + "\"";
+    }
+    var n = typeof value === "number" ? value : parsePaloNumericInput(value);
+    if (n == null) {
+      throw new Error("valeur numerique attendue");
+    }
+    return String(n);
+  }
+
   PaloApiClient.prototype.cellValueByIds = async function cellValueByIds(sid, name_database, name_cube, idPathStr) {
     var text = await this.call("/cell/value", {
       sid: sid,
@@ -1376,6 +1438,29 @@
     });
     var line = String(text).trim().split(/\r?\n/)[0];
     return parseCellValueResponseLine(line);
+  };
+
+  /** Type stocke : 1 numerique, 2 string, 0 si la cellule n'existe pas. */
+  PaloApiClient.prototype.cellStoredTypeByIds = async function cellStoredTypeByIds(sid, name_database, name_cube, idPathStr) {
+    var text = await this.call("/cell/value", {
+      sid: sid,
+      name_database: name_database,
+      name_cube: name_cube,
+      path: idPathStr
+    });
+    var line = String(text).trim().split(/\r?\n/)[0];
+    return parseCellStoredType(line);
+  };
+
+  PaloApiClient.prototype.cellClearByIds = async function cellClearByIds(sid, name_database, name_cube, idPathStr) {
+    var text = await this.call("/cell/clear", {
+      sid: sid,
+      name_database: name_database,
+      name_cube: name_cube,
+      path: idPathStr,
+      wait: 1
+    });
+    return String(text).trim().indexOf("1") === 0;
   };
 
   /**
@@ -1437,14 +1522,15 @@
     idPathStr,
     value,
     splash,
-    wait
+    wait,
+    valueKind
   ) {
     var params = {
       sid: sid,
       name_database: name_database,
       name_cube: name_cube,
       path: idPathStr,
-      value: normalizePaloPathSegment(value),
+      value: valueKind ? formatPaloCellReplaceValue(value, valueKind) : normalizePaloPathSegment(value),
       splash: splash || 0
     };
     if (wait) {
@@ -1474,17 +1560,24 @@
     name_cube,
     idPaths,
     values,
-    splash
+    splash,
+    valueKinds
   ) {
     var paths = Array.isArray(idPaths) ? idPaths : [idPaths];
     var valueList = Array.isArray(values) ? values : [values];
+    var kinds = Array.isArray(valueKinds) ? valueKinds : [];
     if (!paths.length || paths.length !== valueList.length) {
       throw new Error(
         "cell/replace_bulk: " + paths.length + " chemin(s) pour " + valueList.length + " valeur(s)."
       );
     }
     var splashMode = splash == null || splash === "" ? 1 : splash;
-    var encoded = valueList.map(encodePaloBulkValue);
+    var encoded = valueList.map(function (value, index) {
+      if (kinds[index] === "string" || kinds[index] === "numeric") {
+        return formatPaloCellReplaceValue(value, kinds[index]);
+      }
+      return encodePaloBulkValue(value);
+    });
     var start = 0;
     while (start < paths.length) {
       var pathPart = String(paths[start]);
@@ -2753,6 +2846,9 @@
   paloGlobal.PaloOffice.paloStorageDiagSync = paloStorageDiagSync;
   paloGlobal.PaloOffice.paloBuildNamePathSafe = paloBuildNamePathSafe;
   paloGlobal.PaloOffice.paloJoinNamePath = paloJoinNamePath;
+  paloGlobal.PaloOffice.parsePaloNumericInput = parsePaloNumericInput;
+  paloGlobal.PaloOffice.paloPathStorageKind = paloPathStorageKind;
+  paloGlobal.PaloOffice.formatPaloCellReplaceValue = formatPaloCellReplaceValue;
   paloGlobal.PaloOffice.paloSplitNamePath = paloSplitNamePath;
   paloGlobal.PaloOffice.createConnectionManager = function createConnectionManager() {
     return new PaloConnectionManager();

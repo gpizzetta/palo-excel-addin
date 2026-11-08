@@ -1,8 +1,9 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.9";
+  var PALO_PLUGIN_VERSION = "1.0.3.10";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
+  var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
   var DATAC_WRITE_MAX_CELLS = 200;
 
   function complete(event) {
@@ -396,6 +397,31 @@
     };
   }
 
+  async function elementTypeForWrite(ctx, dimensionName, elementName, cache) {
+    var key = ctx.database + "\0" + dimensionName + "\0" + elementName;
+    if (Object.prototype.hasOwnProperty.call(cache, key)) {
+      return cache[key];
+    }
+    var info = null;
+    try {
+      info = await ctx.client.elementInfo(ctx.sid, ctx.database, dimensionName, elementName);
+    } catch (err) {
+      if (isTransportError(err)) {
+        throw err;
+      }
+      throw new Error(missingElementMessage(elementName, dimensionName));
+    }
+    if (!elementInfoIsUsable(info)) {
+      throw new Error(missingElementMessage(elementName, dimensionName));
+    }
+    cache[key] = Number(info.type);
+    return cache[key];
+  }
+
+  /**
+   * Type d'element avant ecriture : 2 → string quotee. 1 ou 4 → nombre non quote.
+   * Une cellule Palo deja string sur une mesure numerique est videe puis reecrite en numeric.
+   */
   async function executeDatacWrite(cells, mode, value, splash) {
     var targets = cells;
     if (mode !== "bulk") {
@@ -414,12 +440,51 @@
     });
     var manager = window.PaloOffice.createConnectionManager();
     var keys = Object.keys(groups);
-    var written = 0;
+    var typeCache = {};
+    var plans = [];
     var splashMode = splash == null || Number.isNaN(Number(splash)) ? 1 : Number(splash);
     var i;
+    var j;
+    var k;
     for (i = 0; i < keys.length; i += 1) {
       var group = groups[keys[i]];
       var ctx = await manager.getClientAndContext(group[0].servdb);
+      var dimNames = await manager.getCubeDimensionNamesOrdered(
+        ctx.connectionName,
+        ctx.sid,
+        ctx.client,
+        ctx.database,
+        group[0].cube
+      );
+      var groupPlans = [];
+      for (j = 0; j < group.length; j += 1) {
+        var cell = group[j];
+        if (cell.coordinates.length !== dimNames.length) {
+          throw new Error(
+            "Nombre de coordonnees (" + cell.coordinates.length
+            + ") different du nombre de dimensions du cube " + cell.cube
+            + " (" + dimNames.length + ")."
+          );
+        }
+        var types = [];
+        for (k = 0; k < dimNames.length; k += 1) {
+          types.push(await elementTypeForWrite(ctx, dimNames[k], cell.coordinates[k], typeCache));
+        }
+        var kind = window.PaloOffice.paloPathStorageKind(types);
+        var storedValue = value;
+        if (kind === "numeric") {
+          storedValue = window.PaloOffice.parsePaloNumericInput(value);
+          if (storedValue == null) {
+            throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+          }
+        }
+        groupPlans.push({
+          ctx: ctx,
+          cell: cell,
+          kind: kind,
+          value: storedValue
+        });
+      }
       if (mode === "bulk") {
         var idPaths = await manager.buildCellIdPathsListFromSegments(
           ctx.connectionName,
@@ -429,40 +494,100 @@
           group[0].cube,
           group.map(function (c) { return c.coordinates; })
         );
-        await ctx.client.cellReplaceBulk(
-          ctx.sid,
-          ctx.database,
-          group[0].cube,
-          idPaths,
-          idPaths.map(function () { return value; }),
-          splashMode
-        );
-        written += group.length;
+        for (j = 0; j < groupPlans.length; j += 1) {
+          groupPlans[j].idPath = idPaths[j];
+        }
       } else {
-        var j;
-        for (j = 0; j < group.length; j += 1) {
-          var idPath = await manager.buildCellIdPathFromSegments(
+        for (j = 0; j < groupPlans.length; j += 1) {
+          groupPlans[j].idPath = await manager.buildCellIdPathFromSegments(
             ctx.connectionName,
             ctx.sid,
             ctx.client,
             ctx.database,
-            group[j].cube,
-            group[j].coordinates
+            groupPlans[j].cell.cube,
+            groupPlans[j].cell.coordinates
           );
-          var ok = await ctx.client.cellReplaceByIds(
-            ctx.sid,
-            ctx.database,
-            group[j].cube,
-            idPath,
-            value,
-            splashMode,
-            true
-          );
-          if (!ok) {
-            throw new Error("cell/replace a refuse l'ecriture (" + group[j].address + ").");
-          }
-          written += 1;
         }
+      }
+      plans = plans.concat(groupPlans);
+    }
+
+    for (i = 0; i < plans.length; i += 1) {
+      if (plans[i].kind !== "numeric") {
+        continue;
+      }
+      var storedType = 0;
+      try {
+        storedType = await plans[i].ctx.client.cellStoredTypeByIds(
+          plans[i].ctx.sid,
+          plans[i].ctx.database,
+          plans[i].cell.cube,
+          plans[i].idPath
+        );
+      } catch (errType) {
+        if (isTransportError(errType)) {
+          throw errType;
+        }
+        storedType = 0;
+      }
+      if (storedType !== 2) {
+        continue;
+      }
+      var cleared = false;
+      try {
+        cleared = await plans[i].ctx.client.cellClearByIds(
+          plans[i].ctx.sid,
+          plans[i].ctx.database,
+          plans[i].cell.cube,
+          plans[i].idPath
+        );
+      } catch (errClear) {
+        if (isTransportError(errClear)) {
+          throw errClear;
+        }
+        cleared = false;
+      }
+      if (!cleared) {
+        throw new Error(NUMERIC_CELL_TEXT_MESSAGE);
+      }
+    }
+
+    var written = 0;
+    if (mode === "bulk") {
+      for (i = 0; i < keys.length; i += 1) {
+        var bulkPlans = plans.filter(function (plan) {
+          return plan.cell.servdb + "\0" + plan.cell.cube === keys[i];
+        });
+        if (!bulkPlans.length) {
+          continue;
+        }
+        await bulkPlans[0].ctx.client.cellReplaceBulk(
+          bulkPlans[0].ctx.sid,
+          bulkPlans[0].ctx.database,
+          bulkPlans[0].cell.cube,
+          bulkPlans.map(function (plan) { return plan.idPath; }),
+          bulkPlans.map(function (plan) { return plan.value; }),
+          splashMode,
+          bulkPlans.map(function (plan) { return plan.kind; })
+        );
+        written += bulkPlans.length;
+      }
+    } else {
+      for (i = 0; i < plans.length; i += 1) {
+        var ok = await plans[i].ctx.client.cellReplaceByIds(
+          plans[i].ctx.sid,
+          plans[i].ctx.database,
+          plans[i].cell.cube,
+          plans[i].idPath,
+          plans[i].value,
+          splashMode,
+          true,
+          plans[i].kind
+        );
+        if (!ok) {
+          throw new Error("cell/replace a refuse l'ecriture (" + plans[i].cell.address + ").");
+        }
+        written += 1;
       }
     }
     return {
