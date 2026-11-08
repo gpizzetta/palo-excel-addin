@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.29";
+  var PALO_PLUGIN_VERSION = "1.0.3.30";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -749,8 +749,26 @@
     }
     return {
       written: written,
-      addresses: targets.map(function (c) { return c.address; })
+      addresses: targets.map(function (c) { return c.address; }),
+      splash: Number(splashMode) > 0
     };
+  }
+
+  /** Apres un splash accepte par Palo : la feuille entiere, pas seulement la cellule ecrite. */
+  function forcerRecalculFeuille() {
+    if (typeof Excel === "undefined" || typeof Excel.run !== "function") {
+      return Promise.resolve();
+    }
+    return Excel.run(function (context) {
+      var sheet = context.workbook.worksheets.getActiveWorksheet();
+      if (typeof sheet.calculate !== "function") {
+        return context.sync();
+      }
+      sheet.calculate(true);
+      return context.sync();
+    }).catch(function () {
+      // L'ecriture Palo est deja faite. Un refus de calcul Excel ne la transforme pas en erreur.
+    });
   }
 
   function isConsolidatedElement(info) {
@@ -986,12 +1004,15 @@
                 o.value == null ? "" : String(o.value),
                 o.path || null
               )
-                .then(function () {
+                .then(function (result) {
                   cleanup();
                   try {
                     dlg.close();
                   } catch (_closeOk) {
                     // Le dialogue est deja ferme.
+                  }
+                  if (result && result.splash) {
+                    forcerRecalculFeuille();
                   }
                 })
                 .catch(function (err) {
