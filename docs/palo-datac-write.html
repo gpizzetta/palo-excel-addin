@@ -74,6 +74,7 @@
     #like-dims { display: flex; flex-direction: column; gap: 8px; }
     p { margin: 0; }
     .hint { color: var(--palo-text-secondary); font-size: 12px; line-height: 1.4; }
+    #action-help { margin-top: 6px; }
     label {
       display: block;
       font-size: 11px;
@@ -168,6 +169,7 @@
         <option value="set-pct">Pourcentage de la cellule</option>
         <option value="copy">Copier</option>
       </select>
+      <p id="action-help" class="hint">Remplace la valeur de la cellule par le nombre saisi.</p>
     </div>
     <div id="value-block">
       <label for="value" id="value-label">Valeur</label>
@@ -187,26 +189,27 @@
   </main>
   <script>
     var STORAGE_KEY = "palo_datac_write_v1";
+    var PREFS_KEY = "palo_datac_write_prefs_v1";
     var state = { cells: [], busy: false, writeMode: "replace" };
     var ACTIONS_BASE = [
-      { id: "replace", label: "Remplacer", value: "amount", path: false },
-      { id: "add", label: "Ajouter", value: "amount", path: false },
-      { id: "add-pct", label: "Ajouter en %", value: "percent", path: false },
-      { id: "set-pct", label: "Pourcentage de la cellule", value: "percent", path: false },
-      { id: "copy", label: "Copier", value: "none", path: true }
+      { id: "replace", label: "Remplacer", value: "amount", path: false, help: "Remplace la valeur de la cellule par le nombre saisi." },
+      { id: "add", label: "Ajouter", value: "amount", path: false, help: "Ajoute le nombre saisi a la valeur actuelle. 200 et 10 donnent 210." },
+      { id: "add-pct", label: "Ajouter en %", value: "percent", path: false, help: "Ajoute ce pourcentage a la valeur actuelle. 200 et 10 donnent 220." },
+      { id: "set-pct", label: "Pourcentage de la cellule", value: "percent", path: false, help: "Remplace la cellule par ce pourcentage de sa valeur. 200 et 10 donnent 20." },
+      { id: "copy", label: "Copier", value: "none", path: true, help: "Copie les valeurs du chemin source vers cette cellule." }
     ];
     var ACTIONS_CONSOLIDATED = [
-      { id: "spread", label: "Repartir", value: "amount", path: false },
-      { id: "add-total", label: "Ajouter au total", value: "amount", path: false },
-      { id: "add-total-pct", label: "Ajouter un % au total", value: "percent", path: false },
-      { id: "set-total-pct", label: "Passer le total a %", value: "percent", path: false },
-      { id: "set-bases", label: "Ecrire sur chaque base", value: "amount", path: false },
-      { id: "add-bases", label: "Ajouter a chaque base", value: "amount", path: false },
-      { id: "like", label: "Reprendre une repartition", value: "amount", path: true },
-      { id: "like-add", label: "Reprendre et ajouter", value: "amount", path: true },
-      { id: "like-pct", label: "Pourcentage du modele", value: "percent", path: true },
-      { id: "like-add-pct", label: "Ajouter en % au modele", value: "percent", path: true },
-      { id: "copy", label: "Copier", value: "none", path: true }
+      { id: "spread", label: "Repartir", value: "amount", path: false, help: "Repartit le nombre saisi sur les bases du regroupement." },
+      { id: "add-total", label: "Ajouter au total", value: "amount", path: false, help: "Augmente le total du nombre saisi, puis le repartit. 100 et 10 donnent 110." },
+      { id: "add-total-pct", label: "Ajouter un % au total", value: "percent", path: false, help: "Augmente le total de ce pourcentage, puis le repartit. 100 et 10 donnent 110." },
+      { id: "set-total-pct", label: "Passer le total a %", value: "percent", path: false, help: "Remplace le total par ce pourcentage, puis le repartit. 100 et 10 donnent 10." },
+      { id: "set-bases", label: "Ecrire sur chaque base", value: "amount", path: false, help: "Ecrit le meme nombre sur chaque cellule de base." },
+      { id: "add-bases", label: "Ajouter a chaque base", value: "amount", path: false, help: "Ajoute le meme nombre a chaque cellule de base." },
+      { id: "like", label: "Reprendre une repartition", value: "amount", path: true, help: "Reprend les proportions du chemin source et y pose le nombre saisi." },
+      { id: "like-add", label: "Reprendre et ajouter", value: "amount", path: true, help: "Reprend le chemin source et ajoute le nombre saisi a son total." },
+      { id: "like-pct", label: "Pourcentage du modele", value: "percent", path: true, help: "Pose ce pourcentage de la valeur du chemin source." },
+      { id: "like-add-pct", label: "Ajouter en % au modele", value: "percent", path: true, help: "Ajoute ce pourcentage a la valeur du chemin source. 200 et 10 donnent 220." },
+      { id: "copy", label: "Copier", value: "none", path: true, help: "Copie les valeurs du chemin source, sans les modifier." }
     ];
 
     function applyOfficeTheme() {
@@ -263,6 +266,115 @@
       return list[0];
     }
 
+    function readLocalPrefs() {
+      try {
+        var raw = window.localStorage.getItem(PREFS_KEY);
+        if (!raw) {
+          return null;
+        }
+        var data = JSON.parse(raw);
+        return data && typeof data === "object" ? data : null;
+      } catch (_prefs) {
+        return null;
+      }
+    }
+
+    function prefsForOpen(payload) {
+      var incoming = payload && payload.prefs && typeof payload.prefs === "object" ? payload.prefs : null;
+      var local = readLocalPrefs();
+      if (!incoming) {
+        return local;
+      }
+      if (!local) {
+        return incoming;
+      }
+      var actionByMode = {};
+      var key;
+      var localActions = local.actionByMode || {};
+      var incomingActions = incoming.actionByMode || {};
+      for (key in localActions) {
+        if (Object.prototype.hasOwnProperty.call(localActions, key)) {
+          actionByMode[key] = localActions[key];
+        }
+      }
+      for (key in incomingActions) {
+        if (Object.prototype.hasOwnProperty.call(incomingActions, key)) {
+          actionByMode[key] = incomingActions[key];
+        }
+      }
+      var axes = {};
+      var localAxes = local.axes || {};
+      var incomingAxes = incoming.axes || {};
+      for (key in localAxes) {
+        if (Object.prototype.hasOwnProperty.call(localAxes, key)) {
+          axes[key] = localAxes[key];
+        }
+      }
+      for (key in incomingAxes) {
+        if (Object.prototype.hasOwnProperty.call(incomingAxes, key)) {
+          axes[key] = incomingAxes[key];
+        }
+      }
+      return { actionByMode: actionByMode, axes: axes };
+    }
+
+    function rememberChoice() {
+      var prefs = readLocalPrefs() || {};
+      var actionByMode = prefs.actionByMode || {};
+      var mode = state.writeMode === "bulk" ? "bulk" : "replace";
+      actionByMode[mode] = currentAction().id;
+      var axes = prefs.axes || {};
+      var selects = document.querySelectorAll("#like-dims select");
+      var i;
+      for (i = 0; i < selects.length; i += 1) {
+        var dim = selects[i].getAttribute("data-dimension");
+        if (dim && selects[i].value) {
+          axes[dim] = selects[i].value;
+        }
+      }
+      var next = { actionByMode: actionByMode, axes: axes };
+      try {
+        window.localStorage.setItem(PREFS_KEY, JSON.stringify(next));
+      } catch (_save) {
+        // Le parent enregistre aussi ces choix a la validation.
+      }
+      return next;
+    }
+
+    function selectHasValue(select, value) {
+      var i;
+      for (i = 0; i < select.options.length; i += 1) {
+        if (select.options[i].value === value) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    function applyRemembered(prefs) {
+      if (!prefs) {
+        applyActionFields();
+        return;
+      }
+      var mode = state.writeMode === "bulk" ? "bulk" : "replace";
+      var actionId = prefs.actionByMode && prefs.actionByMode[mode];
+      var actionSelect = document.getElementById("action");
+      if (actionId && selectHasValue(actionSelect, actionId)) {
+        actionSelect.value = actionId;
+      }
+      var axes = prefs.axes || {};
+      var selects = document.querySelectorAll("#like-dims select");
+      var i;
+      for (i = 0; i < selects.length; i += 1) {
+        var dim = selects[i].getAttribute("data-dimension");
+        var saved = dim ? axes[dim] : "";
+        if (saved && selectHasValue(selects[i], String(saved))) {
+          selects[i].value = String(saved);
+        }
+      }
+      applyActionFields();
+    }
+
     function fillActions() {
       var select = document.getElementById("action");
       var previous = select.value;
@@ -280,7 +392,7 @@
         }
         select.appendChild(opt);
       }
-      if (!allowed) {
+      if (!allowed && list[0]) {
         select.value = list[0].id;
       }
     }
@@ -312,6 +424,10 @@
       label.textContent = action.value === "percent" ? "Pourcentage" : "Valeur";
       input.placeholder = action.value === "percent" ? "Ex. 10" : "Ex. 100";
       pathBlock.hidden = !(action.path && state.dimensions && state.dimensions.length);
+      var help = document.getElementById("action-help");
+      if (help) {
+        help.textContent = action.help || "";
+      }
     }
 
     function renderLike(dimensions) {
@@ -391,8 +507,10 @@
       }
       summary.textContent = lines.join(" ");
       state.dimensions = payload && Array.isArray(payload.dimensions) ? payload.dimensions : [];
+      state.prefs = prefsForOpen(payload);
       fillActions();
       renderLike(state.dimensions);
+      applyRemembered(state.prefs);
       var canWrite = !missing.length;
       document.getElementById("btn-apply").disabled = !canWrite;
       document.getElementById("action").disabled = !canWrite;
@@ -447,6 +565,7 @@
       var action = currentAction();
       var value = action.value === "none" ? "" : document.getElementById("value").value;
       var path = collectPath();
+      var prefs = rememberChoice();
       state.busy = true;
       document.getElementById("btn-apply").disabled = true;
       document.getElementById("btn-cancel").disabled = true;
@@ -456,7 +575,8 @@
         mode: mode,
         action: action.id,
         value: value,
-        path: path
+        path: path,
+        prefs: prefs
       }), { targetOrigin: "*" });
     }
 

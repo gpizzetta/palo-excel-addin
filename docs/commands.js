@@ -1,8 +1,9 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.32";
+  var PALO_PLUGIN_VERSION = "1.0.3.34";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
+  var DATAC_WRITE_PREFS_KEY = "palo_datac_write_prefs_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
   var DATAC_WRITE_MAX_CELLS = 200;
 
@@ -891,6 +892,22 @@
     };
   }
 
+  function readDatacWritePrefs() {
+    try {
+      var raw = window.localStorage.getItem(DATAC_WRITE_PREFS_KEY);
+      if (!raw) {
+        return null;
+      }
+      var data = JSON.parse(raw);
+      if (!data || typeof data !== "object") {
+        return null;
+      }
+      return data;
+    } catch (_prefs) {
+      return null;
+    }
+  }
+
   function openDatacWriteDialog(event, pickContext) {
     var payload = {
       cells: pickContext.cells,
@@ -899,7 +916,8 @@
       writeMode: pickContext.writeMode === "bulk" ? "bulk" : "replace",
       consolidated: pickContext.consolidated || [],
       missing: pickContext.missing || [],
-      dimensions: pickContext.dimensions || []
+      dimensions: pickContext.dimensions || [],
+      prefs: readDatacWritePrefs()
     };
     return storageRemove(DATAC_WRITE_STORAGE_KEY).then(function () {
       return storageSetJson(DATAC_WRITE_STORAGE_KEY, payload);
@@ -967,7 +985,8 @@
                       writeMode: payload.writeMode,
                       consolidated: payload.consolidated,
                       missing: payload.missing,
-                      dimensions: payload.dimensions
+                      dimensions: payload.dimensions,
+                      prefs: payload.prefs
                     }));
                   } catch (_e) {
                     // Le dialogue relit le stockage.
@@ -1000,6 +1019,9 @@
                 return;
               }
               var mode = payload.writeMode === "bulk" ? "bulk" : "replace";
+              if (o.prefs && typeof o.prefs === "object") {
+                storageSetJson(DATAC_WRITE_PREFS_KEY, o.prefs);
+              }
               executeDatacWrite(
                 payload.cells,
                 mode,
