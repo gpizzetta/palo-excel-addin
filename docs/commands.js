@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.31";
+  var PALO_PLUGIN_VERSION = "1.0.3.32";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var NUMERIC_CELL_TEXT_MESSAGE = "Cette mesure est numérique mais la cellule est du texte : la consolidation restera à 0. Resaisir en nombre.";
@@ -448,11 +448,13 @@
   /**
    * Action du popup. splash/compute : /cell/replace. copy : /cell/copy.
    * literal = le nombre saisi. Les autres calculs lisent la cellule d'abord.
+   * Sur une base, le splash ADD est ignore par Palo et la valeur remplace la cellule.
+   * Ajouter et Ajouter en % calculent donc le nouveau nombre, puis l'ecrivent en splash 0.
    */
   var WRITE_ACTIONS = {
     replace: { splash: 0, compute: "literal" },
-    add: { splash: 2, compute: "literal" },
-    "add-pct": { splash: 2, compute: "delta-pct" },
+    add: { splash: 0, compute: "add-current" },
+    "add-pct": { splash: 0, compute: "grow-pct" },
     "set-pct": { splash: 0, compute: "ratio" },
     spread: { splash: 1, compute: "literal" },
     "add-total": { splash: 1, compute: "add-current" },
@@ -663,8 +665,10 @@
           plans[i].writeValue = currentNumber + amount;
         } else if (spec.compute === "grow-pct") {
           plans[i].writeValue = currentNumber * (100 + amount) / 100;
-        } else {
+        } else if (spec.compute === "ratio") {
           plans[i].writeValue = currentNumber * amount / 100;
+        } else {
+          throw new Error("Action inconnue.");
         }
       }
     }
