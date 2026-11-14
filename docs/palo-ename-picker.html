@@ -73,8 +73,7 @@
       color: var(--palo-text-secondary);
       margin-bottom: 4px;
     }
-    #dimension-select,
-    #source-select {
+    #dimension-select {
       box-sizing: border-box;
       width: 100%;
       padding: 6px 8px;
@@ -85,16 +84,37 @@
       outline: none;
       background: var(--palo-input-bg);
     }
-    #dimension-wrap label[for="source-select"] {
-      margin-top: 8px;
-    }
-    #dimension-select:focus,
-    #source-select:focus {
+    #dimension-select:focus {
       border-color: var(--palo-focus);
       box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
-    #dimension-select:disabled,
-    #source-select:disabled {
+    #dimension-select:disabled {
+      opacity: 0.65;
+      cursor: wait;
+    }
+    #source-buttons {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    #source-buttons button {
+      flex: 1 1 0;
+      margin: 0;
+      padding: 6px 8px;
+      font: inherit;
+      font-weight: 600;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-input-border);
+      border-radius: 2px;
+      cursor: pointer;
+    }
+    #source-buttons button.is-active {
+      color: #ffffff;
+      background: var(--palo-focus);
+      border-color: var(--palo-focus);
+    }
+    #source-buttons button:disabled {
       opacity: 0.65;
       cursor: wait;
     }
@@ -171,11 +191,10 @@
   <div id="dimension-wrap">
     <label for="dimension-select">Dimension</label>
     <select id="dimension-select" aria-label="Dimension"></select>
-    <label for="source-select">Afficher</label>
-    <select id="source-select" aria-label="Element ou attributs">
-      <option value="element">Element</option>
-      <option value="attribute">Attributs</option>
-    </select>
+    <div id="source-buttons" role="group" aria-label="Element ou attributs">
+      <button type="button" data-source="element" class="is-active" aria-pressed="true">Element</button>
+      <button type="button" data-source="attribute" aria-pressed="false">Attributs</button>
+    </div>
   </div>
   <div id="filter-wrap">
     <label for="element-filter" class="visually-hidden">Filtrer</label>
@@ -237,15 +256,29 @@
       var empty = document.getElementById("empty");
       var title = document.querySelector("h1");
       var dimSelect = document.getElementById("dimension-select");
-      var sourceSelect = document.getElementById("source-select");
+      var sourceButtons = document.getElementById("source-buttons");
       var filterInput = document.getElementById("element-filter");
       var allElements = [];
       var lastLoadedDimension = "";
       var lastLoadedSource = "element";
+      var sourceMode = "element";
       var dimensionChangeFromUser = false;
 
       function currentSource() {
-        return sourceSelect && sourceSelect.value === "attribute" ? "attribute" : "element";
+        return sourceMode === "attribute" ? "attribute" : "element";
+      }
+
+      function paintSourceButtons() {
+        if (!sourceButtons) {
+          return;
+        }
+        var buttons = sourceButtons.querySelectorAll("button");
+        var i;
+        for (i = 0; i < buttons.length; i += 1) {
+          var on = buttons[i].getAttribute("data-source") === currentSource();
+          buttons[i].classList.toggle("is-active", on);
+          buttons[i].setAttribute("aria-pressed", on ? "true" : "false");
+        }
       }
 
       function applySourceLabels() {
@@ -363,8 +396,12 @@
         if (dimSelect) {
           dimSelect.disabled = disabled;
         }
-        if (sourceSelect) {
-          sourceSelect.disabled = disabled;
+        if (sourceButtons) {
+          var buttons = sourceButtons.querySelectorAll("button");
+          var bi;
+          for (bi = 0; bi < buttons.length; bi += 1) {
+            buttons[bi].disabled = disabled;
+          }
         }
       }
 
@@ -408,11 +445,21 @@
         });
       }
 
-      if (sourceSelect) {
-        sourceSelect.addEventListener("change", function () {
+      if (sourceButtons) {
+        sourceButtons.addEventListener("click", function (ev) {
+          var btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+          if (!btn || btn.disabled) {
+            return;
+          }
+          var next = btn.getAttribute("data-source") === "attribute" ? "attribute" : "element";
+          if (next === currentSource()) {
+            return;
+          }
+          sourceMode = next;
+          paintSourceButtons();
           applySourceLabels();
           var dim = dimSelect ? String(dimSelect.value || "").trim() : "";
-          if (!dim || (dim === lastLoadedDimension && currentSource() === lastLoadedSource)) {
+          if (!dim) {
             return;
           }
           lastLoadedDimension = dim;
