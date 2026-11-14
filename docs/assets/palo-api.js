@@ -1352,14 +1352,15 @@
     });
   };
 
-  PaloApiClient.prototype.databaseCubes = async function databaseCubes(sid, database) {
+  PaloApiClient.prototype.databaseCubes = async function databaseCubes(sid, database, flags) {
+    var opt = flags || {};
     var text = await this.call("/database/cubes", {
       sid: sid,
       name_database: database,
-      show_normal: 1,
-      show_system: 0,
-      show_attribute: 0,
-      show_info: 0
+      show_normal: opt.show_normal == null ? 1 : opt.show_normal,
+      show_system: opt.show_system == null ? 0 : opt.show_system,
+      show_attribute: opt.show_attribute == null ? 0 : opt.show_attribute,
+      show_info: opt.show_info == null ? 0 : opt.show_info
     });
     return text.split("\n").map(function (line) { return line.trim(); }).filter(Boolean).map(function (line) {
       var p = splitSemicolonLine(line);
@@ -1428,6 +1429,66 @@
       childIds: parseCsvIds(p[10] || ""),
       weights: parseCsvNumbers(p[11] || "")
     };
+  };
+
+  PaloApiClient.prototype.dimensionInfo = async function dimensionInfo(sid, database, dimension) {
+    var text = await this.call("/dimension/info", {
+      sid: sid,
+      name_database: database,
+      name_dimension: dimension
+    });
+    var p = splitSemicolonLine(String(text).trim().split("\n")[0]);
+    return {
+      id: p[0],
+      name: p[1],
+      numberElements: Number(p[2] || "0"),
+      type: Number(p[6] || "0"),
+      attributeDimensionId: p[7] || "",
+      attributeCubeId: p[8] || ""
+    };
+  };
+
+  var paloSharedAttributeCubeCache = new Map();
+  var paloSharedAttributeCubeInflight = new Map();
+
+  /** Nom du cube d'attributs de la dimension, ou "" s'il n'y en a pas. */
+  PaloApiClient.prototype.attributeCubeName = function attributeCubeName(sid, database, dimension) {
+    var key = String(resolvePaloDirectBaseUrl(this.profile) || "") + "\t" + database + "\t" + dimension;
+    if (paloSharedAttributeCubeCache.has(key)) {
+      return Promise.resolve(paloSharedAttributeCubeCache.get(key));
+    }
+    if (paloSharedAttributeCubeInflight.has(key)) {
+      return paloSharedAttributeCubeInflight.get(key);
+    }
+    var self = this;
+    var pending = (async function () {
+      var info = await self.dimensionInfo(sid, database, dimension);
+      var cubeId = String(info.attributeCubeId || "").trim();
+      if (!cubeId || cubeId === "0") {
+        return "";
+      }
+      var cubes = await self.databaseCubes(sid, database, {
+        show_normal: 0,
+        show_system: 0,
+        show_attribute: 1,
+        show_info: 0
+      });
+      var i;
+      for (i = 0; i < cubes.length; i += 1) {
+        if (String(cubes[i].id) === cubeId) {
+          return cubes[i].name;
+        }
+      }
+      return "";
+    })();
+    paloSharedAttributeCubeInflight.set(key, pending);
+    pending.then(function (name) {
+      paloSharedAttributeCubeCache.set(key, name);
+    }, function () {
+    }).then(function () {
+      paloSharedAttributeCubeInflight.delete(key);
+    });
+    return pending;
   };
 
   PaloApiClient.prototype.elementInfo = async function elementInfo(sid, database, dimension, element) {

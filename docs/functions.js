@@ -1452,14 +1452,15 @@
     });
   };
 
-  PaloApiClient.prototype.databaseCubes = async function databaseCubes(sid, database) {
+  PaloApiClient.prototype.databaseCubes = async function databaseCubes(sid, database, flags) {
+    var opt = flags || {};
     var text = await this.call("/database/cubes", {
       sid: sid,
       name_database: database,
-      show_normal: 1,
-      show_system: 0,
-      show_attribute: 0,
-      show_info: 0
+      show_normal: opt.show_normal == null ? 1 : opt.show_normal,
+      show_system: opt.show_system == null ? 0 : opt.show_system,
+      show_attribute: opt.show_attribute == null ? 0 : opt.show_attribute,
+      show_info: opt.show_info == null ? 0 : opt.show_info
     });
     return text.split("\n").map(function (line) { return line.trim(); }).filter(Boolean).map(function (line) {
       var p = splitSemicolonLine(line);
@@ -1528,6 +1529,66 @@
       childIds: parseCsvIds(p[10] || ""),
       weights: parseCsvNumbers(p[11] || "")
     };
+  };
+
+  PaloApiClient.prototype.dimensionInfo = async function dimensionInfo(sid, database, dimension) {
+    var text = await this.call("/dimension/info", {
+      sid: sid,
+      name_database: database,
+      name_dimension: dimension
+    });
+    var p = splitSemicolonLine(String(text).trim().split("\n")[0]);
+    return {
+      id: p[0],
+      name: p[1],
+      numberElements: Number(p[2] || "0"),
+      type: Number(p[6] || "0"),
+      attributeDimensionId: p[7] || "",
+      attributeCubeId: p[8] || ""
+    };
+  };
+
+  var paloSharedAttributeCubeCache = new Map();
+  var paloSharedAttributeCubeInflight = new Map();
+
+  /** Nom du cube d'attributs de la dimension, ou "" s'il n'y en a pas. */
+  PaloApiClient.prototype.attributeCubeName = function attributeCubeName(sid, database, dimension) {
+    var key = String(resolvePaloDirectBaseUrl(this.profile) || "") + "\t" + database + "\t" + dimension;
+    if (paloSharedAttributeCubeCache.has(key)) {
+      return Promise.resolve(paloSharedAttributeCubeCache.get(key));
+    }
+    if (paloSharedAttributeCubeInflight.has(key)) {
+      return paloSharedAttributeCubeInflight.get(key);
+    }
+    var self = this;
+    var pending = (async function () {
+      var info = await self.dimensionInfo(sid, database, dimension);
+      var cubeId = String(info.attributeCubeId || "").trim();
+      if (!cubeId || cubeId === "0") {
+        return "";
+      }
+      var cubes = await self.databaseCubes(sid, database, {
+        show_normal: 0,
+        show_system: 0,
+        show_attribute: 1,
+        show_info: 0
+      });
+      var i;
+      for (i = 0; i < cubes.length; i += 1) {
+        if (String(cubes[i].id) === cubeId) {
+          return cubes[i].name;
+        }
+      }
+      return "";
+    })();
+    paloSharedAttributeCubeInflight.set(key, pending);
+    pending.then(function (name) {
+      paloSharedAttributeCubeCache.set(key, name);
+    }, function () {
+    }).then(function () {
+      paloSharedAttributeCubeInflight.delete(key);
+    });
+    return pending;
   };
 
   PaloApiClient.prototype.elementInfo = async function elementInfo(sid, database, dimension, element) {
@@ -3008,7 +3069,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.35";
+var PALO_ASSET_VERSION = "1.0.3.37";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -3836,13 +3897,23 @@ var PALO_ASSET_VERSION = "1.0.3.35";
       if (!query) {
         return "#PALO! ENAME: element vide.";
       }
-      if (shouldBlockPaloErrorOnly(servdb) || shouldBlockPaloErrorOnly(dimensionName) || shouldBlockPaloErrorOnly(index)) {
+      if (
+        shouldBlockPaloErrorOnly(servdb)
+        || shouldBlockPaloErrorOnly(dimensionName)
+        || shouldBlockPaloErrorOnly(index)
+        || (args.length > 3 && shouldBlockPaloErrorOnly(args[3]))
+      ) {
         return "";
       }
+      var attribute = "";
+      if (args.length > 3 && !isOfficeCustomFunctionMeta(args[3]) && !isBlankPaloArg(args[3])) {
+        attribute = String(coerceExcelScalarArg(args[3]) == null ? "" : coerceExcelScalarArg(args[3])).trim();
+      }
       var context = await manager.getClientAndContext(serv);
+      var elementName = "";
       try {
         var elem = await context.client.elementInfo(context.sid, context.database, dim, query);
-        return String(elem.name);
+        elementName = String(elem.name);
       } catch (_exact) {
         var items = await context.client.dimensionElements(context.sid, context.database, dim);
         var qLower = query.toLowerCase();
@@ -3857,8 +3928,20 @@ var PALO_ASSET_VERSION = "1.0.3.35";
         if (!found) {
           return "#PALO! ENAME: element \"" + query + "\" introuvable dans \"" + dim + "\".";
         }
-        return String(found.name);
+        elementName = String(found.name);
       }
+      if (!attribute) {
+        return elementName;
+      }
+      var cubeName = await context.client.attributeCubeName(context.sid, context.database, dim);
+      if (!cubeName) {
+        return "#PALO! ENAME: pas de cube d'attributs pour \"" + dim + "\".";
+      }
+      var value = await context.client.cellValue(context.sid, context.database, cubeName, [attribute, elementName]);
+      if (value == null || value === "") {
+        return elementName;
+      }
+      return value;
     } catch (error) {
       return toError(error);
     }
@@ -4100,6 +4183,98 @@ var PALO_ASSET_VERSION = "1.0.3.35";
     }
   }
 
+  var PALO_TODO_FUNCS = [
+    ["AFILTER", "AFILTER", "Le filtre attribut supprime des éléments pour lesquels les lignes attribut définies ne correspondent pas."],
+    ["AGR_CHILDREN", "AGR.CHILDREN", "Indique à une agrégation de prendre les enfants directs."],
+    ["AGR_LEAVES", "AGR.LEAVES", "Indique à une agrégation de prendre les éléments de base situés sous l'élément."],
+    ["AGR_SELF", "AGR.SELF", "Indique à une agrégation de prendre l'élément lui-même."],
+    ["CONNECTIONUSER", "CONNECTIONUSER", "Retourne l'utilisateur de la connexion"],
+    ["COORD", "COORD", "Regroupe des coordonnées dans une matrice pour DATA.SUM et les autres agrégats."],
+    ["CUBE", "CUBE", "Désigne la zone de cube lue par une vue Palo."],
+    ["DATA", "DATA", "Lit la valeur de la cellule de données indiquée à partir du cube."],
+    ["DATA_AVG", "DATA.AVG", "Renvoie la valeur moyenne d'une plage de cellules du cube."],
+    ["DATA_CNT", "DATA.CNT", "Renvoie le nombre de cellules d'une plage de cellules du cube."],
+    ["DATA_MAX", "DATA.MAX", "Renvoie la valeur maximale d'une plage de cellules du cube."],
+    ["DATA_MIN", "DATA.MIN", "Renvoie la valeur minimale d'une plage de cellules du cube."],
+    ["DATA_SUM", "DATA.SUM", "Renvoie la somme d'une plage de cellules du cube."],
+    ["DATAA", "DATAA", "Lit une valeur numérique en acceptant un alias à la place du nom d'élément."],
+    ["DATAAC", "DATAAC", "Comme DATAA, et signale une erreur si la cellule ne peut pas être lue."],
+    ["DATAAT", "DATAAT", "Lit une valeur texte en acceptant un alias à la place du nom d'élément."],
+    ["DATAATC", "DATAATC", "Comme DATAAT, et signale une erreur si la cellule texte ne peut pas être lue."],
+    ["DATABASE_LIST_CUBES", "DATABASE_LIST_CUBES", "La fonction établit, dans une plage que vous aurez prédéfinie, une liste des cubes d’une base de données."],
+    ["DATABASE_LIST_DIMENSIONS_EXT", "DATABASE_LIST_DIMENSIONS_EXT", "Liste les dimensions d'une base avec leurs attributs : identifiant, type et nombre d'éléments."],
+    ["DATAT", "DATAT", "Lit la valeur texte de la cellule indiquée. Renvoie une chaîne vide si la lecture échoue."],
+    ["DATATC", "DATATC", "Lit la valeur texte de la cellule indiquée et renvoie une erreur si la lecture échoue. Le texte est limité à 255 caractères."],
+    ["DATAV", "DATAV", "Lit une cellule du cube et se place dans une formule matricielle Excel."],
+    ["DATAX", "DATAX", "Lit une cellule du cube, et ne se calcule que lorsque sa feuille est active."],
+    ["DFILTER", "DFILTER", "Calcule pour chaque élément d’un sous-ensemble une valeur de données. La valeur peut être numérique ou un String."],
+    ["DIMENSION", "DIMENSION", "Désigne une dimension dans la définition d'une vue Palo."],
+    ["EADD", "EADD", "Ajoute un élément, ou un lien de consolidation, dans une dimension."],
+    ["EALIAS", "EALIAS", "Renvoie l'alias d'un élément, ou les éléments qui portent l'alias indiqué."],
+    ["EDELETE", "EDELETE", "Supprime l'élément spécifié."],
+    ["EFIRST", "EFIRST", "Renvoie le premier élément de la dimension, ou le premier enfant du parent indiqué."],
+    ["EINDEX", "EINDEX", "Renvoie la position de l’élément indiqué dans la dimension."],
+    ["EISCHILD", "EISCHILD", "Vérifie si un élément consolidé contient l’élément indiqué."],
+    ["ELEMENT_LIST_ANCESTORS", "ELEMENT_LIST_ANCESTORS", "Listes de tous les ancêtres de l'élément spécifié"],
+    ["ELEMENT_LIST_CHILDREN", "ELEMENT_LIST_CHILDREN", "Liste les enfants directs d'un élément."],
+    ["ELEMENT_LIST_CONSOLIDATION_ELEMENTS", "ELEMENT_LIST_CONSOLIDATION_ELEMENTS", "Retourne une liste avec tous les éléments enfants d'un élément consolidé."],
+    ["ELEMENT_LIST_DESCENDANTS", "ELEMENT_LIST_DESCENDANTS", "Liste tous les descendants."],
+    ["ELEMENT_LIST_PARENTS", "ELEMENT_LIST_PARENTS", "Retourne une liste de tous les parents d'un élément"],
+    ["ELEMENT_LIST_SIBLINGS", "ELEMENT_LIST_SIBLINGS", "Retourne une liste de tous les éléments qui sont sur le même niveau hiérarchique que l’élément spécifié"],
+    ["ENEXT", "ENEXT", "Renvoie le nom de l'élément qui suit l'élément indiqué."],
+    ["EPREV", "EPREV", "Renvoie le nom de l'élément qui précède l'élément indiqué."],
+    ["ERENAME", "ERENAME", "Renomme l’élément indiqué."],
+    ["ERROR_LOG", "ERROR_LOG", "Journalise une ligne d'import refusée par le serveur."],
+    ["ESIBLING", "ESIBLING", "Renvoie le nom de l’élément frère défini."],
+    ["ETOPLEVEL", "ETOPLEVEL", "Renvoie le niveau le plus élevé que possède un élément dans la hiérarchie de consolidation de la dimension indiquée."],
+    ["EUPDATE", "EUPDATE", "Met à jour le type, le poids ou la position d'un élément existant."],
+    ["EXPANDTYPE", "EXPANDTYPE", "Regroupe les modes d'expansion (SELF, CHILDREN, LEAVES) d'une agrégation."],
+    ["HFILTER", "HFILTER", "Filtre un sous-ensemble selon la place de l'élément dans la hiérarchie : niveau, parents, enfants ou feuilles."],
+    ["PICKLIST", "PICKLIST", "Peut ajouter des éléments à un sous-ensemble qui ne peuvent en aucun cas être à nouveau supprimés. En outre, il est possible de définir par ces derniers une multitude d’éléments qui feront office de filtre."],
+    ["PING", "PING", "Vérifie que le serveur Jedox OLAP de la connexion répond."],
+    ["REGISTER", "REGISTER", "Enregistre un serveur PALO pour qu'une formule puisse s'y connecter."],
+    ["REMOVE_CONNECTION", "REMOVE_CONNECTION", "Ferme la connexion nommée."],
+    ["ROOT_LIST_DATABASES", "ROOT_LIST_DATABASES", "Donne une liste avec toutes les bases de données du serveur spécifié."],
+    ["ROOT_LIST_DATABASES_EXT", "ROOT_LIST_DATABASES_EXT", "Liste les bases du serveur avec leurs attributs."],
+    ["SERVERSUBSET", "SERVERSUBSET", "Ancien nom de SERVER_SUBSET : calcule un sous-ensemble d'éléments sur le serveur."],
+    ["SERVER_INFO", "SERVER_INFO", "Retourne des informations sur le serveur Jedox OLAP d'une connexion donnée."],
+    ["SERVER_SUBSET", "SERVER_SUBSET", "Renvoie un sous-ensemble d’éléments de dimension."],
+    ["SETDATAA", "SETDATAA", "Écrit une valeur en acceptant un alias à la place du nom d'élément."],
+    ["SETDATAAIF", "SETDATAAIF", "Écrit une valeur, en acceptant un alias, lorsque la condition est vraie."],
+    ["SETDATAA_WRAP", "SETDATAA_WRAP", "Variante interne de SETDATAA : enveloppe l'écriture et journalise l'erreur."],
+    ["SETDATAIF", "SETDATAIF", "Écrit une valeur dans une cellule du cube lorsque la condition est vraie."],
+    ["SETDATA_BULK", "SETDATA_BULK", "Écrit plusieurs cellules du cube dans un seul appel, sans interpréter de préfixe."],
+    ["SETDATA_ERROR", "SETDATA_ERROR", "Journalise une ligne d'import refusée par le serveur."],
+    ["SETDATA_WRAP", "SETDATA_WRAP", "Variante interne de SETDATA : enveloppe l'écriture et journalise l'erreur au lieu de la remonter."],
+    ["SORT", "SORT", "Définit l'affichage des éléments du sous-ensemble, par exemple en ordre de définition ou en ordre hiérarchique."],
+    ["SUBCUBE", "SUBCUBE", "Décrit la tranche de cube lue par DFILTER. La dimension filtrée reste vide, les autres reçoivent un ou plusieurs éléments."],
+    ["SUBSET", "SUBSET", "Renvoie un sous-ensemble d’éléments de dimension."],
+    ["SUBSETSIZE", "SUBSETSIZE", "Renvoie la longueur d’un extrait d’ensemble d’un élément de dimension."],
+    ["SUBSETX", "SUBSETX", "Renvoie un sous-ensemble d’éléments de dimension si est appelée depuis une feuille active."],
+    ["TFILTER", "TFILTER", "Éléments dont les noms correspondent à des modèles définis, sont conservés. Le reste est supprimé de l’affichage. Plusieurs critères de filtre sont indiqués dans la matrice."],
+    ["USERGROUPS", "USERGROUPS", "Retourne le groupe d'utilisateurs de la connexion"],
+    ["VIEW_AREAGET", "VIEW.AREAGET", "Renvoie les valeurs de la zone d'une vue Palo."],
+    ["VIEW_AXISDEF", "VIEW.AXISDEF", "Définit un axe (lignes ou colonnes) d'une vue Palo."],
+    ["VIEW_AXISGET", "VIEW.AXISGET", "Renvoie les éléments placés sur un axe de vue Palo."],
+    ["VIEW_AXISGETINDEX", "VIEW.AXISGETINDEX", "Renvoie la position d'un élément sur un axe de vue Palo."],
+    ["VIEW_SUBSETDEF", "VIEW.SUBSETDEF", "Définit le sous-ensemble utilisé par un axe de vue Palo."],
+  ];
+
+  function paloTodoMessage(excelName, description) {
+    return "#PALO! TODO " + excelName + " : " + description;
+  }
+
+  function registerPaloTodoFunctions() {
+    var i;
+    for (i = 0; i < PALO_TODO_FUNCS.length; i += 1) {
+      (function (item) {
+        CustomFunctions.associate(item[0], function () {
+          return paloTodoMessage("PALO." + item[1], item[2]);
+        });
+      })(PALO_TODO_FUNCS[i]);
+    }
+  }
+
   function registerCustomFunctions() {
     if (typeof CustomFunctions === "undefined") {
       return false;
@@ -4110,21 +4285,22 @@ var PALO_ASSET_VERSION = "1.0.3.35";
     CustomFunctions.associate("RUNTIME_DIAG", RUNTIME_DIAG);
     CustomFunctions.associate("STORAGE_DIAG", STORAGE_DIAG);
     CustomFunctions.associate("DATAC", DATAC);
-    CustomFunctions.associate("PALO_SETDATA", PALO_SETDATA);
+    CustomFunctions.associate("SETDATA", PALO_SETDATA);
     CustomFunctions.associate("ENAME", ENAME);
-    CustomFunctions.associate("PALO_ECOUNT", PALO_ECOUNT);
-    CustomFunctions.associate("PALO_ECHILDCOUNT", PALO_ECHILDCOUNT);
-    CustomFunctions.associate("PALO_ECHILD", PALO_ECHILD);
-    CustomFunctions.associate("PALO_EPARENTCOUNT", PALO_EPARENTCOUNT);
-    CustomFunctions.associate("PALO_EPARENT", PALO_EPARENT);
-    CustomFunctions.associate("PALO_ELEVEL", PALO_ELEVEL);
-    CustomFunctions.associate("PALO_EINDENT", PALO_EINDENT);
-    CustomFunctions.associate("PALO_ETYPE", PALO_ETYPE);
-    CustomFunctions.associate("PALO_EWEIGHT", PALO_EWEIGHT);
-    CustomFunctions.associate("PALO_DATABASE_LIST_DIMENSIONS", PALO_DATABASE_LIST_DIMENSIONS);
-    CustomFunctions.associate("PALO_CUBE_LIST_DIMENSIONS", PALO_CUBE_LIST_DIMENSIONS);
-    CustomFunctions.associate("PALO_DIMENSION_LIST_CUBES", PALO_DIMENSION_LIST_CUBES);
-    CustomFunctions.associate("PALO_DIMENSION_LIST_ELEMENTS", PALO_DIMENSION_LIST_ELEMENTS);
+    CustomFunctions.associate("ECOUNT", PALO_ECOUNT);
+    CustomFunctions.associate("ECHILDCOUNT", PALO_ECHILDCOUNT);
+    CustomFunctions.associate("ECHILD", PALO_ECHILD);
+    CustomFunctions.associate("EPARENTCOUNT", PALO_EPARENTCOUNT);
+    CustomFunctions.associate("EPARENT", PALO_EPARENT);
+    CustomFunctions.associate("ELEVEL", PALO_ELEVEL);
+    CustomFunctions.associate("EINDENT", PALO_EINDENT);
+    CustomFunctions.associate("ETYPE", PALO_ETYPE);
+    CustomFunctions.associate("EWEIGHT", PALO_EWEIGHT);
+    CustomFunctions.associate("DATABASE_LIST_DIMENSIONS", PALO_DATABASE_LIST_DIMENSIONS);
+    CustomFunctions.associate("CUBE_LIST_DIMENSIONS", PALO_CUBE_LIST_DIMENSIONS);
+    CustomFunctions.associate("DIMENSION_LIST_CUBES", PALO_DIMENSION_LIST_CUBES);
+    CustomFunctions.associate("DIMENSION_LIST_ELEMENTS", PALO_DIMENSION_LIST_ELEMENTS);
+    registerPaloTodoFunctions();
     gBoot.__PALO_CF_REGISTERED__ = true;
     gBoot.__PALO_CF_REGISTERED_AT__ = Date.now();
     paloWarmStorageAfterRegister();

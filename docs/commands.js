@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.35";
+  var PALO_PLUGIN_VERSION = "1.0.3.37";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_PREFS_KEY = "palo_datac_write_prefs_v1";
@@ -166,7 +166,7 @@
       }
       var servdb = active + "/DWH";
       var safe = escapeDoubleQuotesForFormula(servdb);
-      var formula = '=PALO_SETDATA(100;0;"' + safe + '";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")';
+      var formula = '=PALO.SETDATA(100;0;"' + safe + '";"Sales";"Actual";"2024";"Jan";"Total Products";"Local")';
       await Excel.run(async function (context) {
         var sheet = context.workbook.worksheets.getActiveWorksheet();
         var range = sheet.getActiveCell();

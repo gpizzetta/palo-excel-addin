@@ -123,8 +123,8 @@
       ]
     },
     {
-      "id": "PALO_SETDATA",
-      "name": "PALO_SETDATA",
+      "id": "SETDATA",
+      "name": "SETDATA",
       "description": "Ecrit une valeur dans un cube Palo.",
       "result": {
         "type": "any",
@@ -275,9 +275,9 @@
     {
       "id": "ENAME",
       "name": "ENAME",
-      "description": "Nom d'affichage d'un element (API element/info et dimensions par nom). Exactement 3 arguments utiles: servdb; dimension; elementName. Arguments supplementaires ignores.",
+      "description": "Nom de l'element. Le 4e argument lit cet attribut dans le cube d'attributs de la dimension. Un attribut texte vide renvoie le nom de l'element.",
       "result": {
-        "type": "string",
+        "type": "any",
         "dimensionality": "scalar"
       },
       "volatile": false,
@@ -295,7 +295,8 @@
           "type": "any"
         },
         {
-          "name": "ignored1",
+          "name": "attribute",
+          "description": "Nom de l'attribut. Absent ou vide : le nom de l'element.",
           "type": "any",
           "optional": true
         },
@@ -312,8 +313,8 @@
       ]
     },
     {
-      "id": "PALO_ECOUNT",
-      "name": "PALO_ECOUNT",
+      "id": "ECOUNT",
+      "name": "ECOUNT",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -328,11 +329,12 @@
           "name": "dimension",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Donne le nombre d'éléments d'une dimension."
     },
     {
-      "id": "PALO_ECHILDCOUNT",
-      "name": "PALO_ECHILDCOUNT",
+      "id": "ECHILDCOUNT",
+      "name": "ECHILDCOUNT",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -351,11 +353,12 @@
           "name": "element",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Donne le nombre d'enfants directs d'un élément."
     },
     {
-      "id": "PALO_ECHILD",
-      "name": "PALO_ECHILD",
+      "id": "ECHILD",
+      "name": "ECHILD",
       "result": {
         "type": "string",
         "dimensionality": "scalar"
@@ -378,11 +381,12 @@
           "name": "childIndex",
           "type": "number"
         }
-      ]
+      ],
+      "description": "Donne le nom de l'enfant à la position indiquée (la première position est 1)."
     },
     {
-      "id": "PALO_EPARENTCOUNT",
-      "name": "PALO_EPARENTCOUNT",
+      "id": "EPARENTCOUNT",
+      "name": "EPARENTCOUNT",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -401,11 +405,12 @@
           "name": "element",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Donne le nombre de parents d'un élément."
     },
     {
-      "id": "PALO_EPARENT",
-      "name": "PALO_EPARENT",
+      "id": "EPARENT",
+      "name": "EPARENT",
       "result": {
         "type": "string",
         "dimensionality": "scalar"
@@ -428,11 +433,12 @@
           "name": "parentIndex",
           "type": "number"
         }
-      ]
+      ],
+      "description": "Donne le nom du parent à la position indiquée (la première position est 1)."
     },
     {
-      "id": "PALO_ELEVEL",
-      "name": "PALO_ELEVEL",
+      "id": "ELEVEL",
+      "name": "ELEVEL",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -451,11 +457,12 @@
           "name": "element",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Donne le niveau de l'élément dans la hiérarchie."
     },
     {
-      "id": "PALO_EINDENT",
-      "name": "PALO_EINDENT",
+      "id": "EINDENT",
+      "name": "EINDENT",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -474,11 +481,12 @@
           "name": "element",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Donne le retrait hiérarchique de l'élément, en partant de 1."
     },
     {
-      "id": "PALO_ETYPE",
-      "name": "PALO_ETYPE",
+      "id": "ETYPE",
+      "name": "ETYPE",
       "result": {
         "type": "string",
         "dimensionality": "scalar"
@@ -497,11 +505,12 @@
           "name": "element",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Renvoie le type de l'élément : numeric, string ou consolidated."
     },
     {
-      "id": "PALO_EWEIGHT",
-      "name": "PALO_EWEIGHT",
+      "id": "EWEIGHT",
+      "name": "EWEIGHT",
       "result": {
         "type": "number",
         "dimensionality": "scalar"
@@ -524,11 +533,12 @@
           "name": "child",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Renvoie le poids de l'enfant dans le parent indiqué."
     },
     {
-      "id": "PALO_DATABASE_LIST_DIMENSIONS",
-      "name": "PALO_DATABASE_LIST_DIMENSIONS",
+      "id": "DATABASE_LIST_DIMENSIONS",
+      "name": "DATABASE_LIST_DIMENSIONS",
       "result": {
         "type": "string",
         "dimensionality": "matrix"
@@ -539,11 +549,12 @@
           "name": "servdb",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Liste les dimensions d'une base, une par ligne."
     },
     {
-      "id": "PALO_CUBE_LIST_DIMENSIONS",
-      "name": "PALO_CUBE_LIST_DIMENSIONS",
+      "id": "CUBE_LIST_DIMENSIONS",
+      "name": "CUBE_LIST_DIMENSIONS",
       "result": {
         "type": "string",
         "dimensionality": "matrix"
@@ -558,11 +569,12 @@
           "name": "cube",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Liste les dimensions d'un cube, dans l'ordre du cube."
     },
     {
-      "id": "PALO_DIMENSION_LIST_CUBES",
-      "name": "PALO_DIMENSION_LIST_CUBES",
+      "id": "DIMENSION_LIST_CUBES",
+      "name": "DIMENSION_LIST_CUBES",
       "result": {
         "type": "string",
         "dimensionality": "matrix"
@@ -577,11 +589,12 @@
           "name": "dimension",
           "type": "string"
         }
-      ]
+      ],
+      "description": "Liste les cubes qui utilisent une dimension."
     },
     {
-      "id": "PALO_DIMENSION_LIST_ELEMENTS",
-      "name": "PALO_DIMENSION_LIST_ELEMENTS",
+      "id": "DIMENSION_LIST_ELEMENTS",
+      "name": "DIMENSION_LIST_ELEMENTS",
       "result": {
         "type": "string",
         "dimensionality": "matrix"
@@ -595,6 +608,1413 @@
         {
           "name": "dimension",
           "type": "string"
+        }
+      ],
+      "description": "Liste les éléments d'une dimension."
+    },
+    {
+      "id": "AFILTER",
+      "name": "AFILTER",
+      "description": "TODO. Le filtre attribut supprime des éléments pour lesquels les lignes attribut définies ne correspondent pas.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "AGR_CHILDREN",
+      "name": "AGR.CHILDREN",
+      "description": "TODO. Indique à une agrégation de prendre les enfants directs.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "AGR_LEAVES",
+      "name": "AGR.LEAVES",
+      "description": "TODO. Indique à une agrégation de prendre les éléments de base situés sous l'élément.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "AGR_SELF",
+      "name": "AGR.SELF",
+      "description": "TODO. Indique à une agrégation de prendre l'élément lui-même.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "CONNECTIONUSER",
+      "name": "CONNECTIONUSER",
+      "description": "TODO. Retourne l'utilisateur de la connexion",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "COORD",
+      "name": "COORD",
+      "description": "TODO. Regroupe des coordonnées dans une matrice pour DATA.SUM et les autres agrégats.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "CUBE",
+      "name": "CUBE",
+      "description": "TODO. Désigne la zone de cube lue par une vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA",
+      "name": "DATA",
+      "description": "TODO. Lit la valeur de la cellule de données indiquée à partir du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA_AVG",
+      "name": "DATA.AVG",
+      "description": "TODO. Renvoie la valeur moyenne d'une plage de cellules du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA_CNT",
+      "name": "DATA.CNT",
+      "description": "TODO. Renvoie le nombre de cellules d'une plage de cellules du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA_MAX",
+      "name": "DATA.MAX",
+      "description": "TODO. Renvoie la valeur maximale d'une plage de cellules du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA_MIN",
+      "name": "DATA.MIN",
+      "description": "TODO. Renvoie la valeur minimale d'une plage de cellules du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATA_SUM",
+      "name": "DATA.SUM",
+      "description": "TODO. Renvoie la somme d'une plage de cellules du cube.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAA",
+      "name": "DATAA",
+      "description": "TODO. Lit une valeur numérique en acceptant un alias à la place du nom d'élément.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAAC",
+      "name": "DATAAC",
+      "description": "TODO. Comme DATAA, et signale une erreur si la cellule ne peut pas être lue.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAAT",
+      "name": "DATAAT",
+      "description": "TODO. Lit une valeur texte en acceptant un alias à la place du nom d'élément.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAATC",
+      "name": "DATAATC",
+      "description": "TODO. Comme DATAAT, et signale une erreur si la cellule texte ne peut pas être lue.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATABASE_LIST_CUBES",
+      "name": "DATABASE_LIST_CUBES",
+      "description": "TODO. La fonction établit, dans une plage que vous aurez prédéfinie, une liste des cubes d’une base de données.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATABASE_LIST_DIMENSIONS_EXT",
+      "name": "DATABASE_LIST_DIMENSIONS_EXT",
+      "description": "TODO. Liste les dimensions d'une base avec leurs attributs : identifiant, type et nombre d'éléments.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAT",
+      "name": "DATAT",
+      "description": "TODO. Lit la valeur texte de la cellule indiquée. Renvoie une chaîne vide si la lecture échoue.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATATC",
+      "name": "DATATC",
+      "description": "TODO. Lit la valeur texte de la cellule indiquée et renvoie une erreur si la lecture échoue. Le texte est limité à 255 caractères.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAV",
+      "name": "DATAV",
+      "description": "TODO. Lit une cellule du cube et se place dans une formule matricielle Excel.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DATAX",
+      "name": "DATAX",
+      "description": "TODO. Lit une cellule du cube, et ne se calcule que lorsque sa feuille est active.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DFILTER",
+      "name": "DFILTER",
+      "description": "TODO. Calcule pour chaque élément d’un sous-ensemble une valeur de données. La valeur peut être numérique ou un String.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "DIMENSION",
+      "name": "DIMENSION",
+      "description": "TODO. Désigne une dimension dans la définition d'une vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EADD",
+      "name": "EADD",
+      "description": "TODO. Ajoute un élément, ou un lien de consolidation, dans une dimension.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EALIAS",
+      "name": "EALIAS",
+      "description": "TODO. Renvoie l'alias d'un élément, ou les éléments qui portent l'alias indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EDELETE",
+      "name": "EDELETE",
+      "description": "TODO. Supprime l'élément spécifié.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EFIRST",
+      "name": "EFIRST",
+      "description": "TODO. Renvoie le premier élément de la dimension, ou le premier enfant du parent indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EINDEX",
+      "name": "EINDEX",
+      "description": "TODO. Renvoie la position de l’élément indiqué dans la dimension.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EISCHILD",
+      "name": "EISCHILD",
+      "description": "TODO. Vérifie si un élément consolidé contient l’élément indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_ANCESTORS",
+      "name": "ELEMENT_LIST_ANCESTORS",
+      "description": "TODO. Listes de tous les ancêtres de l'élément spécifié",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_CHILDREN",
+      "name": "ELEMENT_LIST_CHILDREN",
+      "description": "TODO. Liste les enfants directs d'un élément.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_CONSOLIDATION_ELEMENTS",
+      "name": "ELEMENT_LIST_CONSOLIDATION_ELEMENTS",
+      "description": "TODO. Retourne une liste avec tous les éléments enfants d'un élément consolidé.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_DESCENDANTS",
+      "name": "ELEMENT_LIST_DESCENDANTS",
+      "description": "TODO. Liste tous les descendants.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_PARENTS",
+      "name": "ELEMENT_LIST_PARENTS",
+      "description": "TODO. Retourne une liste de tous les parents d'un élément",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ELEMENT_LIST_SIBLINGS",
+      "name": "ELEMENT_LIST_SIBLINGS",
+      "description": "TODO. Retourne une liste de tous les éléments qui sont sur le même niveau hiérarchique que l’élément spécifié",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ENEXT",
+      "name": "ENEXT",
+      "description": "TODO. Renvoie le nom de l'élément qui suit l'élément indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EPREV",
+      "name": "EPREV",
+      "description": "TODO. Renvoie le nom de l'élément qui précède l'élément indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ERENAME",
+      "name": "ERENAME",
+      "description": "TODO. Renomme l’élément indiqué.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ERROR_LOG",
+      "name": "ERROR_LOG",
+      "description": "TODO. Journalise une ligne d'import refusée par le serveur.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ESIBLING",
+      "name": "ESIBLING",
+      "description": "TODO. Renvoie le nom de l’élément frère défini.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ETOPLEVEL",
+      "name": "ETOPLEVEL",
+      "description": "TODO. Renvoie le niveau le plus élevé que possède un élément dans la hiérarchie de consolidation de la dimension indiquée.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EUPDATE",
+      "name": "EUPDATE",
+      "description": "TODO. Met à jour le type, le poids ou la position d'un élément existant.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "EXPANDTYPE",
+      "name": "EXPANDTYPE",
+      "description": "TODO. Regroupe les modes d'expansion (SELF, CHILDREN, LEAVES) d'une agrégation.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "HFILTER",
+      "name": "HFILTER",
+      "description": "TODO. Filtre un sous-ensemble selon la place de l'élément dans la hiérarchie : niveau, parents, enfants ou feuilles.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "PICKLIST",
+      "name": "PICKLIST",
+      "description": "TODO. Peut ajouter des éléments à un sous-ensemble qui ne peuvent en aucun cas être à nouveau supprimés. En outre, il est possible de définir par ces derniers une multitude d’éléments qui feront office de filtre.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "PING",
+      "name": "PING",
+      "description": "TODO. Vérifie que le serveur Jedox OLAP de la connexion répond.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "REGISTER",
+      "name": "REGISTER",
+      "description": "TODO. Enregistre un serveur PALO pour qu'une formule puisse s'y connecter.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "REMOVE_CONNECTION",
+      "name": "REMOVE_CONNECTION",
+      "description": "TODO. Ferme la connexion nommée.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ROOT_LIST_DATABASES",
+      "name": "ROOT_LIST_DATABASES",
+      "description": "TODO. Donne une liste avec toutes les bases de données du serveur spécifié.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "ROOT_LIST_DATABASES_EXT",
+      "name": "ROOT_LIST_DATABASES_EXT",
+      "description": "TODO. Liste les bases du serveur avec leurs attributs.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SERVERSUBSET",
+      "name": "SERVERSUBSET",
+      "description": "TODO. Ancien nom de SERVER_SUBSET : calcule un sous-ensemble d'éléments sur le serveur.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SERVER_INFO",
+      "name": "SERVER_INFO",
+      "description": "TODO. Retourne des informations sur le serveur Jedox OLAP d'une connexion donnée.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SERVER_SUBSET",
+      "name": "SERVER_SUBSET",
+      "description": "TODO. Renvoie un sous-ensemble d’éléments de dimension.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATAA",
+      "name": "SETDATAA",
+      "description": "TODO. Écrit une valeur en acceptant un alias à la place du nom d'élément.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATAAIF",
+      "name": "SETDATAAIF",
+      "description": "TODO. Écrit une valeur, en acceptant un alias, lorsque la condition est vraie.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATAA_WRAP",
+      "name": "SETDATAA_WRAP",
+      "description": "TODO. Variante interne de SETDATAA : enveloppe l'écriture et journalise l'erreur.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATAIF",
+      "name": "SETDATAIF",
+      "description": "TODO. Écrit une valeur dans une cellule du cube lorsque la condition est vraie.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATA_BULK",
+      "name": "SETDATA_BULK",
+      "description": "TODO. Écrit plusieurs cellules du cube dans un seul appel, sans interpréter de préfixe.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATA_ERROR",
+      "name": "SETDATA_ERROR",
+      "description": "TODO. Journalise une ligne d'import refusée par le serveur.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SETDATA_WRAP",
+      "name": "SETDATA_WRAP",
+      "description": "TODO. Variante interne de SETDATA : enveloppe l'écriture et journalise l'erreur au lieu de la remonter.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SORT",
+      "name": "SORT",
+      "description": "TODO. Définit l'affichage des éléments du sous-ensemble, par exemple en ordre de définition ou en ordre hiérarchique.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SUBCUBE",
+      "name": "SUBCUBE",
+      "description": "TODO. Décrit la tranche de cube lue par DFILTER. La dimension filtrée reste vide, les autres reçoivent un ou plusieurs éléments.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SUBSET",
+      "name": "SUBSET",
+      "description": "TODO. Renvoie un sous-ensemble d’éléments de dimension.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SUBSETSIZE",
+      "name": "SUBSETSIZE",
+      "description": "TODO. Renvoie la longueur d’un extrait d’ensemble d’un élément de dimension.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "SUBSETX",
+      "name": "SUBSETX",
+      "description": "TODO. Renvoie un sous-ensemble d’éléments de dimension si est appelée depuis une feuille active.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "TFILTER",
+      "name": "TFILTER",
+      "description": "TODO. Éléments dont les noms correspondent à des modèles définis, sont conservés. Le reste est supprimé de l’affichage. Plusieurs critères de filtre sont indiqués dans la matrice.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "USERGROUPS",
+      "name": "USERGROUPS",
+      "description": "TODO. Retourne le groupe d'utilisateurs de la connexion",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "VIEW_AREAGET",
+      "name": "VIEW.AREAGET",
+      "description": "TODO. Renvoie les valeurs de la zone d'une vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "VIEW_AXISDEF",
+      "name": "VIEW.AXISDEF",
+      "description": "TODO. Définit un axe (lignes ou colonnes) d'une vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "VIEW_AXISGET",
+      "name": "VIEW.AXISGET",
+      "description": "TODO. Renvoie les éléments placés sur un axe de vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "VIEW_AXISGETINDEX",
+      "name": "VIEW.AXISGETINDEX",
+      "description": "TODO. Renvoie la position d'un élément sur un axe de vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
+        }
+      ]
+    },
+    {
+      "id": "VIEW_SUBSETDEF",
+      "name": "VIEW.SUBSETDEF",
+      "description": "TODO. Définit le sous-ensemble utilisé par un axe de vue Palo.",
+      "result": {
+        "type": "string",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "args",
+          "description": "Arguments de la fonction historique. Ignores tant que la fonction est en TODO.",
+          "type": "any",
+          "optional": true,
+          "repeating": true
         }
       ]
     }
