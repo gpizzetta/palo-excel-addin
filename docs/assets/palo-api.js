@@ -576,18 +576,6 @@
     }
   }
 
-  function paloSetLastApiUrl(url) {
-    paloGlobal.PaloOffice = paloGlobal.PaloOffice || {};
-    paloGlobal.PaloOffice._lastApiUrl = String(url || "");
-  }
-
-  function paloGetLastApiUrl() {
-    if (!paloGlobal.PaloOffice || !paloGlobal.PaloOffice._lastApiUrl) {
-      return "";
-    }
-    return String(paloGlobal.PaloOffice._lastApiUrl);
-  }
-
   function leftRotate(x, c) {
     return (x << c) | (x >>> (32 - c));
   }
@@ -1274,7 +1262,6 @@
   PaloApiClient.prototype.callOnce = async function callOnce(path, params) {
     var url = this.buildUrl(path, params);
     var logUrl = paloRedactUrlForLog(url);
-    paloSetLastApiUrl(logUrl);
     paloTrace("api-call", { path: path, url: logUrl });
     var response;
     var timeoutMs = paloRequestTimeoutMs();
@@ -1836,9 +1823,6 @@
     this._dimElementMapInflight = paloSharedDimElementMapInflight;
     this._cellBatchQueues = new Map();
     this._cellBatchTimers = new Map();
-    // File réservée à PALO.DATAB. PALO.DATAC ne la consulte pas.
-    this._databBatchQueues = new Map();
-    this._databBatchTimers = new Map();
   }
 
   /** Cle de file : une file = une requete /cell/values homogene (meme connexion, sid, base, cube). */
@@ -1873,20 +1857,6 @@
       var n = Number(window.PALO_CELL_BATCH_MS);
       if (!Number.isNaN(n) && n >= 0) {
         return n;
-      }
-    }
-    return 24;
-  }
-
-  /** Délai de regroupement PALO.DATAB. Indépendant du verrou « formules Excel = pas de bulk ». */
-  function databBatchDelayMs() {
-    if (typeof window !== "undefined" && window.PALO_DISABLE_BATCH) {
-      return 0;
-    }
-    if (typeof window !== "undefined" && window.PALO_DATAB_BATCH_MS != null) {
-      var n = Number(window.PALO_DATAB_BATCH_MS);
-      if (!Number.isNaN(n) && n >= 0) {
-        return Math.floor(n);
       }
     }
     return 24;
@@ -2205,227 +2175,6 @@
         } catch (fallbackErr) {
           items[j].reject(fallbackErr);
         }
-      }
-    }
-  };
-
-  /**
-   * PALO.DATAB uniquement. Même regroupement /cell/values que la file hors formules,
-   * y compris dans le runtime Excel. PALO.DATAC continue d'appeler requestCellValueBatched.
-   * Délai 0 (PALO_DISABLE_BATCH ou PALO_DATAB_BATCH_MS=0) : lecture unitaire name_path.
-   */
-  PaloConnectionManager.prototype.requestDatabCellValue = function requestDatabCellValue(
-    connectionName,
-    sid,
-    client,
-    name_database,
-    name_cube,
-    namePath,
-    pathSegments,
-    debugMeta
-  ) {
-    var manager = this;
-    if (databBatchDelayMs() === 0) {
-      return this._resolveCellValueByNameSegments(
-        connectionName,
-        sid,
-        client,
-        name_database,
-        name_cube,
-        pathSegments,
-        namePath
-      );
-    }
-    return new Promise(function (resolve, reject) {
-      var key = cellBatchKey(connectionName, sid, name_database, name_cube);
-      var q = manager._databBatchQueues.get(key);
-      if (!q) {
-        q = {
-          connectionName: connectionName,
-          sid: sid,
-          client: client,
-          name_database: name_database,
-          name_cube: name_cube,
-          items: []
-        };
-        manager._databBatchQueues.set(key, q);
-      }
-      q.items.push({
-        namePath: namePath,
-        pathSegments: pathSegments,
-        debugMeta: debugMeta || null,
-        done: false,
-        resolve: resolve,
-        reject: reject
-      });
-      paloScheduleBatchFlush(manager._databBatchTimers, key, function () {
-        manager._flushDatabBatch(key);
-      });
-    });
-  };
-
-  PaloConnectionManager.prototype._flushDatabBatch = async function _flushDatabBatch(key) {
-    var q = this._databBatchQueues.get(key);
-    if (!q) {
-      return;
-    }
-    this._databBatchQueues.delete(key);
-    var items = q.items;
-    if (!items || !items.length) {
-      return;
-    }
-    var client = q.client;
-    var sid = q.sid;
-    var name_database = q.name_database;
-    var name_cube = q.name_cube;
-    var self = this;
-
-    function markResolved(item, value) {
-      if (item.done) {
-        return;
-      }
-      item.done = true;
-      item.resolve(value);
-    }
-
-    async function fallbackItemToNamePath(item) {
-      if (item.done) {
-        return;
-      }
-      try {
-        var value = await self._resolveCellValueByNameSegments(
-          q.connectionName,
-          sid,
-          client,
-          name_database,
-          name_cube,
-          item.pathSegments,
-          item.namePath
-        );
-        markResolved(item, value);
-      } catch (fallbackErr) {
-        if (!item.done) {
-          item.done = true;
-          item.reject(fallbackErr);
-        }
-      }
-    }
-
-    try {
-      if (items.length === 1) {
-        await fallbackItemToNamePath(items[0]);
-        return;
-      }
-      var allHaveSegments = items.every(function (it) {
-        return Array.isArray(it.pathSegments) && it.pathSegments.length > 0;
-      });
-      var idPaths;
-      if (allHaveSegments) {
-        idPaths = await this.buildCellIdPathsListFromSegments(
-          q.connectionName,
-          sid,
-          client,
-          name_database,
-          name_cube,
-          items.map(function (it) { return it.pathSegments; })
-        );
-      } else {
-        idPaths = await this.buildCellIdPathsList(
-          q.connectionName,
-          sid,
-          client,
-          name_database,
-          name_cube,
-          items.map(function (it) { return it.namePath; })
-        );
-      }
-      paloTrace("datab-cell-values-batch", {
-        connectionName: q.connectionName,
-        name_database: name_database,
-        name_cube: name_cube,
-        count: items.length,
-        pathsQueryLen: idPaths.join(":").length
-      });
-      var maxUrlChars = cellValuesMaxUrlChars();
-      var start = 0;
-      while (start < idPaths.length) {
-        var end = start;
-        var joined = "";
-        while (end < idPaths.length) {
-          var candidate = joined ? (joined + ":" + idPaths[end]) : idPaths[end];
-          if (end > start) {
-            var candidateUrl = client.buildUrl("/cell/values", {
-              sid: sid,
-              name_database: name_database,
-              name_cube: name_cube,
-              paths: candidate
-            });
-            if (candidateUrl.length > maxUrlChars) {
-              break;
-            }
-          }
-          joined = candidate;
-          end += 1;
-        }
-        if (!joined) {
-          joined = idPaths[start];
-          end = start + 1;
-        }
-        var arr;
-        try {
-          arr = await client.cellValues(sid, name_database, name_cube, joined);
-          if (arr.length !== (end - start)) {
-            throw new Error(
-              "cell/values: " + (end - start) + " chemin(s) envoyes, " + arr.length + " ligne(s) recues."
-            );
-          }
-          var allEmpty = arr.length > 0 && arr.every(function (v) {
-            return v === null || v === "";
-          });
-          if (allEmpty) {
-            paloTrace("datab-cell-values-chunk-all-empty-fallback-single", {
-              connectionName: q.connectionName,
-              name_database: name_database,
-              name_cube: name_cube,
-              start: start,
-              end: end
-            });
-            arr = [];
-            var s;
-            for (s = start; s < end; s += 1) {
-              arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[s]));
-            }
-          }
-        } catch (chunkErr) {
-          paloTrace("datab-cell-values-chunk-fallback-single", {
-            connectionName: q.connectionName,
-            name_database: name_database,
-            name_cube: name_cube,
-            start: start,
-            end: end,
-            reason: chunkErr && chunkErr.message ? chunkErr.message : String(chunkErr)
-          });
-          arr = [];
-          var f;
-          for (f = start; f < end; f += 1) {
-            arr.push(await client.cellValueByIds(sid, name_database, name_cube, idPaths[f]));
-          }
-        }
-        var i;
-        for (i = start; i < end; i += 1) {
-          markResolved(items[i], arr[i - start]);
-        }
-        start = end;
-      }
-    } catch (err) {
-      paloTrace("datab-cell-values-batch-error", {
-        key: key,
-        count: items.length,
-        reason: err && err.message ? err.message : String(err)
-      });
-      var j;
-      for (j = 0; j < items.length; j += 1) {
-        await fallbackItemToNamePath(items[j]);
       }
     }
   };
@@ -3132,7 +2881,6 @@
   paloGlobal.PaloOffice.datacPerf = paloDatacPerf;
   paloGlobal.PaloOffice.datacPerfRender = paloDatacPerfRender;
   paloGlobal.PaloOffice.getTraceHistory = paloGetTraceHistory;
-  paloGlobal.PaloOffice.getLastApiUrl = paloGetLastApiUrl;
   paloGlobal.PaloOffice.paloEnsureStorageReady = paloEnsureStorageReady;
   paloGlobal.PaloOffice.paloAwaitOfficeReadyAsync = paloAwaitOfficeReadyAsync;
   paloGlobal.PaloOffice.paloReloadOfficeRuntimeStorage = paloReloadOfficeRuntimeStorage;
