@@ -1437,14 +1437,15 @@
     });
   };
 
-  PaloApiClient.prototype.databaseDimensions = async function databaseDimensions(sid, database) {
+  PaloApiClient.prototype.databaseDimensions = async function databaseDimensions(sid, database, flags) {
+    var opt = flags || {};
     var text = await this.call("/database/dimensions", {
       sid: sid,
       name_database: database,
-      show_normal: 1,
-      show_system: 0,
-      show_attribute: 0,
-      show_info: 0
+      show_normal: opt.show_normal == null ? 1 : opt.show_normal,
+      show_system: opt.show_system == null ? 0 : opt.show_system,
+      show_attribute: opt.show_attribute == null ? 0 : opt.show_attribute,
+      show_info: opt.show_info == null ? 0 : opt.show_info
     });
     return text.split("\n").map(function (line) { return line.trim(); }).filter(Boolean).map(function (line) {
       var p = splitSemicolonLine(line);
@@ -3069,7 +3070,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.38";
+var PALO_ASSET_VERSION = "1.0.3.39";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;

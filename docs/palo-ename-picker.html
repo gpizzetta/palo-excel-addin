@@ -73,7 +73,8 @@
       color: var(--palo-text-secondary);
       margin-bottom: 4px;
     }
-    #dimension-select {
+    #dimension-select,
+    #source-select {
       box-sizing: border-box;
       width: 100%;
       padding: 6px 8px;
@@ -84,11 +85,16 @@
       outline: none;
       background: var(--palo-input-bg);
     }
-    #dimension-select:focus {
+    #dimension-wrap label[for="source-select"] {
+      margin-top: 8px;
+    }
+    #dimension-select:focus,
+    #source-select:focus {
       border-color: var(--palo-focus);
       box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
-    #dimension-select:disabled {
+    #dimension-select:disabled,
+    #source-select:disabled {
       opacity: 0.65;
       cursor: wait;
     }
@@ -165,6 +171,11 @@
   <div id="dimension-wrap">
     <label for="dimension-select">Dimension</label>
     <select id="dimension-select" aria-label="Dimension"></select>
+    <label for="source-select">Afficher</label>
+    <select id="source-select" aria-label="Element ou attributs">
+      <option value="element">Element</option>
+      <option value="attribute">Attributs</option>
+    </select>
   </div>
   <div id="filter-wrap">
     <label for="element-filter" class="visually-hidden">Filtrer</label>
@@ -209,10 +220,11 @@
       }
     }
 
-    function sendPick(name, dimension) {
+    function sendPick(name, dimension, source) {
       var payload = JSON.stringify({
         element: name,
-        dimension: dimension || ""
+        dimension: dimension || "",
+        source: source === "attribute" ? "attribute" : "element"
       });
       if (Office.context && Office.context.ui && typeof Office.context.ui.messageParent === "function") {
         Office.context.ui.messageParent(payload, { targetOrigin: "*" });
@@ -223,11 +235,28 @@
       applyOfficeTheme();
       var ul = document.getElementById("elements");
       var empty = document.getElementById("empty");
+      var title = document.querySelector("h1");
       var dimSelect = document.getElementById("dimension-select");
+      var sourceSelect = document.getElementById("source-select");
       var filterInput = document.getElementById("element-filter");
       var allElements = [];
       var lastLoadedDimension = "";
+      var lastLoadedSource = "element";
       var dimensionChangeFromUser = false;
+
+      function currentSource() {
+        return sourceSelect && sourceSelect.value === "attribute" ? "attribute" : "element";
+      }
+
+      function applySourceLabels() {
+        var attributes = currentSource() === "attribute";
+        if (title) {
+          title.textContent = attributes ? "Choisissez un attribut" : "Choisissez un element";
+        }
+        if (filterInput) {
+          filterInput.placeholder = attributes ? "Filtrer les attributs..." : "Filtrer les elements...";
+        }
+      }
 
       function showEmpty(text) {
         empty.style.display = "block";
@@ -251,7 +280,10 @@
       function renderList(items) {
         ul.innerHTML = "";
         if (!items || !items.length) {
-          showEmpty(allElements.length ? "Aucun element ne correspond au filtre." : "Liste vide.");
+          var attributes = currentSource() === "attribute";
+          var none = attributes ? "Aucun attribut ne correspond au filtre." : "Aucun element ne correspond au filtre.";
+          var vacant = attributes ? "Aucun attribut." : "Liste vide.";
+          showEmpty(allElements.length ? none : vacant);
           return;
         }
         empty.style.display = "none";
@@ -267,7 +299,7 @@
           }
           li.addEventListener("click", function () {
             var dim = dimSelect ? String(dimSelect.value || "") : "";
-            sendPick(name, dim);
+            sendPick(name, dim, currentSource());
           });
           ul.appendChild(li);
         });
@@ -327,22 +359,33 @@
         dimensionChangeFromUser = true;
       }
 
+      function setSelectsDisabled(disabled) {
+        if (dimSelect) {
+          dimSelect.disabled = disabled;
+        }
+        if (sourceSelect) {
+          sourceSelect.disabled = disabled;
+        }
+      }
+
       function requestDimensionElements(dimension) {
         if (!dimension || !Office.context || !Office.context.ui || typeof Office.context.ui.messageParent !== "function") {
           return;
         }
-        if (dimSelect) {
-          dimSelect.disabled = true;
-        }
+        setSelectsDisabled(true);
+        ul.innerHTML = "";
+        showEmpty("Chargement...");
         try {
           Office.context.ui.messageParent(
-            JSON.stringify({ type: "loadDimension", dimension: dimension }),
+            JSON.stringify({
+              type: "loadDimension",
+              dimension: dimension,
+              source: currentSource()
+            }),
             { targetOrigin: "*" }
           );
         } catch (_e) {
-          if (dimSelect) {
-            dimSelect.disabled = false;
-          }
+          setSelectsDisabled(false);
         }
       }
 
@@ -356,10 +399,24 @@
             return;
           }
           var dim = String(dimSelect.value || "").trim();
-          if (!dim || dim === lastLoadedDimension) {
+          if (!dim || (dim === lastLoadedDimension && currentSource() === lastLoadedSource)) {
             return;
           }
           lastLoadedDimension = dim;
+          lastLoadedSource = currentSource();
+          requestDimensionElements(dim);
+        });
+      }
+
+      if (sourceSelect) {
+        sourceSelect.addEventListener("change", function () {
+          applySourceLabels();
+          var dim = dimSelect ? String(dimSelect.value || "").trim() : "";
+          if (!dim || (dim === lastLoadedDimension && currentSource() === lastLoadedSource)) {
+            return;
+          }
+          lastLoadedDimension = dim;
+          lastLoadedSource = currentSource();
           requestDimensionElements(dim);
         });
       }
@@ -375,11 +432,11 @@
           fillList(o.elements);
           if (dimSelect && !dimSelect.disabled) {
             lastLoadedDimension = String(dimSelect.value || "").trim();
+            lastLoadedSource = currentSource();
           }
         }
-        if (dimSelect) {
-          dimSelect.disabled = false;
-        }
+        applySourceLabels();
+        setSelectsDisabled(false);
       }
 
       function tryReadLocalStorage() {
@@ -420,22 +477,29 @@
             return;
           }
           if (payload && payload.type === "elements" && Array.isArray(payload.elements)) {
+            var asked = payload.source === "attribute" ? "attribute" : "element";
+            if (payload.dimension && dimSelect && String(dimSelect.value || "") !== String(payload.dimension)) {
+              return;
+            }
+            if (asked !== currentSource()) {
+              return;
+            }
             fillList(payload.elements);
+            if (!payload.elements.length && payload.emptyMessage) {
+              showEmpty(String(payload.emptyMessage));
+            }
             if (payload.dimension && dimSelect) {
               dimensionChangeFromUser = false;
               dimSelect.value = String(payload.dimension);
               lastLoadedDimension = String(payload.dimension);
+              lastLoadedSource = asked;
               dimensionChangeFromUser = true;
             }
-            if (dimSelect) {
-              dimSelect.disabled = false;
-            }
+            setSelectsDisabled(false);
             return;
           }
           if (payload && payload.type === "loadDimensionError") {
-            if (dimSelect) {
-              dimSelect.disabled = false;
-            }
+            setSelectsDisabled(false);
             showEmpty(String(payload.message || "Impossible de charger les elements."));
           }
         } catch (_e) {

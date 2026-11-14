@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.38";
+  var PALO_PLUGIN_VERSION = "1.0.3.39";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_PREFS_KEY = "palo_datac_write_prefs_v1";
@@ -1205,6 +1205,42 @@
           });
       }
 
+      async function loadPickerItems(ctx2, dimensionName, source) {
+        var dim = String(dimensionName || "").trim();
+        if (source !== "attribute") {
+          var elsPlain = await ctx2.client.dimensionElements(ctx2.sid, ctx2.database, dim);
+          return { elements: mapDimensionElementsToPickerItems(elsPlain), emptyMessage: "" };
+        }
+        var info = await ctx2.client.dimensionInfo(ctx2.sid, ctx2.database, dim);
+        var attrDimId = String(info.attributeDimensionId || "").trim();
+        if (!attrDimId || attrDimId === "0") {
+          return { elements: [], emptyMessage: "Aucun attribut pour la dimension \"" + dim + "\"." };
+        }
+        var attrDims = await ctx2.client.databaseDimensions(ctx2.sid, ctx2.database, {
+          show_normal: 0,
+          show_system: 0,
+          show_attribute: 1,
+          show_info: 0
+        });
+        var attrName = "";
+        var ai;
+        for (ai = 0; ai < attrDims.length; ai += 1) {
+          if (String(attrDims[ai].id) === attrDimId) {
+            attrName = String(attrDims[ai].name || "");
+            break;
+          }
+        }
+        if (!attrName) {
+          return { elements: [], emptyMessage: "Aucun attribut pour la dimension \"" + dim + "\"." };
+        }
+        var attrEls = await ctx2.client.dimensionElements(ctx2.sid, ctx2.database, attrName);
+        var attrItems = mapDimensionElementsToPickerItems(attrEls);
+        return {
+          elements: attrItems,
+          emptyMessage: attrItems.length ? "" : "Aucun attribut pour la dimension \"" + dim + "\"."
+        };
+      }
+
       var dimRows = await ctx.client.databaseDimensions(ctx.sid, ctx.database);
       var dimNames = dimRows
         .map(function (d) {
@@ -1312,23 +1348,22 @@
               o = null;
             }
             if (o && o.type === "loadDimension" && o.dimension) {
+              var askedSource = o.source === "attribute" ? "attribute" : "element";
+              var askedDim = String(o.dimension || "").trim();
               manager
                 .getClientAndContext(pickContext.servdb)
                 .then(function (ctx2) {
-                  return ctx2.client.dimensionElements(
-                    ctx2.sid,
-                    ctx2.database,
-                    String(o.dimension || "").trim()
-                  );
+                  return loadPickerItems(ctx2, askedDim, askedSource);
                 })
-                .then(function (els2) {
-                  var items2 = mapDimensionElementsToPickerItems(els2);
+                .then(function (loaded) {
                   if (typeof dlg.messageChild === "function") {
                     dlg.messageChild(
                       JSON.stringify({
                         type: "elements",
-                        dimension: String(o.dimension || "").trim(),
-                        elements: items2
+                        dimension: askedDim,
+                        source: askedSource,
+                        elements: loaded.elements,
+                        emptyMessage: loaded.emptyMessage || ""
                       })
                     );
                   }
@@ -1347,9 +1382,11 @@
             }
             var chosen = "";
             var chosenDim = "";
+            var chosenSource = "element";
             if (o && o.element) {
               chosen = String(o.element);
               chosenDim = o.dimension != null ? String(o.dimension).trim() : "";
+              chosenSource = o.source === "attribute" ? "attribute" : "element";
             }
             if (!chosen) {
               try {
@@ -1397,7 +1434,22 @@
               }
               var newLit = window.paloEnameRibbon.buildExcelStringLiteral(chosen);
               var base = parsed2.formula;
-              var updated = base.slice(0, parsed2.args[2].start) + newLit + base.slice(parsed2.args[2].end);
+              var updated;
+              if (chosenSource === "attribute") {
+                if (parsed2.args.length >= 4) {
+                  updated = base.slice(0, parsed2.args[3].start) + newLit + base.slice(parsed2.args[3].end);
+                } else {
+                  var closeAt = parsed2.callEnd - 1;
+                  var gap = parsed2.args.length >= 2
+                    ? base.slice(parsed2.args[0].end, parsed2.args[1].start)
+                    : ";";
+                  var sep = gap.indexOf(",") !== -1 && gap.indexOf(";") === -1 ? "," : ";";
+                  var spacing = /\s/.test(gap) ? " " : "";
+                  updated = base.slice(0, closeAt) + sep + spacing + newLit + base.slice(closeAt);
+                }
+              } else {
+                updated = base.slice(0, parsed2.args[2].start) + newLit + base.slice(parsed2.args[2].end);
+              }
               if (chosenDim && chosenDim !== String(pickContext.dimension || "").trim()) {
                 var dimLit = window.paloEnameRibbon.buildExcelStringLiteral(chosenDim);
                 updated = updated.slice(0, parsed2.args[1].start) + dimLit + updated.slice(parsed2.args[1].end);
