@@ -1,7 +1,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.37";
+var PALO_ASSET_VERSION = "1.0.3.38";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -737,7 +737,7 @@ var PALO_ASSET_VERSION = "1.0.3.37";
   }
 
   async function PALO_SETDATA(value, splash, servdb, cubeName) {
-    var coordinates = sanitizePaloCoordinates(Array.prototype.slice.call(arguments, 4));
+    var coordinates = paloCollectCoordinateArgs(arguments, 4);
     if (paloFnTrace()) {
       console.info("[PaloOffice PALO_SETDATA] start", {
         servdb: servdb,
