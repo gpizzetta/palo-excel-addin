@@ -131,6 +131,9 @@
       padding: 0;
     }
     #attr-list li {
+      display: flex;
+      align-items: center;
+      gap: 12px;
       padding: 8px 12px;
       cursor: pointer;
       color: var(--palo-text);
@@ -141,6 +144,33 @@
     #attr-list li:active,
     #attr-list li.selected {
       background: var(--palo-active);
+    }
+    .attr-name {
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .attr-value {
+      flex: 0 0 42%;
+      min-height: 1.4em;
+      text-align: right;
+      color: var(--palo-text);
+      cursor: text;
+    }
+    .attr-value input {
+      box-sizing: border-box;
+      width: 100%;
+      margin: 0;
+      padding: 1px 6px;
+      text-align: right;
+      font: inherit;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-focus);
+      border-radius: 2px;
+      outline: none;
     }
     .actions {
       display: flex;
@@ -201,10 +231,6 @@
     <ul id="attr-list"></ul>
   </div>
   <div class="fields fields-bottom">
-    <div>
-      <label for="value">Valeur</label>
-      <input id="value" type="text" autocomplete="off" spellcheck="false">
-    </div>
     <div id="status"></div>
     <div class="actions">
       <button type="button" id="cancel" class="secondary">Annuler</button>
@@ -217,6 +243,9 @@
       quiet: false,
       attributes: [],
       attribute: "",
+      values: {},
+      editing: "",
+      focusEditor: false,
       valueToken: 0
     };
 
@@ -308,7 +337,28 @@
       paintAttributeList();
     }
 
+    function attributeShownValue(name) {
+      if (!state.values || !Object.prototype.hasOwnProperty.call(state.values, name)) {
+        return "";
+      }
+      var raw = state.values[name];
+      return raw == null ? "" : String(raw);
+    }
+
+    function rememberEditor() {
+      var editor = document.querySelector("#attr-list .attr-value input");
+      if (!editor) {
+        return;
+      }
+      var row = editor.closest ? editor.closest("li") : null;
+      var name = row ? row.getAttribute("data-name") : "";
+      if (name) {
+        state.values[name] = editor.value;
+      }
+    }
+
     function paintAttributeList() {
+      rememberEditor();
       var ul = document.getElementById("attr-list");
       var filter = document.getElementById("attr-filter");
       var q = String(filter && filter.value ? filter.value : "").trim().toLowerCase();
@@ -319,43 +369,104 @@
           return;
         }
         var li = document.createElement("li");
-        li.textContent = name;
         li.setAttribute("data-name", name);
         if (name === state.attribute) {
           li.classList.add("selected");
         }
-        li.addEventListener("click", function () {
-          if (state.attribute === name) {
+        var nameEl = document.createElement("span");
+        nameEl.className = "attr-name";
+        nameEl.textContent = name;
+        var valueEl = document.createElement("span");
+        valueEl.className = "attr-value";
+        if (state.editing === name) {
+          li.classList.add("editing");
+          var input = document.createElement("input");
+          input.type = "text";
+          input.value = attributeShownValue(name);
+          input.setAttribute("autocomplete", "off");
+          input.setAttribute("spellcheck", "false");
+          input.addEventListener("mousedown", function (ev) {
+            ev.stopPropagation();
+          });
+          input.addEventListener("click", function (ev) {
+            ev.stopPropagation();
+          });
+          input.addEventListener("input", function () {
+            state.values[name] = input.value;
+          });
+          input.addEventListener("keydown", function (ev) {
+            if (ev.key === "Enter") {
+              ev.preventDefault();
+              input.blur();
+            }
+          });
+          input.addEventListener("blur", function () {
+            state.values[name] = input.value;
+            if (state.editing !== name) {
+              return;
+            }
+            state.editing = "";
+            li.classList.remove("editing");
+            valueEl.textContent = input.value;
+          });
+          valueEl.appendChild(input);
+        } else {
+          valueEl.textContent = attributeShownValue(name);
+        }
+        valueEl.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          if (state.editing === name) {
             return;
           }
           state.attribute = name;
+          state.editing = name;
+          state.focusEditor = true;
           paintAttributeList();
-          requestValue();
         });
+        li.addEventListener("click", function () {
+          if (state.attribute === name && state.editing !== name) {
+            return;
+          }
+          state.editing = "";
+          state.attribute = name;
+          paintAttributeList();
+        });
+        li.appendChild(nameEl);
+        li.appendChild(valueEl);
         ul.appendChild(li);
       });
       var selected = ul.querySelector("li.selected");
       if (selected && typeof selected.scrollIntoView === "function") {
         selected.scrollIntoView({ block: "nearest" });
       }
+      if (state.focusEditor) {
+        state.focusEditor = false;
+        var editor = ul.querySelector(".attr-value input");
+        if (editor) {
+          editor.focus();
+          editor.select();
+        }
+      }
     }
 
-    function requestValue() {
+    function requestValues() {
       var dimension = document.getElementById("dimension").value;
       var element = document.getElementById("element").value;
-      var attribute = selectedAttribute();
-      if (!dimension || !element || !attribute) {
-        document.getElementById("value").value = "";
+      if (!dimension || !element) {
+        state.values = {};
+        state.editing = "";
+        paintAttributeList();
         return;
       }
       state.valueToken += 1;
+      state.editing = "";
       document.getElementById("status").textContent = "";
       post({
-        type: "loadValue",
+        type: "loadValues",
         token: state.valueToken,
         dimension: dimension,
         element: element,
-        attribute: attribute
+        attribute: selectedAttribute()
       });
     }
 
@@ -371,11 +482,13 @@
       if (Array.isArray(payload.elements)) {
         fillSelect(el, payload.elements, payload.element);
       }
+      if (payload.values && typeof payload.values === "object") {
+        state.values = payload.values;
+      } else if (payload.attribute && payload.value != null) {
+        state.values[payload.attribute] = payload.value;
+      }
       if (Array.isArray(payload.attributes)) {
         renderAttributes(payload.attributes, payload.attribute);
-      }
-      if (payload.value != null) {
-        document.getElementById("value").value = String(payload.value);
       }
       document.getElementById("status").textContent = payload.message || (state.attributes.length ? "" : "Aucun attribut pour cette dimension.");
     }
@@ -398,7 +511,7 @@
         if (state.quiet) {
           return;
         }
-        requestValue();
+        requestValues();
       });
       document.getElementById("cancel").addEventListener("click", function () {
         post({ type: "cancel" });
@@ -409,6 +522,7 @@
           document.getElementById("status").textContent = "Choisissez une dimension, un element et un attribut.";
           return;
         }
+        rememberEditor();
         document.getElementById("ok").disabled = true;
         document.getElementById("status").textContent = "";
         post({
@@ -417,7 +531,7 @@
           element: el.value,
           attribute: attribute,
           attributeType: selectedAttributeType(),
-          value: document.getElementById("value").value
+          value: attributeShownValue(attribute)
         });
       });
 
@@ -429,11 +543,13 @@
             document.getElementById("ok").disabled = false;
             return;
           }
-          if (payload.type === "value") {
+          if (payload.type === "values") {
             if (Number(payload.token) !== state.valueToken) {
               return;
             }
-            document.getElementById("value").value = payload.value == null ? "" : String(payload.value);
+            state.values = payload.values && typeof payload.values === "object" ? payload.values : {};
+            state.editing = "";
+            paintAttributeList();
             if (payload.message) {
               document.getElementById("status").textContent = String(payload.message);
             }

@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.44";
+  var PALO_PLUGIN_VERSION = "1.0.3.45";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_PREFS_KEY = "palo_datac_write_prefs_v1";
@@ -1129,15 +1129,18 @@
     if (!attribute && attributes.length) {
       attribute = attributes[0].name;
     }
-    var value = "";
+    var values = {};
     var message = attributes.length ? "" : "Aucun attribut pour cette dimension.";
-    if (element && attribute) {
+    if (element && attributes.length) {
       var cubeName = await ctx.client.attributeCubeName(ctx.sid, ctx.database, dim);
       if (!cubeName) {
         message = "Pas de cube d'attributs pour \"" + dim + "\".";
       } else {
-        var read = await ctx.client.cellValue(ctx.sid, ctx.database, cubeName, [attribute, element]);
-        value = read == null ? "" : read;
+        await Promise.all(attributes.map(function (attr) {
+          return ctx.client.cellValue(ctx.sid, ctx.database, cubeName, [attr.name, element]).then(function (read) {
+            values[attr.name] = read == null ? "" : read;
+          });
+        }));
       }
     }
     return {
@@ -1145,7 +1148,8 @@
       attributes: attributes,
       element: element,
       attribute: attribute,
-      value: value,
+      values: values,
+      value: Object.prototype.hasOwnProperty.call(values, attribute) ? values[attribute] : "",
       message: message
     };
   }
@@ -1192,6 +1196,7 @@
       element: initial.element,
       attributes: initial.attributes,
       attribute: initial.attribute,
+      values: initial.values || {},
       value: initial.value == null ? "" : initial.value,
       message: initial.message || ""
     };
@@ -1264,6 +1269,7 @@
                 element: loaded.element,
                 attributes: loaded.attributes,
                 attribute: loaded.attribute,
+                values: loaded.values || {},
                 value: loaded.value == null ? "" : loaded.value,
                 message: loaded.message || ""
               });
@@ -1272,29 +1278,22 @@
             });
             return;
           }
-          if (o.type === "loadValue") {
-            var token = o.token;
+          if (o.type === "loadValues") {
+            var valuesToken = o.token;
             manager.getClientAndContext(pickContext.servdb).then(function (ctx2) {
-              return ctx2.client.attributeCubeName(ctx2.sid, ctx2.database, o.dimension).then(function (cubeName) {
-                if (!cubeName) {
-                  return { value: "", message: "Pas de cube d'attributs pour \"" + o.dimension + "\"." };
-                }
-                return ctx2.client.cellValue(ctx2.sid, ctx2.database, cubeName, [o.attribute, o.element]).then(function (read) {
-                  return { value: read == null ? "" : read, message: "" };
-                });
-              });
-            }).then(function (read) {
+              return loadEattributChoices(ctx2, o.dimension, o.element, o.attribute);
+            }).then(function (loaded) {
               postChild({
-                type: "value",
-                token: token,
-                value: read.value,
-                message: read.message || ""
+                type: "values",
+                token: valuesToken,
+                values: loaded.values || {},
+                message: loaded.message || ""
               });
             }).catch(function (err) {
               postChild({
-                type: "value",
-                token: token,
-                value: "",
+                type: "values",
+                token: valuesToken,
+                values: {},
                 message: err && err.message ? err.message : String(err)
               });
             });
