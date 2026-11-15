@@ -1,6 +1,6 @@
 /* global Office, Excel, OfficeRuntime */
 (function commandsBootstrap() {
-  var PALO_PLUGIN_VERSION = "1.0.3.40";
+  var PALO_PLUGIN_VERSION = "1.0.3.43";
   var PICKER_STORAGE_KEY = "palo_ename_picker_v1";
   var DATAC_WRITE_STORAGE_KEY = "palo_datac_write_v1";
   var DATAC_WRITE_PREFS_KEY = "palo_datac_write_prefs_v1";
@@ -1057,6 +1057,321 @@
     });
   }
 
+  function eattributNames(rows) {
+    return rows
+      .map(function (item) {
+        return String(item && item.name || "");
+      })
+      .filter(Boolean)
+      .sort(function (a, b) {
+        return a.localeCompare(b, "fr", { sensitivity: "base" });
+      });
+  }
+
+  function eattributKeep(names, current) {
+    var i;
+    for (i = 0; i < names.length; i += 1) {
+      if (names[i] === current) {
+        return current;
+      }
+    }
+    return names.length ? names[0] : "";
+  }
+
+  async function loadEattributChoices(ctx, dimensionName, preferElement, preferAttribute) {
+    var dim = String(dimensionName || "").trim();
+    var els = await ctx.client.dimensionElements(ctx.sid, ctx.database, dim);
+    var elements = eattributNames(els);
+    var attributes = [];
+    var info = await ctx.client.dimensionInfo(ctx.sid, ctx.database, dim);
+    var attrDimId = String(info.attributeDimensionId || "").trim();
+    if (attrDimId && attrDimId !== "0") {
+      var attrDims = await ctx.client.databaseDimensions(ctx.sid, ctx.database, {
+        show_normal: 0,
+        show_system: 0,
+        show_attribute: 1,
+        show_info: 0
+      });
+      var attrDimName = "";
+      var i;
+      for (i = 0; i < attrDims.length; i += 1) {
+        if (String(attrDims[i].id) === attrDimId) {
+          attrDimName = String(attrDims[i].name || "");
+          break;
+        }
+      }
+      if (attrDimName) {
+        var attrEls = await ctx.client.dimensionElements(ctx.sid, ctx.database, attrDimName);
+        attributes = attrEls
+          .map(function (item) {
+            return {
+              name: String(item && item.name || ""),
+              type: Number(item && item.type || 1)
+            };
+          })
+          .filter(function (item) {
+            return Boolean(item.name);
+          })
+          .sort(function (a, b) {
+            return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
+          });
+      }
+    }
+    var element = eattributKeep(elements, String(preferElement || ""));
+    var attribute = "";
+    var ai;
+    for (ai = 0; ai < attributes.length; ai += 1) {
+      if (attributes[ai].name === preferAttribute) {
+        attribute = attributes[ai].name;
+        break;
+      }
+    }
+    if (!attribute && attributes.length) {
+      attribute = attributes[0].name;
+    }
+    var value = "";
+    var message = attributes.length ? "" : "Aucun attribut pour cette dimension.";
+    if (element && attribute) {
+      var cubeName = await ctx.client.attributeCubeName(ctx.sid, ctx.database, dim);
+      if (!cubeName) {
+        message = "Pas de cube d'attributs pour \"" + dim + "\".";
+      } else {
+        var read = await ctx.client.cellValue(ctx.sid, ctx.database, cubeName, [attribute, element]);
+        value = read == null ? "" : read;
+      }
+    }
+    return {
+      elements: elements,
+      attributes: attributes,
+      element: element,
+      attribute: attribute,
+      value: value,
+      message: message
+    };
+  }
+
+  function formatEattributStoredValue(raw, attributeType) {
+    if (Number(attributeType) === 2) {
+      var text = raw == null ? "" : String(raw);
+      return { sent: "\"" + text.replace(/"/g, "\"\"") + "\"" };
+    }
+    var s = String(raw == null ? "" : raw).trim().replace(/\s/g, "").replace(",", ".");
+    if (!s) {
+      return { sent: "0" };
+    }
+    if (!/^[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?$/.test(s)) {
+      return { error: "Valeur numerique attendue." };
+    }
+    return { sent: String(Number(s)) };
+  }
+
+  async function openEattributDialog(event, pickContext) {
+    var EATTRIBUT_STORAGE_KEY = "palo_eattribut_dialog_v1";
+    var manager = window.PaloOffice.createConnectionManager();
+    var ctx = await manager.getClientAndContext(pickContext.servdb);
+    var initial = await loadEattributChoices(
+      ctx,
+      pickContext.dimension,
+      pickContext.element,
+      pickContext.attribute
+    );
+    var dimRows = await ctx.client.databaseDimensions(ctx.sid, ctx.database);
+    var dimNames = dimRows
+      .map(function (d) { return String(d.name || ""); })
+      .filter(Boolean)
+      .sort(function (a, b) { return a.localeCompare(b, "fr", { sensitivity: "base" }); });
+    if (pickContext.dimension && dimNames.indexOf(pickContext.dimension) === -1) {
+      dimNames.push(pickContext.dimension);
+      dimNames.sort(function (a, b) { return a.localeCompare(b, "fr", { sensitivity: "base" }); });
+    }
+    var payload = {
+      type: "init",
+      dimensions: dimNames,
+      dimension: pickContext.dimension,
+      elements: initial.elements,
+      element: initial.element,
+      attributes: initial.attributes,
+      attribute: initial.attribute,
+      value: initial.value == null ? "" : initial.value,
+      message: initial.message || ""
+    };
+    await storageRemove(EATTRIBUT_STORAGE_KEY);
+    await storageSetJson(EATTRIBUT_STORAGE_KEY, payload);
+    var dialogUrl = new URL("palo-eattribut.html", window.location.href);
+    dialogUrl.searchParams.set("v", PALO_PLUGIN_VERSION);
+    Office.context.ui.displayDialogAsync(
+      dialogUrl.href,
+      { height: 74, width: 36, displayInIframe: true },
+      function (asyncResult) {
+        if (asyncResult.status !== Office.AsyncResultStatus.Succeeded) {
+          paloUserNotify(
+            "Impossible d'ouvrir la fenetre d'attribut."
+              + (asyncResult.errorMessage ? " " + asyncResult.errorMessage : ""),
+            "error"
+          );
+          storageRemove(EATTRIBUT_STORAGE_KEY);
+          complete(event);
+          return;
+        }
+        var dlg = asyncResult.value;
+        var ribbonEventCompleted = false;
+        function finishRibbonUiEvent() {
+          if (ribbonEventCompleted || !event) {
+            return;
+          }
+          ribbonEventCompleted = true;
+          complete(event);
+        }
+        setTimeout(finishRibbonUiEvent, 200);
+        function closeDialog() {
+          try {
+            dlg.close();
+          } catch (_close) {
+          }
+          storageRemove(EATTRIBUT_STORAGE_KEY);
+        }
+        function postChild(obj) {
+          if (typeof dlg.messageChild === "function") {
+            dlg.messageChild(JSON.stringify(obj));
+          }
+        }
+        dlg.addEventHandler(Office.EventType.DialogMessageReceived, function (arg) {
+          var o = null;
+          try {
+            o = JSON.parse(String(arg.message || ""));
+          } catch (_parse) {
+            o = null;
+          }
+          if (!o || !o.type) {
+            return;
+          }
+          if (o.type === "ready") {
+            postChild(payload);
+            return;
+          }
+          if (o.type === "cancel") {
+            closeDialog();
+            return;
+          }
+          if (o.type === "loadDimension") {
+            manager.getClientAndContext(pickContext.servdb).then(function (ctx2) {
+              return loadEattributChoices(ctx2, o.dimension, "", "");
+            }).then(function (loaded) {
+              postChild({
+                type: "dimensionData",
+                dimension: String(o.dimension || ""),
+                elements: loaded.elements,
+                element: loaded.element,
+                attributes: loaded.attributes,
+                attribute: loaded.attribute,
+                value: loaded.value == null ? "" : loaded.value,
+                message: loaded.message || ""
+              });
+            }).catch(function (err) {
+              postChild({ type: "error", message: err && err.message ? err.message : String(err) });
+            });
+            return;
+          }
+          if (o.type === "loadValue") {
+            var token = o.token;
+            manager.getClientAndContext(pickContext.servdb).then(function (ctx2) {
+              return ctx2.client.attributeCubeName(ctx2.sid, ctx2.database, o.dimension).then(function (cubeName) {
+                if (!cubeName) {
+                  return { value: "", message: "Pas de cube d'attributs pour \"" + o.dimension + "\"." };
+                }
+                return ctx2.client.cellValue(ctx2.sid, ctx2.database, cubeName, [o.attribute, o.element]).then(function (read) {
+                  return { value: read == null ? "" : read, message: "" };
+                });
+              });
+            }).then(function (read) {
+              postChild({
+                type: "value",
+                token: token,
+                value: read.value,
+                message: read.message || ""
+              });
+            }).catch(function (err) {
+              postChild({
+                type: "value",
+                token: token,
+                value: "",
+                message: err && err.message ? err.message : String(err)
+              });
+            });
+            return;
+          }
+          if (o.type !== "ok") {
+            return;
+          }
+          var formatted = formatEattributStoredValue(o.value, o.attributeType);
+          if (formatted.error) {
+            postChild({ type: "error", message: formatted.error });
+            return;
+          }
+          manager.getClientAndContext(pickContext.servdb).then(function (ctx2) {
+            return ctx2.client.attributeCubeName(ctx2.sid, ctx2.database, o.dimension).then(function (cubeName) {
+              if (!cubeName) {
+                throw new Error("Pas de cube d'attributs pour \"" + o.dimension + "\".");
+              }
+              return ctx2.client.cellReplace(
+                ctx2.sid,
+                ctx2.database,
+                cubeName,
+                [o.attribute, o.element],
+                formatted.sent,
+                0
+              );
+            });
+          }).then(function (ok) {
+            if (!ok) {
+              throw new Error("Le serveur a refuse l'ecriture de l'attribut.");
+            }
+            return Excel.run(async function (context) {
+              var cell = context.workbook.getActiveCell();
+              cell.load(["formulasLocal", "formulas"]);
+              await context.sync();
+              var meta = window.paloEnameRibbon.readFormulaBestMetaForPalo(cell);
+              var parsed = window.paloEnameRibbon.parsePaloEattributCall(
+                window.paloEnameRibbon.normalizeRibbonFormula(meta.formula)
+              );
+              var target = cell.getCell(meta.row, meta.col);
+              if (!parsed || parsed.args.length < 4) {
+                var sel = context.workbook.getSelectedRange();
+                sel.load(["formulasLocal", "formulas"]);
+                await context.sync();
+                var metaS = window.paloEnameRibbon.readFormulaBestMetaForPalo(sel);
+                parsed = window.paloEnameRibbon.parsePaloEattributCall(
+                  window.paloEnameRibbon.normalizeRibbonFormula(metaS.formula)
+                );
+                target = sel.getCell(metaS.row, metaS.col);
+              }
+              if (!parsed || parsed.args.length < 4) {
+                throw new Error("Cellule PALO.EATTRIBUT introuvable pour appliquer le choix.");
+              }
+              var litDim = window.paloEnameRibbon.buildExcelStringLiteral(o.dimension);
+              var litEl = window.paloEnameRibbon.buildExcelStringLiteral(o.element);
+              var litAt = window.paloEnameRibbon.buildExcelStringLiteral(o.attribute);
+              var updated = parsed.formula;
+              updated = updated.slice(0, parsed.args[3].start) + litAt + updated.slice(parsed.args[3].end);
+              updated = updated.slice(0, parsed.args[2].start) + litEl + updated.slice(parsed.args[2].end);
+              updated = updated.slice(0, parsed.args[1].start) + litDim + updated.slice(parsed.args[1].end);
+              await applyFormulaLocalAndRecalculate(context, target, updated);
+            });
+          }).then(function () {
+            closeDialog();
+          }).catch(function (err) {
+            postChild({ type: "error", message: err && err.message ? err.message : String(err) });
+          });
+        });
+        dlg.addEventHandler(Office.EventType.DialogEventReceived, function (ev) {
+          if (ev && (ev.error === 12004 || ev.error === 12006)) {
+            storageRemove(EATTRIBUT_STORAGE_KEY);
+          }
+        });
+      }
+    );
+  }
+
   async function paloRibbonAction(event) {
     try {
       if (!window.paloEnameRibbon || !window.PaloOffice) {
@@ -1082,6 +1397,35 @@
             return window.paloEnameRibbon.readFormulaBestForPalo(range);
           }
 
+          function buildEattributResult(formulaLocal) {
+            var fl = window.paloEnameRibbon.normalizeRibbonFormula(formulaLocal);
+            if (!fl || fl.charAt(0) !== "=") {
+              return { skip: true, reason: "empty_formula" };
+            }
+            var parsed = window.paloEnameRibbon.parsePaloEattributCall(fl);
+            if (!parsed || parsed.args.length < 4) {
+              return { skip: true, reason: "not_eattribut" };
+            }
+            return {
+              skip: false,
+              p1: window.paloEnameRibbon.prepareResolveArgument(context, workbook, sheet, parsed.args[0].raw),
+              p2: window.paloEnameRibbon.prepareResolveArgument(context, workbook, sheet, parsed.args[1].raw),
+              p3: window.paloEnameRibbon.prepareResolveArgument(context, workbook, sheet, parsed.args[2].raw),
+              p4: window.paloEnameRibbon.prepareResolveArgument(context, workbook, sheet, parsed.args[3].raw)
+            };
+          }
+
+          function eattributContext(prepared) {
+            return {
+              skip: false,
+              kind: "eattribut",
+              servdb: window.paloEnameRibbon.readPrepared(prepared.p1).trim(),
+              dimension: window.paloEnameRibbon.readPrepared(prepared.p2).trim(),
+              element: window.paloEnameRibbon.readPrepared(prepared.p3).trim(),
+              attribute: window.paloEnameRibbon.readPrepared(prepared.p4).trim()
+            };
+          }
+
           function buildResultFromFormula(formulaLocal) {
             var fl = window.paloEnameRibbon.normalizeRibbonFormula(formulaLocal);
             if (!fl || fl.charAt(0) !== "=") {
@@ -1096,8 +1440,14 @@
             return { skip: false, p1: p1, p2: p2 };
           }
 
-          // Cellule active PALO.ENAME : selecteur d'element (comportement inchange).
           var activeFormula = readFormula(cell);
+          var fromAttr = buildEattributResult(activeFormula);
+          if (!fromAttr.skip) {
+            await context.sync();
+            return eattributContext(fromAttr);
+          }
+
+          // Cellule active PALO.ENAME : selecteur d'element (comportement inchange).
           var fromActive = buildResultFromFormula(activeFormula);
           if (!fromActive.skip) {
             await context.sync();
@@ -1123,6 +1473,12 @@
               };
             }
             return { skip: true, reason: "datac_unresolved" };
+          }
+
+          var fromSelAttr = buildEattributResult(readFormula(sel));
+          if (!fromSelAttr.skip) {
+            await context.sync();
+            return eattributContext(fromSelAttr);
           }
 
           var fromSel = buildResultFromFormula(readFormula(sel));
@@ -1167,11 +1523,21 @@
         return;
       }
 
+      if (!pickContext.skip && pickContext.kind === "eattribut") {
+        if (!pickContext.servdb || !pickContext.dimension || !pickContext.element || !pickContext.attribute) {
+          await paloUserNotify("PALO.EATTRIBUT: servdb, dimension, element ou attribut vide.", "error");
+          complete(event);
+          return;
+        }
+        await openEattributDialog(event, pickContext);
+        return;
+      }
+
       if (pickContext.skip) {
         await paloUserNotify(
           pickContext.reason === "datac_unresolved"
             ? "PALO.DATAC trouvee, mais les coordonnees n'ont pas pu etre lues (reference vide ou formule illisible)."
-            : "Palo action fonctionne sur une cellule PALO.ENAME(...) ou PALO.DATAC(...).",
+            : "Palo action fonctionne sur une cellule PALO.ENAME(...), PALO.EATTRIBUT(...) ou PALO.DATAC(...).",
           "error"
         );
         complete(event);
@@ -1203,42 +1569,6 @@
           .sort(function (a, b) {
             return a.name.localeCompare(b.name, "fr", { sensitivity: "base" });
           });
-      }
-
-      async function loadPickerItems(ctx2, dimensionName, source) {
-        var dim = String(dimensionName || "").trim();
-        if (source !== "attribute") {
-          var elsPlain = await ctx2.client.dimensionElements(ctx2.sid, ctx2.database, dim);
-          return { elements: mapDimensionElementsToPickerItems(elsPlain), emptyMessage: "" };
-        }
-        var info = await ctx2.client.dimensionInfo(ctx2.sid, ctx2.database, dim);
-        var attrDimId = String(info.attributeDimensionId || "").trim();
-        if (!attrDimId || attrDimId === "0") {
-          return { elements: [], emptyMessage: "Aucun attribut pour la dimension \"" + dim + "\"." };
-        }
-        var attrDims = await ctx2.client.databaseDimensions(ctx2.sid, ctx2.database, {
-          show_normal: 0,
-          show_system: 0,
-          show_attribute: 1,
-          show_info: 0
-        });
-        var attrName = "";
-        var ai;
-        for (ai = 0; ai < attrDims.length; ai += 1) {
-          if (String(attrDims[ai].id) === attrDimId) {
-            attrName = String(attrDims[ai].name || "");
-            break;
-          }
-        }
-        if (!attrName) {
-          return { elements: [], emptyMessage: "Aucun attribut pour la dimension \"" + dim + "\"." };
-        }
-        var attrEls = await ctx2.client.dimensionElements(ctx2.sid, ctx2.database, attrName);
-        var attrItems = mapDimensionElementsToPickerItems(attrEls);
-        return {
-          elements: attrItems,
-          emptyMessage: attrItems.length ? "" : "Aucun attribut pour la dimension \"" + dim + "\"."
-        };
       }
 
       var dimRows = await ctx.client.databaseDimensions(ctx.sid, ctx.database);
@@ -1348,22 +1678,23 @@
               o = null;
             }
             if (o && o.type === "loadDimension" && o.dimension) {
-              var askedSource = o.source === "attribute" ? "attribute" : "element";
-              var askedDim = String(o.dimension || "").trim();
               manager
                 .getClientAndContext(pickContext.servdb)
                 .then(function (ctx2) {
-                  return loadPickerItems(ctx2, askedDim, askedSource);
+                  return ctx2.client.dimensionElements(
+                    ctx2.sid,
+                    ctx2.database,
+                    String(o.dimension || "").trim()
+                  );
                 })
-                .then(function (loaded) {
+                .then(function (els2) {
+                  var items2 = mapDimensionElementsToPickerItems(els2);
                   if (typeof dlg.messageChild === "function") {
                     dlg.messageChild(
                       JSON.stringify({
                         type: "elements",
-                        dimension: askedDim,
-                        source: askedSource,
-                        elements: loaded.elements,
-                        emptyMessage: loaded.emptyMessage || ""
+                        dimension: String(o.dimension || "").trim(),
+                        elements: items2
                       })
                     );
                   }
@@ -1382,11 +1713,9 @@
             }
             var chosen = "";
             var chosenDim = "";
-            var chosenSource = "element";
             if (o && o.element) {
               chosen = String(o.element);
               chosenDim = o.dimension != null ? String(o.dimension).trim() : "";
-              chosenSource = o.source === "attribute" ? "attribute" : "element";
             }
             if (!chosen) {
               try {
@@ -1434,22 +1763,7 @@
               }
               var newLit = window.paloEnameRibbon.buildExcelStringLiteral(chosen);
               var base = parsed2.formula;
-              var updated;
-              if (chosenSource === "attribute") {
-                if (parsed2.args.length >= 4) {
-                  updated = base.slice(0, parsed2.args[3].start) + newLit + base.slice(parsed2.args[3].end);
-                } else {
-                  var closeAt = parsed2.callEnd - 1;
-                  var gap = parsed2.args.length >= 2
-                    ? base.slice(parsed2.args[0].end, parsed2.args[1].start)
-                    : ";";
-                  var sep = gap.indexOf(",") !== -1 && gap.indexOf(";") === -1 ? "," : ";";
-                  var spacing = /\s/.test(gap) ? " " : "";
-                  updated = base.slice(0, closeAt) + sep + spacing + newLit + base.slice(closeAt);
-                }
-              } else {
-                updated = base.slice(0, parsed2.args[2].start) + newLit + base.slice(parsed2.args[2].end);
-              }
+              var updated = base.slice(0, parsed2.args[2].start) + newLit + base.slice(parsed2.args[2].end);
               if (chosenDim && chosenDim !== String(pickContext.dimension || "").trim()) {
                 var dimLit = window.paloEnameRibbon.buildExcelStringLiteral(chosenDim);
                 updated = updated.slice(0, parsed2.args[1].start) + dimLit + updated.slice(parsed2.args[1].end);

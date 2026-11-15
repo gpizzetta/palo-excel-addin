@@ -23,6 +23,7 @@
       s.charAt(0) !== "="
       && (
         /(?:^|[^A-Z0-9_])PALO\s*\.\s*ENAME\s*\(/i.test(s)
+        || /(?:^|[^A-Z0-9_])PALO\s*\.\s*EATTRIBUT\s*\(/i.test(s)
         || /(?:^|[^A-Z0-9_])PALO\s*\.\s*DATAC\s*\(/i.test(s)
       )
     ) {
@@ -354,6 +355,10 @@
     return parsePaloFunctionCall(formulaLocal, "ENAME", 3);
   }
 
+  function parsePaloEattributCall(formulaLocal) {
+    return parsePaloFunctionCall(formulaLocal, "EATTRIBUT", 4);
+  }
+
   function parsePaloDatacCall(formulaLocal) {
     return parsePaloFunctionCall(formulaLocal, "DATAC", 2);
   }
@@ -453,6 +458,7 @@
     readFormulaBestForPalo: readFormulaBestForPalo,
     readFormulaForPaloFromLoadedRange: readFormulaForPaloFromLoadedRange,
     parsePaloEnameCall: parsePaloEnameCall,
+    parsePaloEattributCall: parsePaloEattributCall,
     parsePaloDatacCall: parsePaloDatacCall,
     mentionsPaloDatacInText: mentionsPaloDatacInText,
     scanRangeForPaloDatacHits: scanRangeForPaloDatacHits,

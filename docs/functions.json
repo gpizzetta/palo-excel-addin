@@ -313,6 +313,35 @@
       ]
     },
     {
+      "id": "EATTRIBUT",
+      "name": "EATTRIBUT",
+      "description": "Lit l'attribut d'un element. Le 4e argument est obligatoire. Un attribut texte vide renvoie le nom de l'element.",
+      "result": {
+        "type": "any",
+        "dimensionality": "scalar"
+      },
+      "volatile": false,
+      "parameters": [
+        {
+          "name": "servdb",
+          "type": "any"
+        },
+        {
+          "name": "dimension",
+          "type": "any"
+        },
+        {
+          "name": "elementName",
+          "type": "any"
+        },
+        {
+          "name": "attribute",
+          "description": "Nom de l'attribut.",
+          "type": "any"
+        }
+      ]
+    },
+    {
       "id": "ECOUNT",
       "name": "ECOUNT",
       "result": {

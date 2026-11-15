@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+  <meta http-equiv="Pragma" content="no-cache">
+  <title>Attribut</title>
+  <link rel="icon" href="/palo-excel-addin/favicon.ico" type="image/x-icon">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    :root {
+      --palo-bg: #f3f2f1;
+      --palo-surface: #ffffff;
+      --palo-border: #edebe9;
+      --palo-text: #323130;
+      --palo-text-secondary: #605e5c;
+      --palo-hover: #f3f2f1;
+      --palo-input-bg: #ffffff;
+      --palo-input-border: #8a8886;
+      --palo-focus: #0078d4;
+      --palo-button: #0078d4;
+      --palo-button-text: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --palo-bg: #1f1f1f;
+        --palo-surface: #292827;
+        --palo-border: #3b3a39;
+        --palo-text: #ffffff;
+        --palo-text-secondary: #c8c6c4;
+        --palo-hover: #323130;
+        --palo-input-bg: #292827;
+        --palo-input-border: #8a8886;
+        --palo-focus: #2899f5;
+      }
+    }
+    html.theme-dark { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      color: var(--palo-text);
+      background: var(--palo-bg);
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    h1 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface);
+    }
+    main {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px 12px 12px;
+    }
+    label {
+      display: block;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--palo-text-secondary);
+      margin-bottom: 4px;
+    }
+    select, input {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px 8px;
+      font: inherit;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-input-border);
+      border-radius: 2px;
+    }
+    select:focus, input:focus {
+      outline: none;
+      border-color: var(--palo-focus);
+      box-shadow: 0 0 0 1px var(--palo-focus) inset;
+    }
+    #attr-wrap {
+      flex: 1;
+      min-height: 80px;
+      display: flex;
+      flex-direction: column;
+    }
+    #attr-list {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      border: 1px solid var(--palo-input-border);
+      border-radius: 2px;
+      background: var(--palo-input-bg);
+    }
+    #attr-list li {
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+    #attr-list li:hover { background: var(--palo-hover); }
+    #attr-list li.selected {
+      background: var(--palo-focus);
+      color: #ffffff;
+    }
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    button {
+      font: inherit;
+      min-width: 96px;
+      padding: 6px 14px;
+      border: 1px solid var(--palo-button);
+      border-radius: 2px;
+      background: var(--palo-button);
+      color: var(--palo-button-text);
+      cursor: pointer;
+    }
+    button.secondary {
+      background: var(--palo-surface);
+      color: var(--palo-text);
+      border-color: var(--palo-input-border);
+    }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    #status {
+      min-height: 1.2em;
+      color: var(--palo-text-secondary);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Attribut</h1>
+  <main>
+    <div>
+      <label for="dimension">Dimension</label>
+      <select id="dimension"></select>
+    </div>
+    <div>
+      <label for="element">Element</label>
+      <select id="element"></select>
+    </div>
+    <div id="attr-wrap">
+      <label>Attribut</label>
+      <ul id="attr-list"></ul>
+    </div>
+    <div>
+      <label for="value">Valeur</label>
+      <input id="value" type="text" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="status"></div>
+    <div class="actions">
+      <button type="button" id="cancel" class="secondary">Annuler</button>
+      <button type="button" id="ok">OK</button>
+    </div>
+  </main>
+  <script>
+    var STORAGE_KEY = "palo_eattribut_dialog_v1";
+    var state = {
+      quiet: false,
+      attributes: [],
+      attribute: "",
+      valueToken: 0
+    };
+
+    function applyOfficeTheme() {
+      var theme = Office.context && Office.context.officeTheme;
+      if (!theme) {
+        return;
+      }
+      var root = document.documentElement;
+      function setVar(name, value) {
+        if (value) {
+          root.style.setProperty(name, value);
+        }
+      }
+      setVar("--palo-bg", theme.bodyBackgroundColor);
+      setVar("--palo-text", theme.bodyForegroundColor);
+      setVar("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
+      setVar("--palo-input-bg", theme.controlBackgroundColor);
+      if (theme.isDarkTheme) {
+        root.classList.add("theme-dark");
+      }
+    }
+
+    function post(obj) {
+      if (!Office.context || !Office.context.ui || typeof Office.context.ui.messageParent !== "function") {
+        return;
+      }
+      Office.context.ui.messageParent(JSON.stringify(obj), { targetOrigin: "*" });
+    }
+
+    function fillSelect(select, names, current) {
+      state.quiet = true;
+      select.innerHTML = "";
+      (names || []).forEach(function (name) {
+        var nm = String(name || "");
+        if (!nm) {
+          return;
+        }
+        var opt = document.createElement("option");
+        opt.value = nm;
+        opt.textContent = nm;
+        select.appendChild(opt);
+      });
+      if (current) {
+        var i;
+        for (i = 0; i < select.options.length; i += 1) {
+          if (select.options[i].value === current) {
+            select.value = current;
+            break;
+          }
+        }
+      }
+      state.quiet = false;
+    }
+
+    function selectedAttribute() {
+      return state.attribute || "";
+    }
+
+    function selectedAttributeType() {
+      var i;
+      for (i = 0; i < state.attributes.length; i += 1) {
+        if (state.attributes[i].name === state.attribute) {
+          return Number(state.attributes[i].type || 1);
+        }
+      }
+      return 1;
+    }
+
+    function renderAttributes(attributes, current) {
+      var ul = document.getElementById("attr-list");
+      state.attributes = Array.isArray(attributes) ? attributes : [];
+      state.attribute = "";
+      ul.innerHTML = "";
+      state.attributes.forEach(function (item) {
+        var name = String(item && item.name || "");
+        if (!name) {
+          return;
+        }
+        var li = document.createElement("li");
+        li.textContent = name;
+        li.setAttribute("data-name", name);
+        li.addEventListener("click", function () {
+          if (state.attribute === name) {
+            return;
+          }
+          state.attribute = name;
+          paintAttributeSelection();
+          requestValue();
+        });
+        ul.appendChild(li);
+      });
+      if (current) {
+        state.attribute = current;
+      } else if (state.attributes.length) {
+        state.attribute = String(state.attributes[0].name || "");
+      }
+      paintAttributeSelection();
+    }
+
+    function paintAttributeSelection() {
+      var items = document.querySelectorAll("#attr-list li");
+      var i;
+      for (i = 0; i < items.length; i += 1) {
+        var on = items[i].getAttribute("data-name") === state.attribute;
+        items[i].classList.toggle("selected", on);
+        if (on && typeof items[i].scrollIntoView === "function") {
+          items[i].scrollIntoView({ block: "nearest" });
+        }
+      }
+    }
+
+    function requestValue() {
+      var dimension = document.getElementById("dimension").value;
+      var element = document.getElementById("element").value;
+      var attribute = selectedAttribute();
+      if (!dimension || !element || !attribute) {
+        document.getElementById("value").value = "";
+        return;
+      }
+      state.valueToken += 1;
+      document.getElementById("status").textContent = "";
+      post({
+        type: "loadValue",
+        token: state.valueToken,
+        dimension: dimension,
+        element: element,
+        attribute: attribute
+      });
+    }
+
+    function applyPayload(payload) {
+      if (!payload) {
+        return;
+      }
+      var dim = document.getElementById("dimension");
+      var el = document.getElementById("element");
+      if (Array.isArray(payload.dimensions)) {
+        fillSelect(dim, payload.dimensions, payload.dimension);
+      }
+      if (Array.isArray(payload.elements)) {
+        fillSelect(el, payload.elements, payload.element);
+      }
+      if (Array.isArray(payload.attributes)) {
+        renderAttributes(payload.attributes, payload.attribute);
+      }
+      if (payload.value != null) {
+        document.getElementById("value").value = String(payload.value);
+      }
+      document.getElementById("status").textContent = payload.message || (state.attributes.length ? "" : "Aucun attribut pour cette dimension.");
+    }
+
+    Office.onReady(function () {
+      applyOfficeTheme();
+      var dim = document.getElementById("dimension");
+      var el = document.getElementById("element");
+      dim.addEventListener("change", function () {
+        if (state.quiet) {
+          return;
+        }
+        post({ type: "loadDimension", dimension: dim.value });
+      });
+      el.addEventListener("change", function () {
+        if (state.quiet) {
+          return;
+        }
+        requestValue();
+      });
+      document.getElementById("cancel").addEventListener("click", function () {
+        post({ type: "cancel" });
+      });
+      document.getElementById("ok").addEventListener("click", function () {
+        var attribute = selectedAttribute();
+        if (!dim.value || !el.value || !attribute) {
+          document.getElementById("status").textContent = "Choisissez une dimension, un element et un attribut.";
+          return;
+        }
+        document.getElementById("ok").disabled = true;
+        document.getElementById("status").textContent = "";
+        post({
+          type: "ok",
+          dimension: dim.value,
+          element: el.value,
+          attribute: attribute,
+          attributeType: selectedAttributeType(),
+          value: document.getElementById("value").value
+        });
+      });
+
+      function onParentMessage(arg) {
+        try {
+          var payload = JSON.parse(String(arg && arg.message ? arg.message : ""));
+          if (payload.type === "init" || payload.type === "dimensionData") {
+            applyPayload(payload);
+            document.getElementById("ok").disabled = false;
+            return;
+          }
+          if (payload.type === "value") {
+            if (Number(payload.token) !== state.valueToken) {
+              return;
+            }
+            document.getElementById("value").value = payload.value == null ? "" : String(payload.value);
+            if (payload.message) {
+              document.getElementById("status").textContent = String(payload.message);
+            }
+            return;
+          }
+          if (payload.type === "error") {
+            document.getElementById("ok").disabled = false;
+            document.getElementById("status").textContent = String(payload.message || "Echec de l'enregistrement.");
+          }
+        } catch (_e) {
+        }
+      }
+
+      if (Office.context && Office.context.ui && typeof Office.context.ui.addHandlerAsync === "function") {
+        Office.context.ui.addHandlerAsync(Office.EventType.DialogParentMessageReceived, onParentMessage, function () {
+          try {
+            post({ type: "ready" });
+          } catch (_e) {
+          }
+        });
+      }
+      try {
+        var raw = window.localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          applyPayload(JSON.parse(raw));
+        }
+      } catch (_storage) {
+      }
+    });
+  </script>
+</body>
+</html>

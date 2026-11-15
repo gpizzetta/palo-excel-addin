@@ -1634,6 +1634,9 @@
       return Number.isNaN(n) ? null : n;
     }
     if (type === 2) {
+      if (p.length > 2) {
+        return p[2] == null ? "" : String(p[2]);
+      }
       return value;
     }
     return "";
@@ -3070,7 +3073,7 @@
 /* global CustomFunctions, OfficeRuntime */
 /* Source des fonctions Excel : editer ce fichier puis ./build-bundle.sh (genere functions.js). */
 var PALO_CDN_BASE = "https://gpizzetta.github.io/palo-excel-addin";
-var PALO_ASSET_VERSION = "1.0.3.40";
+var PALO_ASSET_VERSION = "1.0.3.43";
 
 (function paloFunctionsBootstrap() {
   var connectionManager = null;
@@ -3866,11 +3869,15 @@ var PALO_ASSET_VERSION = "1.0.3.40";
     }
   }
 
-  async function ENAME() {
+  async function paloElementNameFromArgs(fnName, args, requireAttribute) {
+    var tag = "#PALO! " + fnName + ": ";
     try {
-      var args = Array.prototype.slice.call(arguments);
-      if (args.length < 3) {
-        return "#PALO! ENAME: il faut au moins 3 arguments (servdb; dimension; element). Recu: " + args.length + ".";
+      var minArgs = requireAttribute ? 4 : 3;
+      if (args.length < minArgs) {
+        return tag + (requireAttribute
+          ? "il faut 4 arguments (servdb; dimension; element; attribut)."
+          : "il faut au moins 3 arguments (servdb; dimension; element).")
+          + " Recu: " + args.length + ".";
       }
       var servdb = args[0];
       var dimensionName = args[1];
@@ -3878,25 +3885,30 @@ var PALO_ASSET_VERSION = "1.0.3.40";
 
       var manager = await getConnectionManager();
       if (!manager) {
-        return "#PALO! ENAME: runtime pas pret (F9 pour recalculer).";
+        return tag + "runtime pas pret (F9 pour recalculer).";
       }
       var servRaw = coerceExcelScalarArg(servdb);
       var dimRaw = coerceExcelScalarArg(dimensionName);
       var elementRaw = coerceExcelScalarArg(index);
-      if (isOfficeCustomFunctionMeta(servdb) || isOfficeCustomFunctionMeta(dimensionName) || isOfficeCustomFunctionMeta(index)) {
-        return "#PALO! ENAME: argument Office interne detecte. Reference une cellule a valeur unique.";
+      if (
+        isOfficeCustomFunctionMeta(servdb)
+        || isOfficeCustomFunctionMeta(dimensionName)
+        || isOfficeCustomFunctionMeta(index)
+        || (requireAttribute && isOfficeCustomFunctionMeta(args[3]))
+      ) {
+        return tag + "argument Office interne detecte. Reference une cellule a valeur unique.";
       }
       var serv = String(servRaw == null ? "" : servRaw).trim();
       var dim = String(dimRaw == null ? "" : dimRaw).trim();
       if (!serv) {
-        return "#PALO! ENAME: servdb vide (attendu ex. CONNEXION/BASE).";
+        return tag + "servdb vide (attendu ex. CONNEXION/BASE).";
       }
       if (!dim) {
-        return "#PALO! ENAME: nom de dimension vide.";
+        return tag + "nom de dimension vide.";
       }
       var query = String(elementRaw == null ? "" : elementRaw).trim();
       if (!query) {
-        return "#PALO! ENAME: element vide.";
+        return tag + "element vide.";
       }
       if (
         shouldBlockPaloErrorOnly(servdb)
@@ -3909,6 +3921,9 @@ var PALO_ASSET_VERSION = "1.0.3.40";
       var attribute = "";
       if (args.length > 3 && !isOfficeCustomFunctionMeta(args[3]) && !isBlankPaloArg(args[3])) {
         attribute = String(coerceExcelScalarArg(args[3]) == null ? "" : coerceExcelScalarArg(args[3])).trim();
+      }
+      if (requireAttribute && !attribute) {
+        return tag + "attribut vide.";
       }
       var context = await manager.getClientAndContext(serv);
       var elementName = "";
@@ -3927,7 +3942,7 @@ var PALO_ASSET_VERSION = "1.0.3.40";
           });
         }
         if (!found) {
-          return "#PALO! ENAME: element \"" + query + "\" introuvable dans \"" + dim + "\".";
+          return tag + "element \"" + query + "\" introuvable dans \"" + dim + "\".";
         }
         elementName = String(found.name);
       }
@@ -3936,7 +3951,7 @@ var PALO_ASSET_VERSION = "1.0.3.40";
       }
       var cubeName = await context.client.attributeCubeName(context.sid, context.database, dim);
       if (!cubeName) {
-        return "#PALO! ENAME: pas de cube d'attributs pour \"" + dim + "\".";
+        return tag + "pas de cube d'attributs pour \"" + dim + "\".";
       }
       var value = await context.client.cellValue(context.sid, context.database, cubeName, [attribute, elementName]);
       if (value == null || value === "") {
@@ -3946,6 +3961,14 @@ var PALO_ASSET_VERSION = "1.0.3.40";
     } catch (error) {
       return toError(error);
     }
+  }
+
+  async function ENAME() {
+    return paloElementNameFromArgs("ENAME", Array.prototype.slice.call(arguments), false);
+  }
+
+  async function EATTRIBUT() {
+    return paloElementNameFromArgs("EATTRIBUT", Array.prototype.slice.call(arguments), true);
   }
 
   async function PALO_ECOUNT(servdb, dimensionName) {
@@ -4288,6 +4311,7 @@ var PALO_ASSET_VERSION = "1.0.3.40";
     CustomFunctions.associate("DATAC", DATAC);
     CustomFunctions.associate("SETDATA", PALO_SETDATA);
     CustomFunctions.associate("ENAME", ENAME);
+    CustomFunctions.associate("EATTRIBUT", EATTRIBUT);
     CustomFunctions.associate("ECOUNT", PALO_ECOUNT);
     CustomFunctions.associate("ECHILDCOUNT", PALO_ECHILDCOUNT);
     CustomFunctions.associate("ECHILD", PALO_ECHILD);

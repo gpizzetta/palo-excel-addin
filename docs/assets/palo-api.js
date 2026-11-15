@@ -1534,6 +1534,9 @@
       return Number.isNaN(n) ? null : n;
     }
     if (type === 2) {
+      if (p.length > 2) {
+        return p[2] == null ? "" : String(p[2]);
+      }
       return value;
     }
     return "";

@@ -36,6 +36,7 @@ Le ruban qui dépose une écriture d'exemple écrit `PALO.SETDATA`.
 | `PALO.DATAC` | Lit une valeur dans un cube Palo (servdb; cube; coord1..coordN). |
 | `PALO.SETDATA` | Ecrit une valeur dans un cube Palo. |
 | `PALO.ENAME` | Nom de l'élément. Le 4e argument lit cet attribut dans le cube d'attributs de la dimension. Un attribut texte vide renvoie le nom de l'élément. |
+| `PALO.EATTRIBUT` | Même lecture d'attribut que `PALO.ENAME`, avec le 4e argument obligatoire. Un attribut texte vide renvoie le nom de l'élément. |
 | `PALO.ECOUNT` | Donne le nombre d'éléments d'une dimension. |
 | `PALO.ECHILDCOUNT` | Donne le nombre d'enfants directs d'un élément. |
 | `PALO.ECHILD` | Donne le nom de l'enfant à la position indiquée (la première position est 1). |
