@@ -12,10 +12,12 @@
     :root {
       --palo-bg: #f3f2f1;
       --palo-surface: #ffffff;
+      --palo-surface-alt: #faf9f8;
       --palo-border: #edebe9;
       --palo-text: #323130;
       --palo-text-secondary: #605e5c;
       --palo-hover: #f3f2f1;
+      --palo-active: #edebe9;
       --palo-input-bg: #ffffff;
       --palo-input-border: #8a8886;
       --palo-focus: #0078d4;
@@ -26,10 +28,12 @@
       :root {
         --palo-bg: #1f1f1f;
         --palo-surface: #292827;
+        --palo-surface-alt: #252423;
         --palo-border: #3b3a39;
         --palo-text: #ffffff;
         --palo-text-secondary: #c8c6c4;
         --palo-hover: #323130;
+        --palo-active: #3b3a39;
         --palo-input-bg: #292827;
         --palo-input-border: #8a8886;
         --palo-focus: #2899f5;
@@ -54,13 +58,18 @@
       border-bottom: 1px solid var(--palo-border);
       background: var(--palo-surface);
     }
-    main {
-      flex: 1;
-      min-height: 0;
+    .fields {
+      flex-shrink: 0;
       display: flex;
       flex-direction: column;
       gap: 8px;
-      padding: 10px 12px 12px;
+      padding: 8px 12px;
+      background: var(--palo-surface-alt);
+      border-bottom: 1px solid var(--palo-border);
+    }
+    .fields-bottom {
+      border-bottom: 0;
+      border-top: 1px solid var(--palo-border);
     }
     label {
       display: block;
@@ -84,31 +93,54 @@
       border-color: var(--palo-focus);
       box-shadow: 0 0 0 1px var(--palo-focus) inset;
     }
-    #attr-wrap {
-      flex: 1;
-      min-height: 80px;
-      display: flex;
-      flex-direction: column;
+    #filter-wrap {
+      flex-shrink: 0;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--palo-border);
+      background: var(--palo-surface-alt);
     }
-    #attr-list {
+    #attr-filter {
+      box-sizing: border-box;
+      width: 100%;
+      padding: 6px 10px;
+      font: inherit;
+      color: var(--palo-text);
+      background: var(--palo-input-bg);
+      border: 1px solid var(--palo-input-border);
+      border-radius: 2px;
+      outline: none;
+    }
+    #attr-filter::placeholder {
+      color: var(--palo-text-secondary);
+      opacity: 0.9;
+    }
+    #attr-filter:focus {
+      border-color: var(--palo-focus);
+      box-shadow: 0 0 0 1px var(--palo-focus) inset;
+    }
+    #list-wrap {
       flex: 1;
       min-height: 0;
       overflow: auto;
+      padding: 4px 0;
+      background: var(--palo-bg);
+    }
+    #attr-list {
+      list-style: none;
       margin: 0;
       padding: 0;
-      list-style: none;
-      border: 1px solid var(--palo-input-border);
-      border-radius: 2px;
-      background: var(--palo-input-bg);
     }
     #attr-list li {
-      padding: 7px 10px;
+      padding: 8px 12px;
       cursor: pointer;
+      color: var(--palo-text);
     }
-    #attr-list li:hover { background: var(--palo-hover); }
+    #attr-list li:hover {
+      background: var(--palo-hover);
+    }
+    #attr-list li:active,
     #attr-list li.selected {
-      background: var(--palo-focus);
-      color: #ffffff;
+      background: var(--palo-active);
     }
     .actions {
       display: flex;
@@ -131,6 +163,17 @@
       border-color: var(--palo-input-border);
     }
     button:disabled { opacity: 0.6; cursor: wait; }
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     #status {
       min-height: 1.2em;
       color: var(--palo-text-secondary);
@@ -140,7 +183,7 @@
 </head>
 <body>
   <h1>Attribut</h1>
-  <main>
+  <div class="fields">
     <div>
       <label for="dimension">Dimension</label>
       <select id="dimension"></select>
@@ -149,10 +192,15 @@
       <label for="element">Element</label>
       <select id="element"></select>
     </div>
-    <div id="attr-wrap">
-      <label>Attribut</label>
-      <ul id="attr-list"></ul>
-    </div>
+  </div>
+  <div id="filter-wrap">
+    <label for="attr-filter" class="visually-hidden">Filtrer</label>
+    <input type="search" id="attr-filter" placeholder="Filtrer les attributs..." autocomplete="off" spellcheck="false">
+  </div>
+  <div id="list-wrap">
+    <ul id="attr-list"></ul>
+  </div>
+  <div class="fields fields-bottom">
     <div>
       <label for="value">Valeur</label>
       <input id="value" type="text" autocomplete="off" spellcheck="false">
@@ -162,7 +210,7 @@
       <button type="button" id="cancel" class="secondary">Annuler</button>
       <button type="button" id="ok">OK</button>
     </div>
-  </main>
+  </div>
   <script>
     var STORAGE_KEY = "palo_eattribut_dialog_v1";
     var state = {
@@ -186,9 +234,16 @@
       setVar("--palo-bg", theme.bodyBackgroundColor);
       setVar("--palo-text", theme.bodyForegroundColor);
       setVar("--palo-surface", theme.controlBackgroundColor || theme.bodyBackgroundColor);
+      setVar("--palo-surface-alt", theme.controlBackgroundColor || theme.bodyBackgroundColor);
       setVar("--palo-input-bg", theme.controlBackgroundColor);
       if (theme.isDarkTheme) {
         root.classList.add("theme-dark");
+        setVar("--palo-border", "#3b3a39");
+        setVar("--palo-text-secondary", "#c8c6c4");
+        setVar("--palo-hover", "#323130");
+        setVar("--palo-active", "#3b3a39");
+        setVar("--palo-input-border", "#8a8886");
+        setVar("--palo-focus", "#2899f5");
       }
     }
 
@@ -239,45 +294,49 @@
     }
 
     function renderAttributes(attributes, current) {
-      var ul = document.getElementById("attr-list");
       state.attributes = Array.isArray(attributes) ? attributes : [];
       state.attribute = "";
-      ul.innerHTML = "";
-      state.attributes.forEach(function (item) {
-        var name = String(item && item.name || "");
-        if (!name) {
-          return;
-        }
-        var li = document.createElement("li");
-        li.textContent = name;
-        li.setAttribute("data-name", name);
-        li.addEventListener("click", function () {
-          if (state.attribute === name) {
-            return;
-          }
-          state.attribute = name;
-          paintAttributeSelection();
-          requestValue();
-        });
-        ul.appendChild(li);
-      });
+      var filter = document.getElementById("attr-filter");
+      if (filter) {
+        filter.value = "";
+      }
       if (current) {
         state.attribute = current;
       } else if (state.attributes.length) {
         state.attribute = String(state.attributes[0].name || "");
       }
-      paintAttributeSelection();
+      paintAttributeList();
     }
 
-    function paintAttributeSelection() {
-      var items = document.querySelectorAll("#attr-list li");
-      var i;
-      for (i = 0; i < items.length; i += 1) {
-        var on = items[i].getAttribute("data-name") === state.attribute;
-        items[i].classList.toggle("selected", on);
-        if (on && typeof items[i].scrollIntoView === "function") {
-          items[i].scrollIntoView({ block: "nearest" });
+    function paintAttributeList() {
+      var ul = document.getElementById("attr-list");
+      var filter = document.getElementById("attr-filter");
+      var q = String(filter && filter.value ? filter.value : "").trim().toLowerCase();
+      ul.innerHTML = "";
+      state.attributes.forEach(function (item) {
+        var name = String(item && item.name || "");
+        if (!name || (q && name.toLowerCase().indexOf(q) === -1)) {
+          return;
         }
+        var li = document.createElement("li");
+        li.textContent = name;
+        li.setAttribute("data-name", name);
+        if (name === state.attribute) {
+          li.classList.add("selected");
+        }
+        li.addEventListener("click", function () {
+          if (state.attribute === name) {
+            return;
+          }
+          state.attribute = name;
+          paintAttributeList();
+          requestValue();
+        });
+        ul.appendChild(li);
+      });
+      var selected = ul.querySelector("li.selected");
+      if (selected && typeof selected.scrollIntoView === "function") {
+        selected.scrollIntoView({ block: "nearest" });
       }
     }
 
@@ -325,6 +384,10 @@
       applyOfficeTheme();
       var dim = document.getElementById("dimension");
       var el = document.getElementById("element");
+      var filter = document.getElementById("attr-filter");
+      if (filter) {
+        filter.addEventListener("input", paintAttributeList);
+      }
       dim.addEventListener("change", function () {
         if (state.quiet) {
           return;
